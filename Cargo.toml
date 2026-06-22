@@ -1,0 +1,13 @@
+[package]
+name = "jihe"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+encase = "0.12"
+glam = { version = "0.33", features = ["encase"]}
+log = "0.4"
+pollster = "0.4"
+thiserror = "2.0"
+wgpu = "29.0"
+winit = "0.30"
