@@ -160,7 +160,14 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
                     module: &shader,
                     entry_point: Some("fs_main"),
                     compilation_options: Default::default(),
-                    targets: &[Some(surface_format.into())],
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: surface_format,
+                        blend: Some(wgpu::BlendState {
+                            alpha: wgpu::BlendComponent::REPLACE,
+                            color: wgpu::BlendComponent::OVER,
+                        }),
+                        write_mask: wgpu::ColorWrites::COLOR,
+                    })],
                 }),
                 multiview_mask: None,
                 cache: None,
