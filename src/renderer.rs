@@ -225,11 +225,11 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         let global_config = GlobalConfig {
-            pos: glam::vec2(0., 0.),
             pixel_delta: 0.01,
+            pos: glam::vec2(0., 0.),
             half_size: glam::vec2(
-                output.texture.width() as f32,
-                output.texture.height() as f32,
+                output.texture.width() as f32 / 2.,
+                output.texture.height() as f32 / 2.,
             ),
         };
         let curve_config = CurveConfig {

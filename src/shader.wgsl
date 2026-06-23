@@ -6,10 +6,8 @@ const YS = array(-1., 1, 1, 1, -1, -1);
 
 struct Global {
     pixel_delta: f32,
-    pos_x: f32,
-    pos_y: f32,
-    half_width: f32,
-    half_height: f32,
+    pos: vec2<f32>,
+    half_tex_size: vec2<f32>,
 }
 
 @group(0)
@@ -18,10 +16,7 @@ var<uniform> global: Global;
 
 struct Curve {
     thickness: i32,
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
+    color: vec4<f32>,
 }
 
 @group(0)
@@ -36,8 +31,8 @@ fn vs_main(@builtin(vertex_index) in: u32) -> @builtin(position) vec4<f32> {
 @fragment
 fn fs_main(@builtin(position) in: vec4<f32>) -> @location(0) vec4<f32> {
     let here = vec2<f32>(
-        (in.x - global.half_width) * global.pixel_delta + global.pos_x,
-        (global.half_height - in.y) * global.pixel_delta + global.pos_y,
+        (in.x - global.half_tex_size.x) * global.pixel_delta + global.pos.x,
+        (global.half_tex_size.y - in.y) * global.pixel_delta + global.pos.y,
     );
 
     var negative = false;
@@ -57,7 +52,7 @@ fn fs_main(@builtin(position) in: vec4<f32>) -> @location(0) vec4<f32> {
     }
 
     if negative && positive {
-        return vec4(curve.r, curve.g, curve.b, curve.a);
+        return curve.color;
     } else {
         return vec4(0., 0, 0, 0);
     }
