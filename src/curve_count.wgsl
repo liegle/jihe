@@ -30,7 +30,7 @@ fn fs(@builtin(position) in: vec4<f32>) -> @location(0) vec4<f32> {
     for (var i = -curve.thickness; i <= curve.thickness; i++) {
         for (var j = -curve.thickness; j <= curve.thickness; j++) {
             if i * i + j * j < curve.thickness * curve.thickness {
-                let v = textureLoad(tex, id);
+                let v = textureLoad(tex, id + vec2<i32>(i, j));
                 if v.x == -1 {
                     negative_count++;
                 } else if v.x == 1 {
