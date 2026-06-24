@@ -1,7 +1,9 @@
-use std::{borrow::Cow, iter};
+use std::iter;
 
 use encase::ShaderType;
 use thiserror;
+
+use crate::{curve_count::CurveCount, curve_eval::CurveEval};
 
 #[derive(encase::ShaderType)]
 struct GlobalConfig {
@@ -30,10 +32,8 @@ pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     curve_offset_texture: wgpu::Texture,
     curve_offset_texture_view: wgpu::TextureView,
 
-    curve_compute_bind_group: wgpu::BindGroup,
-    curve_compute_pipeline: wgpu::ComputePipeline,
-    curve_render_bind_group: wgpu::BindGroup,
-    curve_render_pipeline: wgpu::RenderPipeline,
+    curve_eval: CurveEval,
+    curve_count: CurveCount,
 }
 
 impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
@@ -107,154 +107,18 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         });
         let curve_offset_texture_view = curve_offset_texture.create_view(&Default::default());
 
-        let curve_compute_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: wgpu::TextureFormat::R32Sint,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-        let curve_compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &curve_compute_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &global_config_uniform_buffer,
-                        offset: 0,
-                        size: None,
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&curve_offset_texture_view),
-                },
-            ],
-        });
+        let curve_eval = CurveEval::new(
+            &device,
+            &global_config_uniform_buffer,
+            &curve_offset_texture_view,
+        );
+        let curve_count = CurveCount::new(
+            &device,
+            &curve_config_uniform_buffer,
+            &curve_offset_texture_view,
+            surface_format,
+        );
 
-        let curve_render_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::ReadOnly,
-                            format: wgpu::TextureFormat::R32Sint,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-        let curve_render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &curve_render_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &curve_config_uniform_buffer,
-                        offset: 0,
-                        size: None,
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&curve_offset_texture_view),
-                },
-            ],
-        });
-
-        let curve_compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("curve_eval.wgsl"))),
-        });
-        let curve_render_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("curve_count.wgsl"))),
-        });
-        let curve_compute_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[Some(&curve_compute_bind_group_layout)],
-                immediate_size: 0,
-            });
-        let curve_render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[Some(&curve_render_bind_group_layout)],
-                immediate_size: 0,
-            });
-        let curve_compute_pipeline =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: None,
-                layout: Some(&curve_compute_pipeline_layout),
-                module: &curve_compute_shader,
-                entry_point: Some("cs"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let curve_render_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&curve_render_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &curve_render_shader,
-                    entry_point: Some("vs"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
-                },
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &curve_render_shader,
-                    entry_point: Some("fs"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: surface_format,
-                        blend: Some(wgpu::BlendState {
-                            alpha: wgpu::BlendComponent::REPLACE,
-                            color: wgpu::BlendComponent::OVER,
-                        }),
-                        write_mask: wgpu::ColorWrites::COLOR,
-                    })],
-                }),
-                multiview_mask: None,
-                cache: None,
-            });
         Ok(Self {
             instance,
             window,
@@ -269,10 +133,8 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             curve_offset_texture,
             curve_offset_texture_view,
 
-            curve_render_bind_group,
-            curve_render_pipeline,
-            curve_compute_bind_group,
-            curve_compute_pipeline,
+            curve_eval,
+            curve_count,
         })
     }
 
@@ -351,12 +213,9 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
                 label: Some("ComputePass"),
                 timestamp_writes: None,
             });
-            compute_pass.set_pipeline(&self.curve_compute_pipeline);
-            compute_pass.set_bind_group(0, &self.curve_compute_bind_group, &[]);
-            compute_pass.dispatch_workgroups(
-                self.surface_config.width.div_ceil(16),
-                self.surface_config.height.div_ceil(16),
-                1,
+            self.curve_eval.render(
+                &mut compute_pass,
+                (self.surface_config.width, self.surface_config.height),
             );
         }
 
@@ -377,9 +236,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            render_pass.set_pipeline(&self.curve_render_pipeline);
-            render_pass.set_bind_group(0, Some(&self.curve_render_bind_group), &[]);
-            render_pass.draw(0..6, 0..1);
+            self.curve_count.render(&mut render_pass);
         }
 
         self.queue.submit(iter::once(encoder.finish()));

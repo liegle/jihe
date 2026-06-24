@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use crate::renderer::Renderer;
 
+mod curve_count;
+mod curve_eval;
 mod renderer;
 
 fn main() {
