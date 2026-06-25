@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::renderer::Renderer;
 
-mod curve;
 mod renderer;
 
 fn main() {

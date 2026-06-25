@@ -1,7 +1,9 @@
 use encase::ShaderType;
 
-use crate::curve::{evaluate::Evaluate, trace::Trace, write::Write};
-use crate::renderer::AsStorageBytes;
+use crate::renderer::{
+    AsStorageBytes,
+    curve::{evaluate::Evaluate, trace::Trace, write::Write},
+};
 
 mod evaluate;
 mod trace;

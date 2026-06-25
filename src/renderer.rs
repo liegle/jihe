@@ -3,7 +3,9 @@ use std::iter;
 use encase::ShaderType;
 use thiserror;
 
-use crate::curve::Curve;
+use crate::renderer::curve::Curve;
+
+mod curve;
 
 #[derive(encase::ShaderType)]
 pub struct Camera {
