@@ -3,19 +3,13 @@ use std::iter;
 use encase::ShaderType;
 use thiserror;
 
-use crate::{curve_count::CurveCount, curve_eval::CurveEval};
+use crate::curve::Curve;
 
 #[derive(encase::ShaderType)]
-struct GlobalConfig {
+pub struct GlobalConfig {
     pixel_delta: f32,
     pos: glam::Vec2,
     half_size: glam::Vec2,
-}
-
-#[derive(encase::ShaderType)]
-struct CurveConfig {
-    thickness: i32,
-    color: glam::Vec4,
 }
 
 pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
@@ -28,16 +22,12 @@ pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     is_surface_configured: bool,
 
     global_config_uniform_buffer: wgpu::Buffer,
-    curve_config_uniform_buffer: wgpu::Buffer,
-    curve_offset_texture: wgpu::Texture,
-    curve_offset_texture_view: wgpu::TextureView,
 
-    curve_eval: CurveEval,
-    curve_count: CurveCount,
+    curve: Curve,
 }
 
 impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
-    pub(crate) async fn new(window: W) -> Result<Self, CreateRendererError> {
+    pub(crate) async fn new(window: W, size: (u32, u32)) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
         let surface = instance.create_surface(window.clone())?;
@@ -69,8 +59,8 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: 1,
-            height: 1,
+            width: size.0,
+            height: size.1,
             present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: Vec::new(),
@@ -84,40 +74,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             mapped_at_creation: false,
         });
 
-        let curve_config_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: CurveConfig::min_size().get(),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let curve_offset_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: wgpu::Extent3d {
-                width: 2048,
-                height: 2048,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R32Sint,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let curve_offset_texture_view = curve_offset_texture.create_view(&Default::default());
-
-        let curve_eval = CurveEval::new(
-            &device,
-            &global_config_uniform_buffer,
-            &curve_offset_texture_view,
-        );
-        let curve_count = CurveCount::new(
-            &device,
-            &curve_config_uniform_buffer,
-            &curve_offset_texture_view,
-            surface_format,
-        );
+        let curve = Curve::new(&device, &global_config_uniform_buffer, surface_format, size);
 
         Ok(Self {
             instance,
@@ -129,12 +86,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             is_surface_configured: false,
 
             global_config_uniform_buffer,
-            curve_config_uniform_buffer,
-            curve_offset_texture,
-            curve_offset_texture_view,
-
-            curve_eval,
-            curve_count,
+            curve,
         })
     }
 
@@ -144,6 +96,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             self.surface_config.width = width;
             self.surface_config.height = height;
             self.surface.configure(&self.device, &self.surface_config);
+            self.curve.target_resize(&self.device, (width, height));
         }
     }
 
@@ -189,55 +142,17 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
                 output.texture.height() as f32 / 2.,
             ),
         };
-        let curve_config = CurveConfig {
-            thickness: 3,
-            color: glam::vec4(1., 0., 0., 1.),
-        };
         self.queue.write_buffer(
             &self.global_config_uniform_buffer,
             0,
-            &global_config.as_wgsl_bytes().unwrap(),
-        );
-        self.queue.write_buffer(
-            &self.curve_config_uniform_buffer,
-            0,
-            &curve_config.as_wgsl_bytes().unwrap(),
+            &global_config.as_uniform_bytes().unwrap(),
         );
 
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
-        '_curve_compute: {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("ComputePass"),
-                timestamp_writes: None,
-            });
-            self.curve_eval.render(
-                &mut compute_pass,
-                (self.surface_config.width, self.surface_config.height),
-            );
-        }
-
-        '_curve_render: {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("RenderPass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            self.curve_count.render(&mut render_pass);
-        }
+        self.curve.render(&self.queue, &mut encoder, &view);
 
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
@@ -254,13 +169,25 @@ pub enum CreateRendererError {
     RequestDevice(#[from] wgpu::RequestDeviceError),
 }
 
-trait AsWgslBytes {
-    fn as_wgsl_bytes(&self) -> encase::internal::Result<Vec<u8>>;
+pub trait AsUniformBytes {
+    fn as_uniform_bytes(&self) -> encase::internal::Result<Vec<u8>>;
 }
 
-impl<T: encase::ShaderType + encase::internal::WriteInto> AsWgslBytes for T {
-    fn as_wgsl_bytes(&self) -> encase::internal::Result<Vec<u8>> {
+impl<T: encase::ShaderType + encase::internal::WriteInto> AsUniformBytes for T {
+    fn as_uniform_bytes(&self) -> encase::internal::Result<Vec<u8>> {
         let mut buffer = encase::UniformBuffer::new(vec![]);
+        buffer.write(self)?;
+        Ok(buffer.into_inner())
+    }
+}
+
+pub trait AsStorageBytes {
+    fn as_storage_bytes(&self) -> encase::internal::Result<Vec<u8>>;
+}
+
+impl<T: encase::ShaderType + encase::internal::WriteInto> AsStorageBytes for T {
+    fn as_storage_bytes(&self) -> encase::internal::Result<Vec<u8>> {
+        let mut buffer = encase::DynamicStorageBuffer::new(vec![]);
         buffer.write(self)?;
         Ok(buffer.into_inner())
     }
