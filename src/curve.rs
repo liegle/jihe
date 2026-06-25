@@ -1,11 +1,11 @@
 use encase::ShaderType;
 
-use crate::curve::{curve_count::CurveCount, curve_eval::CurveEval, curve_write::CurveWrite};
+use crate::curve::{evaluate::Evaluate, trace::Trace, write::Write};
 use crate::renderer::AsStorageBytes;
 
-mod curve_count;
-mod curve_eval;
-mod curve_write;
+mod evaluate;
+mod trace;
+mod write;
 
 const CURVES: &[(CurveConfig, &str)] = &[
     (
@@ -31,67 +31,74 @@ struct CurveConfig {
 }
 
 pub struct Curve {
-    evals: Vec<CurveEval>,
-    count: CurveCount,
-    write: CurveWrite,
+    config_buffer: wgpu::Buffer,
 
-    curve_buffer: wgpu::Buffer,
+    evaluates: Vec<Evaluate>,
+    trace: Trace,
+    write: Write,
+
+    curves_buffer: wgpu::Buffer,
 }
 
 impl Curve {
     pub fn new(
         device: &wgpu::Device,
-        global_buffer: &wgpu::Buffer,
-        target_format: wgpu::TextureFormat,
-        target_size: (u32, u32),
+        config_buffer: &wgpu::Buffer,
+        dst_format: wgpu::TextureFormat,
+        dst_size: (u32, u32),
     ) -> Self {
-        let offset_texture = offset_texture(&device, target_size, CURVES.len() as u32);
-        let offset_texture_view = offset_texture_view(&offset_texture);
-        let color_texture = color_texture(&device, target_size, CURVES.len() as u32);
-        let color_texture_view = color_texture_view(&color_texture);
+        let residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
+        let residual_texture_view = create_residual_texture_view(&residual_texture);
+        let color_texture = create_color_texture(&device, dst_size, CURVES.len() as u32);
+        let color_texture_view = create_color_texture_view(&color_texture);
 
-        let curve_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let curves_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: CurveConfig::min_size().get() * CURVES.len() as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let evals = CURVES
+        let evaluates = CURVES
             .iter()
             .enumerate()
-            .map(|(i, c)| CurveEval::new(c.1, i as u32, device, global_buffer, &offset_texture))
+            .map(|(i, c)| Evaluate::new(c.1, i as u32, device, config_buffer, &residual_texture))
             .collect();
-        let count = CurveCount::new(
+        let trace = Trace::new(
             &device,
-            &curve_buffer,
-            &offset_texture_view,
+            &curves_buffer,
+            &residual_texture_view,
             &color_texture_view,
-            CURVES.len() as u32,
         );
-        let write = CurveWrite::new(&device, &color_texture_view, target_format);
+        let write = Write::new(&device, &color_texture_view, dst_format);
 
         Self {
-            evals,
-            count,
+            config_buffer: config_buffer.clone(),
+            evaluates,
+            trace,
             write,
-            curve_buffer,
+            curves_buffer,
         }
     }
 
-    pub fn target_resize(&mut self, device: &wgpu::Device, target_size: (u32, u32)) {
-        let offset_texture = offset_texture(&device, target_size, CURVES.len() as u32);
-        let offset_texture_view = offset_texture_view(&offset_texture);
-        let color_texture = color_texture(&device, target_size, CURVES.len() as u32);
-        let color_texture_view = color_texture_view(&color_texture);
+    pub fn dst_resize(&mut self, device: &wgpu::Device, dst_size: (u32, u32)) {
+        let residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
+        let residual_texture_view = create_residual_texture_view(&residual_texture);
+        let color_texture = create_color_texture(&device, dst_size, CURVES.len() as u32);
+        let color_texture_view = create_color_texture_view(&color_texture);
 
-        for (slice, eval) in &mut self.evals.iter_mut().enumerate() {
-            eval.remake_bind_group(&device, &offset_texture, slice as u32);
+        for (layer, evaluate) in &mut self.evaluates.iter_mut().enumerate() {
+            evaluate.remake_bind_group(
+                &device,
+                &self.config_buffer,
+                &residual_texture,
+                layer as u32,
+            );
         }
-        self.count.remake_bind_group(
+        self.trace.remake_bind_group(
             &device,
-            &self.curve_buffer,
-            &offset_texture_view,
+            &self.curves_buffer,
+            &residual_texture_view,
             &color_texture_view,
         );
         self.write.remake_bind_group(&device, &color_texture_view);
@@ -101,11 +108,14 @@ impl Curve {
         &self,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        view: &wgpu::TextureView,
+        dst_texture_view: &wgpu::TextureView,
     ) {
-        let size = (view.texture().width(), view.texture().height());
+        let dst_size = (
+            dst_texture_view.texture().width(),
+            dst_texture_view.texture().height(),
+        );
         queue.write_buffer(
-            &self.curve_buffer,
+            &self.curves_buffer,
             0,
             &CURVES
                 .iter()
@@ -120,16 +130,17 @@ impl Curve {
                 label: Some("ComputePass"),
                 timestamp_writes: None,
             });
-            for eval in &self.evals {
-                eval.render(&mut compute_pass, size);
+            for evaluate in &self.evaluates {
+                evaluate.render(&mut compute_pass, dst_size);
             }
-            self.count.render(&mut compute_pass, size);
+            self.trace
+                .render(&mut compute_pass, dst_size, CURVES.len() as u32);
         }
         '_render: {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("RenderPass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: &dst_texture_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -147,13 +158,17 @@ impl Curve {
     }
 }
 
-fn offset_texture(device: &wgpu::Device, target_size: (u32, u32), slices: u32) -> wgpu::Texture {
+fn create_residual_texture(
+    device: &wgpu::Device,
+    dst_size: (u32, u32),
+    layer_count: u32,
+) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d {
-            width: target_size.0,
-            height: target_size.1,
-            depth_or_array_layers: slices,
+            width: dst_size.0,
+            height: dst_size.1,
+            depth_or_array_layers: layer_count,
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -164,10 +179,10 @@ fn offset_texture(device: &wgpu::Device, target_size: (u32, u32), slices: u32) -
     })
 }
 
-fn offset_texture_view(offset_texture: &wgpu::Texture) -> wgpu::TextureView {
-    offset_texture.create_view(&wgpu::TextureViewDescriptor {
+fn create_residual_texture_view(residual_texture: &wgpu::Texture) -> wgpu::TextureView {
+    residual_texture.create_view(&wgpu::TextureViewDescriptor {
         label: None,
-        format: Some(offset_texture.format()),
+        format: Some(residual_texture.format()),
         dimension: Some(wgpu::TextureViewDimension::D2Array),
         usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
         aspect: wgpu::TextureAspect::All,
@@ -178,13 +193,17 @@ fn offset_texture_view(offset_texture: &wgpu::Texture) -> wgpu::TextureView {
     })
 }
 
-fn color_texture(device: &wgpu::Device, target_size: (u32, u32), slices: u32) -> wgpu::Texture {
+fn create_color_texture(
+    device: &wgpu::Device,
+    dst_size: (u32, u32),
+    layer_count: u32,
+) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d {
-            width: target_size.0,
-            height: target_size.1,
-            depth_or_array_layers: slices,
+            width: dst_size.0,
+            height: dst_size.1,
+            depth_or_array_layers: layer_count,
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -195,7 +214,7 @@ fn color_texture(device: &wgpu::Device, target_size: (u32, u32), slices: u32) ->
     })
 }
 
-fn color_texture_view(color_texture: &wgpu::Texture) -> wgpu::TextureView {
+fn create_color_texture_view(color_texture: &wgpu::Texture) -> wgpu::TextureView {
     color_texture.create_view(&wgpu::TextureViewDescriptor {
         label: None,
         format: Some(color_texture.format()),

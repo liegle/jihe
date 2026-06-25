@@ -96,7 +96,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             self.surface_config.width = width;
             self.surface_config.height = height;
             self.surface.configure(&self.device, &self.surface_config);
-            self.curve.target_resize(&self.device, (width, height));
+            self.curve.dst_resize(&self.device, (width, height));
         }
     }
 
