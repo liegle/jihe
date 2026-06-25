@@ -1,63 +1,34 @@
 use std::borrow::Cow;
 
-pub struct CurveCount {
+pub struct CurveWrite {
     pipeline: wgpu::RenderPipeline,
+    bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 }
 
-impl CurveCount {
+impl CurveWrite {
     pub fn new(
         device: &wgpu::Device,
-        curve_buffer: &wgpu::Buffer,
-        offset_texture_view: &wgpu::TextureView,
+        color_texture_view: &wgpu::TextureView,
         target_format: wgpu::TextureFormat,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::ReadOnly,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    view_dimension: wgpu::TextureViewDimension::D3,
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::StorageTexture {
-                        access: wgpu::StorageTextureAccess::ReadOnly,
-                        format: wgpu::TextureFormat::R32Sint,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                    },
-                    count: None,
-                },
-            ],
+                count: None,
+            }],
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &curve_buffer,
-                        offset: 0,
-                        size: None,
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&offset_texture_view),
-                },
-            ],
-        });
+        let bind_group = bind_group(&device, &bind_group_layout, &color_texture_view);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("curve_count.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("curve_write.wgsl"))),
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
@@ -94,13 +65,37 @@ impl CurveCount {
         });
         Self {
             pipeline,
+            bind_group_layout,
             bind_group,
         }
     }
 
-    pub fn render(&self, render_pass: &mut wgpu::RenderPass) {
+    pub fn remake_bind_group(
+        &mut self,
+        device: &wgpu::Device,
+        color_texture_view: &wgpu::TextureView,
+    ) {
+        self.bind_group = bind_group(&device, &self.bind_group_layout, &color_texture_view);
+    }
+
+    pub fn render(&self, render_pass: &mut wgpu::RenderPass, slices: u32) {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, Some(&self.bind_group), &[]);
-        render_pass.draw(0..6, 0..1);
+        render_pass.draw(0..6, 0..slices);
     }
+}
+
+fn bind_group(
+    device: &wgpu::Device,
+    bind_group_layout: &wgpu::BindGroupLayout,
+    color_texture_view: &wgpu::TextureView,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(&color_texture_view),
+        }],
+    })
 }

@@ -29,7 +29,3 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     textureStore(tex, id.xy, vec4<i32>(v, 0, 0, 0));
 }
-
-fn f(x: f32, y: f32) -> f32 {
-    return pow(x, 5) - y;
-}

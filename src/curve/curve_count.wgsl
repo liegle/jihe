@@ -1,9 +1,3 @@
-// 2-1 3
-// |/ /|
-// 0 4-5
-const XS = array(-1., 1, -1, 1, -1, 1);
-const YS = array(-1., 1, 1, 1, -1, -1);
-
 struct Curve {
     thickness: i32,
     color: vec4<f32>,
@@ -11,26 +5,26 @@ struct Curve {
 
 @group(0)
 @binding(0)
-var<uniform> curve: Curve;
+var<storage, read> curves: array<Curve>;
 
 @group(0)
 @binding(1)
-var tex: texture_storage_2d<r32sint, read>;
+var in_tex: texture_storage_2d_array<r32sint, read>;
 
-@vertex
-fn vs(@builtin(vertex_index) in: u32) -> @builtin(position) vec4<f32> {
-    return vec4<f32>(XS[in], YS[in], 0, 1);
-}
+@group(0)
+@binding(2)
+var out_tex: texture_storage_3d<rgba8unorm, write>;
 
-@fragment
-fn fs(@builtin(position) in: vec4<f32>) -> @location(0) vec4<f32> {
-    let id = vec2<i32>(in.xy);
+@compute
+@workgroup_size(16, 16, 1)
+fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
+    let curve = curves[id.z];
     var negative_count = 0;
     var positive_count = 0;
     for (var i = -curve.thickness; i <= curve.thickness; i++) {
         for (var j = -curve.thickness; j <= curve.thickness; j++) {
             if i * i + j * j < curve.thickness * curve.thickness {
-                let v = textureLoad(tex, id + vec2<i32>(i, j));
+                let v = textureLoad(in_tex, vec2<i32>(id.xy) + vec2<i32>(i, j), id.z);
                 if v.x == -1 {
                     negative_count++;
                 } else if v.x == 1 {
@@ -40,9 +34,10 @@ fn fs(@builtin(position) in: vec4<f32>) -> @location(0) vec4<f32> {
         }
     }
     if negative_count == 0 || positive_count == 0 {
-        discard;
+        textureStore(out_tex, id, vec4<f32>(0, 0, 0, 0));
+    } else {
+        textureStore(out_tex, id, curve.color * count_to_alpha(negative_count, positive_count));
     }
-    return curve.color * count_to_alpha(negative_count, positive_count);
 }
 
 fn count_to_alpha(negative_count: i32, positive_count: i32) -> f32 {
