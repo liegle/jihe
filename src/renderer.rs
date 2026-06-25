@@ -6,10 +6,9 @@ use thiserror;
 use crate::curve::Curve;
 
 #[derive(encase::ShaderType)]
-pub struct GlobalConfig {
+pub struct Camera {
     pixel_delta: f32,
     pos: glam::Vec2,
-    half_size: glam::Vec2,
 }
 
 pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
@@ -21,7 +20,7 @@ pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     surface_config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
 
-    global_config_uniform_buffer: wgpu::Buffer,
+    camera_buffer: wgpu::Buffer,
 
     curve: Curve,
 }
@@ -67,14 +66,14 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             desired_maximum_frame_latency: 2,
         };
 
-        let global_config_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: GlobalConfig::min_size().get(),
+            size: Camera::min_size().get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let curve = Curve::new(&device, &global_config_uniform_buffer, surface_format, size);
+        let curve = Curve::new(&device, &camera_buffer, surface_format, size);
 
         Ok(Self {
             instance,
@@ -85,7 +84,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             surface_config,
             is_surface_configured: false,
 
-            global_config_uniform_buffer,
+            camera_buffer,
             curve,
         })
     }
@@ -134,18 +133,14 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let global_config = GlobalConfig {
+        let camera = Camera {
             pixel_delta: 0.01,
             pos: glam::vec2(0., 0.),
-            half_size: glam::vec2(
-                output.texture.width() as f32 / 2.,
-                output.texture.height() as f32 / 2.,
-            ),
         };
         self.queue.write_buffer(
-            &self.global_config_uniform_buffer,
+            &self.camera_buffer,
             0,
-            &global_config.as_uniform_bytes().unwrap(),
+            &camera.as_uniform_bytes().unwrap(),
         );
 
         let mut encoder = self

@@ -31,28 +31,29 @@ struct CurveConfig {
 }
 
 pub struct Curve {
-    config_buffer: wgpu::Buffer,
+    camera_buffer: wgpu::Buffer,
 
     evaluates: Vec<Evaluate>,
     trace: Trace,
     write: Write,
 
-    curves_buffer: wgpu::Buffer,
+    curve_configs_buffer: wgpu::Buffer,
 }
 
 impl Curve {
     pub fn new(
         device: &wgpu::Device,
-        config_buffer: &wgpu::Buffer,
+        camera_buffer: &wgpu::Buffer,
         dst_format: wgpu::TextureFormat,
         dst_size: (u32, u32),
     ) -> Self {
+        // TODO: Store 1 residual in 1 bit, to store 32 curves in 1 texture layer
         let residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
         let residual_texture_view = create_residual_texture_view(&residual_texture);
         let color_texture = create_color_texture(&device, dst_size, CURVES.len() as u32);
         let color_texture_view = create_color_texture_view(&color_texture);
 
-        let curves_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let curve_configs_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: CurveConfig::min_size().get() * CURVES.len() as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
@@ -62,22 +63,25 @@ impl Curve {
         let evaluates = CURVES
             .iter()
             .enumerate()
-            .map(|(i, c)| Evaluate::new(c.1, i as u32, device, config_buffer, &residual_texture))
+            .map(|(i, c)| Evaluate::new(c.1, i as u32, device, camera_buffer, &residual_texture))
             .collect();
         let trace = Trace::new(
             &device,
-            &curves_buffer,
+            &curve_configs_buffer,
             &residual_texture_view,
             &color_texture_view,
         );
+        // TODO: Current write can only write to dst out of order
+        // To do it in order, maybe we should fold dst and color tex to another tex,
+        // and then write it back to dst
         let write = Write::new(&device, &color_texture_view, dst_format);
 
         Self {
-            config_buffer: config_buffer.clone(),
+            camera_buffer: camera_buffer.clone(),
             evaluates,
             trace,
             write,
-            curves_buffer,
+            curve_configs_buffer,
         }
     }
 
@@ -90,14 +94,14 @@ impl Curve {
         for (layer, evaluate) in &mut self.evaluates.iter_mut().enumerate() {
             evaluate.remake_bind_group(
                 &device,
-                &self.config_buffer,
+                &self.camera_buffer,
                 &residual_texture,
                 layer as u32,
             );
         }
         self.trace.remake_bind_group(
             &device,
-            &self.curves_buffer,
+            &self.curve_configs_buffer,
             &residual_texture_view,
             &color_texture_view,
         );
@@ -115,7 +119,7 @@ impl Curve {
             dst_texture_view.texture().height(),
         );
         queue.write_buffer(
-            &self.curves_buffer,
+            &self.curve_configs_buffer,
             0,
             &CURVES
                 .iter()

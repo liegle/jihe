@@ -18,14 +18,14 @@ impl Evaluate {
         function: &str,
         layer: u32,
         device: &wgpu::Device,
-        config_buffer: &wgpu::Buffer,
+        camera_buffer: &wgpu::Buffer,
         residual_texture: &wgpu::Texture,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
         let bind_group = create_bind_group(
             device,
             &bind_group_layout,
-            config_buffer,
+            camera_buffer,
             residual_texture,
             layer,
         );
@@ -41,14 +41,14 @@ impl Evaluate {
     pub fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
-        config_buffer: &wgpu::Buffer,
+        camera_buffer: &wgpu::Buffer,
         residual_texture: &wgpu::Texture,
         layer: u32,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
-            config_buffer,
+            camera_buffer,
             residual_texture,
             layer,
         )
@@ -95,7 +95,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    config_buffer: &wgpu::Buffer,
+    camera_buffer: &wgpu::Buffer,
     residual_texture: &wgpu::Texture,
     layer: u32,
 ) -> wgpu::BindGroup {
@@ -117,7 +117,7 @@ fn create_bind_group(
             wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: config_buffer,
+                    buffer: camera_buffer,
                     offset: 0,
                     size: None,
                 }),

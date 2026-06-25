@@ -1,11 +1,11 @@
-struct Curve {
+struct CurveConfig {
     thickness: i32,
     color: vec4<f32>,
 }
 
 @group(0)
 @binding(0)
-var<storage, read> curves: array<Curve>;
+var<storage, read> curve_configs: array<CurveConfig>;
 
 @group(0)
 @binding(1)
@@ -18,12 +18,12 @@ var color_texture: texture_storage_3d<rgba8unorm, write>;
 @compute
 @workgroup_size(16, 16, 1)
 fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
-    let curve = curves[id.z];
+    let curve_config = curve_configs[id.z];
     var negative_count = 0;
     var positive_count = 0;
-    for (var i = -curve.thickness; i <= curve.thickness; i++) {
-        for (var j = -curve.thickness; j <= curve.thickness; j++) {
-            if i * i + j * j < curve.thickness * curve.thickness {
+    for (var i = -curve_config.thickness; i <= curve_config.thickness; i++) {
+        for (var j = -curve_config.thickness; j <= curve_config.thickness; j++) {
+            if i * i + j * j < curve_config.thickness * curve_config.thickness {
                 let v = textureLoad(residual_texture, vec2<i32>(id.xy) + vec2<i32>(i, j), id.z);
                 if v.x == -1 {
                     negative_count++;
@@ -36,7 +36,7 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     if negative_count == 0 || positive_count == 0 {
         textureStore(color_texture, id, vec4<f32>(0, 0, 0, 0));
     } else {
-        textureStore(color_texture, id, curve.color * count_to_alpha(negative_count, positive_count));
+        textureStore(color_texture, id, curve_config.color * count_to_alpha(negative_count, positive_count));
     }
 }
 

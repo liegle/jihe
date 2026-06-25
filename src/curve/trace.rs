@@ -17,7 +17,7 @@ pub struct Trace {
 impl Trace {
     pub fn new(
         device: &wgpu::Device,
-        curves_buffer: &wgpu::Buffer,
+        curve_configs_buffer: &wgpu::Buffer,
         residual_texture_view: &wgpu::TextureView,
         color_texture_view: &wgpu::TextureView,
     ) -> Self {
@@ -25,7 +25,7 @@ impl Trace {
         let bind_group = create_bind_group(
             device,
             &bind_group_layout,
-            curves_buffer,
+            curve_configs_buffer,
             residual_texture_view,
             color_texture_view,
         );
@@ -40,14 +40,14 @@ impl Trace {
     pub fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
-        curves_buffer: &wgpu::Buffer,
+        curve_configs_buffer: &wgpu::Buffer,
         residual_texture_view: &wgpu::TextureView,
         color_texture_view: &wgpu::TextureView,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
-            curves_buffer,
+            curve_configs_buffer,
             residual_texture_view,
             color_texture_view,
         );
@@ -109,7 +109,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    curves_buffer: &wgpu::Buffer,
+    curve_configs_buffer: &wgpu::Buffer,
     residual_texture_view: &wgpu::TextureView,
     color_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
@@ -120,7 +120,7 @@ fn create_bind_group(
             wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: curves_buffer,
+                    buffer: curve_configs_buffer,
                     offset: 0,
                     size: None,
                 }),
