@@ -3,8 +3,9 @@ use std::iter;
 use encase::ShaderType;
 use thiserror;
 
-use crate::renderer::curve::Curve;
+use crate::renderer::{buffer::AsUniformBytes, curve::Curve};
 
+mod buffer;
 mod curve;
 
 #[derive(encase::ShaderType)]
@@ -139,11 +140,8 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             pixel_delta: 0.01,
             pos: glam::vec2(0., 0.),
         };
-        self.queue.write_buffer(
-            &self.camera_buffer,
-            0,
-            &camera.as_uniform_bytes().unwrap(),
-        );
+        self.queue
+            .write_buffer(&self.camera_buffer, 0, &camera.as_uniform_bytes().unwrap());
 
         let mut encoder = self
             .device
@@ -164,28 +162,4 @@ pub enum CreateRendererError {
     RequestAdapter(#[from] wgpu::RequestAdapterError),
     #[error("Failed to request device, err: {0}")]
     RequestDevice(#[from] wgpu::RequestDeviceError),
-}
-
-pub trait AsUniformBytes {
-    fn as_uniform_bytes(&self) -> encase::internal::Result<Vec<u8>>;
-}
-
-impl<T: encase::ShaderType + encase::internal::WriteInto> AsUniformBytes for T {
-    fn as_uniform_bytes(&self) -> encase::internal::Result<Vec<u8>> {
-        let mut buffer = encase::UniformBuffer::new(vec![]);
-        buffer.write(self)?;
-        Ok(buffer.into_inner())
-    }
-}
-
-pub trait AsStorageBytes {
-    fn as_storage_bytes(&self) -> encase::internal::Result<Vec<u8>>;
-}
-
-impl<T: encase::ShaderType + encase::internal::WriteInto> AsStorageBytes for T {
-    fn as_storage_bytes(&self) -> encase::internal::Result<Vec<u8>> {
-        let mut buffer = encase::DynamicStorageBuffer::new(vec![]);
-        buffer.write(self)?;
-        Ok(buffer.into_inner())
-    }
 }
