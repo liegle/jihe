@@ -15,7 +15,7 @@ const CURVES: &[(CurveConfig, &str)] = &[
             thickness: 3,
             color: glam::vec4(1., 0., 0., 1.),
         },
-        "pow(x, 5) - y",
+        "pow(x, 5) + pow(y, 2) - y",
     ),
     (
         CurveConfig {
@@ -52,8 +52,8 @@ impl Curve {
         // TODO: Store 1 residual in 1 bit, to store 32 curves in 1 texture layer
         let residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
         let residual_texture_view = create_residual_texture_view(&residual_texture);
-        let color_texture = create_color_texture(&device, dst_size, CURVES.len() as u32);
-        let color_texture_view = create_color_texture_view(&color_texture);
+        let trace_texture = create_trace_texture(&device, dst_size, CURVES.len() as u32);
+        let trace_texture_view = create_trace_texture_view(&trace_texture);
 
         let curve_configs_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -67,16 +67,16 @@ impl Curve {
             .enumerate()
             .map(|(i, c)| Evaluate::new(c.1, i as u32, device, camera_buffer, &residual_texture))
             .collect();
-        let trace = Trace::new(
-            &device,
-            &curve_configs_buffer,
-            &residual_texture_view,
-            &color_texture_view,
-        );
+        let trace = Trace::new(&device, &residual_texture_view, &trace_texture_view);
         // TODO: Current write can only write to dst out of order
         // To do it in order, maybe we should fold dst and color tex to another tex,
         // and then write it back to dst
-        let write = Write::new(&device, &color_texture_view, dst_format);
+        let write = Write::new(
+            &device,
+            &curve_configs_buffer,
+            &trace_texture_view,
+            dst_format,
+        );
 
         Self {
             camera_buffer: camera_buffer.clone(),
@@ -90,8 +90,8 @@ impl Curve {
     pub fn dst_resize(&mut self, device: &wgpu::Device, dst_size: (u32, u32)) {
         let residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
         let residual_texture_view = create_residual_texture_view(&residual_texture);
-        let color_texture = create_color_texture(&device, dst_size, CURVES.len() as u32);
-        let color_texture_view = create_color_texture_view(&color_texture);
+        let trace_texture = create_trace_texture(&device, dst_size, CURVES.len() as u32);
+        let trace_texture_view = create_trace_texture_view(&trace_texture);
 
         for (layer, evaluate) in &mut self.evaluates.iter_mut().enumerate() {
             evaluate.remake_bind_group(
@@ -101,13 +101,10 @@ impl Curve {
                 layer as u32,
             );
         }
-        self.trace.remake_bind_group(
-            &device,
-            &self.curve_configs_buffer,
-            &residual_texture_view,
-            &color_texture_view,
-        );
-        self.write.remake_bind_group(&device, &color_texture_view);
+        self.trace
+            .remake_bind_group(&device, &residual_texture_view, &trace_texture_view);
+        self.write
+            .remake_bind_group(&device, &self.curve_configs_buffer, &trace_texture_view);
     }
 
     pub fn render(
@@ -179,7 +176,7 @@ fn create_residual_texture(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::R32Sint,
+        format: wgpu::TextureFormat::R32Float,
         usage: wgpu::TextureUsages::STORAGE_BINDING,
         view_formats: &[],
     })
@@ -199,7 +196,7 @@ fn create_residual_texture_view(residual_texture: &wgpu::Texture) -> wgpu::Textu
     })
 }
 
-fn create_color_texture(
+fn create_trace_texture(
     device: &wgpu::Device,
     dst_size: (u32, u32),
     layer_count: u32,
@@ -214,16 +211,16 @@ fn create_color_texture(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D3,
-        format: wgpu::TextureFormat::Rgba8Unorm,
+        format: wgpu::TextureFormat::R32Uint,
         usage: wgpu::TextureUsages::STORAGE_BINDING,
         view_formats: &[],
     })
 }
 
-fn create_color_texture_view(color_texture: &wgpu::Texture) -> wgpu::TextureView {
-    color_texture.create_view(&wgpu::TextureViewDescriptor {
+fn create_trace_texture_view(trace_texture: &wgpu::Texture) -> wgpu::TextureView {
+    trace_texture.create_view(&wgpu::TextureViewDescriptor {
         label: None,
-        format: Some(color_texture.format()),
+        format: Some(trace_texture.format()),
         dimension: Some(wgpu::TextureViewDimension::D3),
         usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
         aspect: wgpu::TextureAspect::All,

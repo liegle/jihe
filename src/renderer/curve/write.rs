@@ -17,11 +17,17 @@ pub struct Write {
 impl Write {
     pub fn new(
         device: &wgpu::Device,
-        color_texture_view: &wgpu::TextureView,
+        curve_configs_buffer: &wgpu::Buffer,
+        trace_texture_view: &wgpu::TextureView,
         dst_format: wgpu::TextureFormat,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
-        let bind_group = create_bind_group(device, &bind_group_layout, color_texture_view);
+        let bind_group = create_bind_group(
+            device,
+            &bind_group_layout,
+            curve_configs_buffer,
+            trace_texture_view,
+        );
         let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
         Self {
             bind_group_layout,
@@ -33,9 +39,15 @@ impl Write {
     pub fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
-        color_texture_view: &wgpu::TextureView,
+        curve_configs_buffer: &wgpu::Buffer,
+        trace_texture_view: &wgpu::TextureView,
     ) {
-        self.bind_group = create_bind_group(device, &self.bind_group_layout, color_texture_view);
+        self.bind_group = create_bind_group(
+            device,
+            &self.bind_group_layout,
+            curve_configs_buffer,
+            trace_texture_view,
+        );
     }
 
     pub fn render(&self, render_pass: &mut wgpu::RenderPass, layer_count: u32) {
@@ -48,30 +60,53 @@ impl Write {
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
     wgpu::BindGroupLayoutDescriptor {
         label: None,
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::StorageTexture {
-                access: wgpu::StorageTextureAccess::ReadOnly,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                view_dimension: wgpu::TextureViewDimension::D3,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
             },
-            count: None,
-        }],
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::ReadOnly,
+                    format: wgpu::TextureFormat::R32Uint,
+                    view_dimension: wgpu::TextureViewDimension::D3,
+                },
+                count: None,
+            },
+        ],
     };
 
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    color_texture_view: &wgpu::TextureView,
+    curve_configs_buffer: &wgpu::Buffer,
+    trace_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
         layout: bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: wgpu::BindingResource::TextureView(color_texture_view),
-        }],
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: curve_configs_buffer,
+                    offset: 0,
+                    size: None,
+                }),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(trace_texture_view),
+            },
+        ],
     })
 }
 

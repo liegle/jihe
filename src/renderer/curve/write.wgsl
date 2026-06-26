@@ -4,9 +4,18 @@
 const XS = array(-1., 1, -1, 1, -1, 1);
 const YS = array(-1., 1, 1, 1, -1, -1);
 
+struct CurveConfig {
+    thickness: i32,
+    color: vec4<f32>,
+}
+
 @group(0)
 @binding(0)
-var color_texture: texture_storage_3d<rgba8unorm, read>;
+var<storage, read> curve_configs: array<CurveConfig>;
+
+@group(0)
+@binding(1)
+var trace_texture: texture_storage_3d<r32uint, read>;
 
 struct VertexOut {
     @builtin(position) position: vec4<f32>,
@@ -20,5 +29,8 @@ fn vs(@builtin(vertex_index) in: u32, @builtin(instance_index) instance_index: u
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    return textureLoad(color_texture, vec3<u32>(vec2<u32>(in.position.xy), in.instance_index));
+    if textureLoad(trace_texture, vec3<u32>(vec2<u32>(in.position.xy), in.instance_index)).x == 0 {
+        discard;
+    }
+    return curve_configs[in.instance_index].color;
 }
