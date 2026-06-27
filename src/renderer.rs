@@ -3,11 +3,11 @@ use std::iter;
 use encase::ShaderType;
 use thiserror;
 
-use crate::renderer::{buffer::AsUniformBytes, curve::Curve, fps::Fps};
+use crate::renderer::{buffer::AsUniformBytes, curve::Curve, frame_counter::FrameCounter};
 
 mod buffer;
 mod curve;
-mod fps;
+mod frame_counter;
 
 #[derive(encase::ShaderType)]
 pub struct Camera {
@@ -24,7 +24,7 @@ pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     surface_config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
 
-    fps: Fps,
+    frame_counter: FrameCounter,
     camera_buffer: wgpu::Buffer,
     curve: Curve,
 }
@@ -91,7 +91,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             surface_config,
             is_surface_configured: false,
 
-            fps: Fps::new(180),
+            frame_counter: FrameCounter::new(180),
 
             camera_buffer,
             curve,
@@ -113,7 +113,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             return;
         }
 
-        self.fps.frame();
+        self.frame_counter.frame();
         let output = self.surface.get_current_texture();
         let output = match output {
             wgpu::CurrentSurfaceTexture::Success(tex) => tex,
