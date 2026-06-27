@@ -3,10 +3,11 @@ use std::iter;
 use encase::ShaderType;
 use thiserror;
 
-use crate::renderer::{buffer::AsUniformBytes, curve::Curve};
+use crate::renderer::{buffer::AsUniformBytes, curve::Curve, fps::Fps};
 
 mod buffer;
 mod curve;
+mod fps;
 
 #[derive(encase::ShaderType)]
 pub struct Camera {
@@ -23,8 +24,8 @@ pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     surface_config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
 
+    fps: Fps,
     camera_buffer: wgpu::Buffer,
-
     curve: Curve,
 }
 
@@ -52,6 +53,8 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
+        log::info!("Surface capabilities: {surface_caps:?}");
+
         let surface_format = surface_caps
             .formats
             .iter()
@@ -63,11 +66,12 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             format: surface_format,
             width: size.0,
             height: size.1,
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
+            present_mode: wgpu::PresentMode::AutoVsync,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: Vec::new(),
             desired_maximum_frame_latency: 2,
         };
+        log::info!("Surface config: {surface_config:?}");
 
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -86,6 +90,8 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             queue,
             surface_config,
             is_surface_configured: false,
+
+            fps: Fps::new(180),
 
             camera_buffer,
             curve,
@@ -107,6 +113,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             return;
         }
 
+        self.fps.frame();
         let output = self.surface.get_current_texture();
         let output = match output {
             wgpu::CurrentSurfaceTexture::Success(tex) => tex,

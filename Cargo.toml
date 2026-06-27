@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 encase = "0.12"
+env_logger = "0.11"
 glam = { version = "0.33", features = ["encase"]}
 log = "0.4"
 pollster = "0.4"
