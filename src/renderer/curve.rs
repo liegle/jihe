@@ -110,9 +110,12 @@ impl Curve {
     pub fn render(
         &self,
         queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
+        #[cfg(feature = "profile")] encoder: &mut wgpu_profiler::Scope<'_, wgpu::CommandEncoder>,
+        #[cfg(not(feature = "profile"))] encoder: &mut wgpu::CommandEncoder,
         dst_texture_view: &wgpu::TextureView,
     ) {
+        #[cfg(feature = "profile")]
+        let mut curve_encoder = encoder.scope("Curve");
         let dst_size = (
             dst_texture_view.texture().width(),
             dst_texture_view.texture().height(),
@@ -129,18 +132,27 @@ impl Curve {
         );
 
         '_compute: {
+            #[cfg(feature = "profile")]
+            let mut compute_pass = curve_encoder.scoped_compute_pass("ComputePass");
+            #[cfg(not(feature = "profile"))]
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("ComputePass"),
                 timestamp_writes: None,
             });
             for evaluate in &self.evaluates {
+                #[cfg(feature = "profile")]
+                let _ = compute_pass.scope(format!("Curve evalute {}", evaluate.layer));
                 evaluate.render(&mut compute_pass, dst_size);
             }
-            self.trace
-                .render(&mut compute_pass, dst_size, CURVES.len() as u32);
+            {
+                #[cfg(feature = "profile")]
+                let _ = compute_pass.scope("Curve trace");
+                self.trace
+                    .render(&mut compute_pass, dst_size, CURVES.len() as u32);
+            }
         }
         '_render: {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let render_pass_descriptor = wgpu::RenderPassDescriptor {
                 label: Some("RenderPass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &dst_texture_view,
@@ -155,8 +167,17 @@ impl Curve {
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
-            });
-            self.write.render(&mut render_pass, CURVES.len() as u32);
+            };
+            #[cfg(feature = "profile")]
+            let mut render_pass =
+                curve_encoder.scoped_render_pass("RenderPass", render_pass_descriptor);
+            #[cfg(not(feature = "profile"))]
+            let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
+            {
+                #[cfg(feature = "profile")]
+                let _ = render_pass.scope("Curve write");
+                self.write.render(&mut render_pass, CURVES.len() as u32);
+            }
         }
     }
 }

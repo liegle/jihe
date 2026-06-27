@@ -3,11 +3,14 @@ use std::iter;
 use encase::ShaderType;
 use thiserror;
 
-use crate::renderer::{buffer::AsUniformBytes, curve::Curve, frame_counter::FrameCounter};
+#[cfg(feature = "profile")]
+use crate::renderer::profile::Profiler;
+use crate::renderer::{buffer::AsUniformBytes, curve::Curve};
 
 mod buffer;
 mod curve;
-mod frame_counter;
+#[cfg(feature = "profile")]
+mod profile;
 
 #[derive(encase::ShaderType)]
 pub struct Camera {
@@ -24,9 +27,11 @@ pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     surface_config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
 
-    frame_counter: FrameCounter,
     camera_buffer: wgpu::Buffer,
     curve: Curve,
+
+    #[cfg(feature = "profile")]
+    profiler: Profiler,
 }
 
 impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
@@ -41,10 +46,16 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
                 force_fallback_adapter: false,
             })
             .await?;
+
+        #[cfg(feature = "profile")]
+        let required_features =
+            adapter.features() & wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES;
+        #[cfg(not(feature = "profile"))]
+        let required_features = wgpu::Features::empty();
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
-                required_features: wgpu::Features::empty(),
+                required_features,
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 required_limits: Default::default(),
                 memory_hints: Default::default(),
@@ -82,6 +93,9 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
 
         let curve = Curve::new(&device, &camera_buffer, surface_format, size);
 
+        #[cfg(feature = "profile")]
+        let profiler = Profiler::new(&device, 180);
+
         Ok(Self {
             instance,
             window,
@@ -91,10 +105,11 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             surface_config,
             is_surface_configured: false,
 
-            frame_counter: FrameCounter::new(180),
-
             camera_buffer,
             curve,
+
+            #[cfg(feature = "profile")]
+            profiler,
         })
     }
 
@@ -113,7 +128,6 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             return;
         }
 
-        self.frame_counter.frame();
         let output = self.surface.get_current_texture();
         let output = match output {
             wgpu::CurrentSurfaceTexture::Success(tex) => tex,
@@ -140,6 +154,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
                 unreachable!("Wgpu example says its unreachable so");
             }
         };
+
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -154,10 +169,17 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
+        #[cfg(feature = "profile")]
+        self.profiler.encode(&mut encoder, &mut |scope| {
+            self.curve.render(&self.queue, scope, &view);
+        });
+        #[cfg(not(feature = "profile"))]
         self.curve.render(&self.queue, &mut encoder, &view);
 
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
+        #[cfg(feature = "profile")]
+        self.profiler.end_frame(&self.queue);
     }
 }
 
