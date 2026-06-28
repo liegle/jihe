@@ -18,7 +18,7 @@ pub struct Camera {
     pos: glam::Vec2,
 }
 
-pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
+pub struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     instance: wgpu::Instance,
     window: W,
     surface: wgpu::Surface<'static>,
@@ -35,7 +35,7 @@ pub(crate) struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
 }
 
 impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
-    pub(crate) async fn new(window: W, size: (u32, u32)) -> Result<Self, CreateRendererError> {
+    pub async fn new(window: W, size: (u32, u32)) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
         let surface = instance.create_surface(window.clone())?;
@@ -113,7 +113,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         })
     }
 
-    pub(crate) fn resize(&mut self, width: u32, height: u32) {
+    pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             self.is_surface_configured = true;
             self.surface_config.width = width;
@@ -123,7 +123,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         }
     }
 
-    pub(crate) fn render(&mut self) {
+    pub fn render(&mut self) {
         if !self.is_surface_configured {
             return;
         }
