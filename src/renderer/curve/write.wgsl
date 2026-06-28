@@ -24,7 +24,8 @@ fn vs(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instanc
     return VertexOut(vec4<f32>(
         f32(i32((vertex_index & 1u) << 1) - 1),
         f32(i32(vertex_index & 2u) - 1),
-        0, 1), instance_index);
+        0, 1
+    ), instance_index);
 }
 
 @fragment
