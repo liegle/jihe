@@ -41,7 +41,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         let surface = instance.create_surface(window.clone())?;
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: Default::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -155,9 +155,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             }
         };
 
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let view = output.texture.create_view(&Default::default());
         let camera = Camera {
             pixel_delta: 0.01,
             pos: glam::vec2(0., 0.),
@@ -165,9 +163,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         self.queue
             .write_buffer(&self.camera_buffer, 0, &camera.as_uniform_bytes().unwrap());
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        let mut encoder = self.device.create_command_encoder(&Default::default());
 
         #[cfg(feature = "profile")]
         self.profiler.encode(&mut encoder, &mut |scope| {

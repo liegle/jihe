@@ -53,7 +53,7 @@ impl Write {
     pub fn render(&self, render_pass: &mut wgpu::RenderPass, layer_count: u32) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, Some(&self.bind_group), &[]);
-        render_pass.draw(0..6, 0..layer_count);
+        render_pass.draw(0..4, 0..layer_count);
     }
 }
 
@@ -130,7 +130,15 @@ fn create_render_pipeline(
             buffers: &[],
             compilation_options: Default::default(),
         },
-        primitive: wgpu::PrimitiveState::default(),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleStrip,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Cw,
+            cull_mode: None,
+            unclipped_depth: false,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            conservative: false,
+        },
         depth_stencil: None,
         multisample: Default::default(),
         fragment: Some(wgpu::FragmentState {

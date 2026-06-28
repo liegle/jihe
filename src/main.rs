@@ -22,8 +22,7 @@ struct App {
 
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window_attributes = winit::window::Window::default_attributes();
-        let window = match event_loop.create_window(window_attributes) {
+        let window = match event_loop.create_window(Default::default()) {
             Ok(w) => w,
             Err(e) => {
                 log::error!("Can't create window: {}", e);
