@@ -7,21 +7,24 @@ mod renderer;
 fn main() {
     env_logger::init();
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-    let mut app = App {
-        renderer: None,
-        window: None,
-    };
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+    let mut app = App::Uninitialized;
     event_loop.run_app(&mut app).unwrap();
 }
 
-struct App {
-    renderer: Option<Renderer<Arc<winit::window::Window>>>,
-    window: Option<Arc<winit::window::Window>>,
+enum App {
+    Uninitialized,
+    Ready {
+        window: Arc<winit::window::Window>,
+        renderer: Renderer<Arc<winit::window::Window>>,
+    },
 }
 
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if let App::Ready { .. } = self {
+            return;
+        }
         let window = match event_loop.create_window(Default::default()) {
             Ok(w) => w,
             Err(e) => {
@@ -30,18 +33,15 @@ impl winit::application::ApplicationHandler for App {
             }
         };
         let window = Arc::new(window);
-        let renderer = match pollster::block_on(Renderer::new(
-            window.clone(),
-            (window.inner_size().width, window.inner_size().height),
-        )) {
-            Ok(r) => r,
-            Err(e) => {
-                log::error!("Can't create renderer: {}", e);
-                return;
-            }
-        };
-        self.renderer = Some(renderer);
-        self.window = Some(window);
+        let renderer =
+            match pollster::block_on(Renderer::new(window.clone(), window.inner_size().into())) {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("Can't create renderer: {}", e);
+                    return;
+                }
+            };
+        *self = App::Ready { window, renderer };
     }
 
     fn window_event(
@@ -50,22 +50,18 @@ impl winit::application::ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        let App::Ready { window, renderer } = self else {
+            return;
+        };
         match event {
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                if let Some(renderer) = &mut self.renderer {
-                    renderer.render();
-                }
-                if let Some(window) = &self.window {
-                    window.request_redraw();
-                }
+                renderer.render();
             }
             winit::event::WindowEvent::Resized(size) => {
-                if let Some(renderer) = &mut self.renderer {
-                    renderer.resize(size.width, size.height);
-                }
+                renderer.resize(size.into());
             }
             _ => (),
         }

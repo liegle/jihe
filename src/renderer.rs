@@ -19,13 +19,13 @@ pub struct Camera {
 }
 
 pub struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
+    size_cache: (u32, u32),
     instance: wgpu::Instance,
     window: W,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     surface_config: wgpu::SurfaceConfiguration,
-    is_surface_configured: bool,
 
     camera_buffer: wgpu::Buffer,
     curve: Curve,
@@ -82,6 +82,8 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
             view_formats: Vec::new(),
             desired_maximum_frame_latency: 2,
         };
+        surface.configure(&device, &surface_config);
+
         log::info!("Surface config: {surface_config:?}");
 
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -97,13 +99,13 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         let profiler = Profiler::new(&device, 180);
 
         Ok(Self {
+            size_cache: size,
             instance,
             window,
             surface,
             device,
             queue,
             surface_config,
-            is_surface_configured: false,
 
             camera_buffer,
             curve,
@@ -113,20 +115,26 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         })
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
-            self.is_surface_configured = true;
-            self.surface_config.width = width;
-            self.surface_config.height = height;
-            self.surface.configure(&self.device, &self.surface_config);
-            self.curve.dst_resize(&self.device, (width, height));
+    pub fn resize(&mut self, size: (u32, u32)) {
+        if size.0 > 0 && size.1 > 0 {
+            self.size_cache = size;
         }
     }
 
-    pub fn render(&mut self) {
-        if !self.is_surface_configured {
+    fn commit_resize(&mut self) {
+        if self.size_cache.0 == self.surface_config.width
+            && self.size_cache.1 == self.surface_config.height
+        {
             return;
         }
+        self.surface_config.width = self.size_cache.0;
+        self.surface_config.height = self.size_cache.1;
+        self.surface.configure(&self.device, &self.surface_config);
+        self.curve.dst_resize(&self.device, self.size_cache);
+    }
+
+    pub fn render(&mut self) {
+        self.commit_resize();
 
         let output = self.surface.get_current_texture();
         let output = match output {
