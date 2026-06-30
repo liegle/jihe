@@ -19,7 +19,6 @@ pub struct Camera {
 }
 
 pub struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
-    size_cache: (u32, u32),
     instance: wgpu::Instance,
     window: W,
     surface: wgpu::Surface<'static>,
@@ -99,7 +98,6 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         let profiler = Profiler::new(&device, 180);
 
         Ok(Self {
-            size_cache: size,
             instance,
             window,
             surface,
@@ -116,26 +114,19 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
     }
 
     pub fn resize(&mut self, size: (u32, u32)) {
-        if size.0 > 0 && size.1 > 0 {
-            self.size_cache = size;
-        }
-    }
-
-    fn commit_resize(&mut self) {
-        if self.size_cache.0 == self.surface_config.width
-            && self.size_cache.1 == self.surface_config.height
+        if size.0 > 0
+            && size.1 > 0
+            && size.0 == self.surface_config.width
+            && size.1 == self.surface_config.height
         {
-            return;
+            self.surface_config.width = size.0;
+            self.surface_config.height = size.1;
+            self.surface.configure(&self.device, &self.surface_config);
+            self.curve.dst_resize(&self.device, size);
         }
-        self.surface_config.width = self.size_cache.0;
-        self.surface_config.height = self.size_cache.1;
-        self.surface.configure(&self.device, &self.surface_config);
-        self.curve.dst_resize(&self.device, self.size_cache);
     }
 
     pub fn render(&mut self) {
-        self.commit_resize();
-
         let output = self.surface.get_current_texture();
         let output = match output {
             wgpu::CurrentSurfaceTexture::Success(tex) => tex,
