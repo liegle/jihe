@@ -18,7 +18,81 @@ pub struct Camera {
     pos: glam::Vec2,
 }
 
-pub struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
+pub enum Task {
+    Exit,
+    Render,
+    Resize((u32, u32)),
+}
+
+pub async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
+    window: W,
+    size: (u32, u32),
+    mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
+) {
+    let mut renderer = match Renderer::new(window, size).await {
+        Ok(r) => r,
+        Err(e) => {
+            log::error!("Can't create renderer: {}", e);
+            return;
+        }
+    };
+
+    const REDRAW_INTERVAL: tokio::time::Duration =
+        tokio::time::Duration::from_millis((1000. / 60.) as u64);
+    const RESIZE_INTERVAL: tokio::time::Duration =
+        tokio::time::Duration::from_millis((2000. / 1.) as u64);
+
+    let mut next_render = tokio::time::Instant::now();
+    let mut next_resize = next_render;
+
+    let mut render_scheduled = false;
+    let mut resize_scheduled = false;
+    let mut next_size = (1, 1);
+
+    loop {
+        let now = tokio::time::Instant::now();
+        tokio::select! {
+            task = receiver.recv() => {
+                let now = tokio::time::Instant::now();
+                match task.unwrap() {
+                    Task::Exit => {
+                        break;
+                    }
+                    Task::Render => {
+                        if now > next_render {
+                            renderer.render();
+                            next_render = now + REDRAW_INTERVAL;
+                        } else {
+                            render_scheduled = true;
+                        }
+                    }
+                    Task::Resize(size) => {
+                        if now > next_render {
+                            renderer.resize(size);
+                            next_resize = now + RESIZE_INTERVAL;
+                        } else {
+                            resize_scheduled = true;
+                            next_size = size;
+                        }
+                    }
+                }
+            }
+            _ = tokio::time::sleep_until(next_render), if render_scheduled && next_render > now => {
+                renderer.render();
+                next_render = now + REDRAW_INTERVAL;
+                render_scheduled = false;
+            },
+            _ = tokio::time::sleep_until(next_resize), if resize_scheduled && next_resize > now => {
+                renderer.resize(next_size);
+                next_resize = now + RESIZE_INTERVAL;
+                resize_scheduled = false;
+            },
+            else => break,
+        }
+    }
+}
+
+struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     instance: wgpu::Instance,
     window: W,
     surface: wgpu::Surface<'static>,
@@ -34,7 +108,7 @@ pub struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
 }
 
 impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
-    pub async fn new(window: W, size: (u32, u32)) -> Result<Self, CreateRendererError> {
+    async fn new(window: W, size: (u32, u32)) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
         let surface = instance.create_surface(window.clone())?;
@@ -113,7 +187,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         })
     }
 
-    pub fn resize(&mut self, size: (u32, u32)) {
+    fn resize(&mut self, size: (u32, u32)) {
         if size.0 > 0
             && size.1 > 0
             && size.0 != self.surface_config.width
@@ -126,7 +200,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
         }
     }
 
-    pub fn render(&mut self) {
+    fn render(&mut self) {
         let output = self.surface.get_current_texture();
         let output = match output {
             wgpu::CurrentSurfaceTexture::Success(tex) => tex,
@@ -179,7 +253,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum CreateRendererError {
+enum CreateRendererError {
     #[error("Failed to create surface, err: {0}")]
     CreateSurface(#[from] wgpu::CreateSurfaceError),
     #[error("Failed to request adapter, err: {0}")]
