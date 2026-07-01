@@ -116,8 +116,8 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
     pub fn resize(&mut self, size: (u32, u32)) {
         if size.0 > 0
             && size.1 > 0
-            && size.0 == self.surface_config.width
-            && size.1 == self.surface_config.height
+            && size.0 != self.surface_config.width
+            && size.1 != self.surface_config.height
         {
             self.surface_config.width = size.0;
             self.surface_config.height = size.1;

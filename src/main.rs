@@ -123,6 +123,7 @@ impl winit::application::ApplicationHandler for App {
         };
         match event {
             winit::event::WindowEvent::CloseRequested => {
+                sender.send(Task::Exit).unwrap();
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
