@@ -1,4 +1,7 @@
-use std::iter;
+use std::{
+    iter,
+    thread::{self, JoinHandle},
+};
 
 use encase::ShaderType;
 use thiserror;
@@ -18,18 +21,64 @@ pub struct Camera {
     pos: glam::Vec2,
 }
 
-pub enum Task {
+enum Task {
     Exit,
     Render,
     Resize((u32, u32)),
 }
 
-pub async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
+pub struct Renderer {
+    join_handle: JoinHandle<()>,
+    sender: tokio::sync::mpsc::UnboundedSender<Task>,
+    size: (u32, u32),
+}
+
+impl Renderer {
+    pub fn new<W: Into<wgpu::SurfaceTarget<'static>> + Clone + Send + 'static>(
+        window: W,
+        size: (u32, u32),
+    ) -> Self {
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let join_handle = thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .unwrap()
+                .block_on(run(window, size, receiver));
+        });
+        Self {
+            join_handle,
+            sender,
+            size,
+        }
+    }
+
+    pub fn join(self) {
+        self.join_handle.join().unwrap();
+    }
+
+    pub fn exit(&self) {
+        self.sender.send(Task::Exit).unwrap();
+    }
+
+    pub fn render(&self) {
+        self.sender.send(Task::Render).unwrap();
+    }
+
+    pub fn resize(&mut self, size: (u32, u32)) {
+        if size != self.size {
+            self.size = size;
+            self.sender.send(Task::Resize(size)).unwrap();
+        }
+    }
+}
+
+async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
     window: W,
     size: (u32, u32),
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
 ) {
-    let mut renderer = match Renderer::new(window, size).await {
+    let mut renderer = match Inner::new(window, size).await {
         Ok(r) => r,
         Err(e) => {
             log::error!("Can't create renderer: {}", e);
@@ -93,7 +142,7 @@ pub async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
     }
 }
 
-struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
+struct Inner<W: Into<wgpu::SurfaceTarget<'static>>> {
     instance: wgpu::Instance,
     window: W,
     surface: wgpu::Surface<'static>,
@@ -108,7 +157,7 @@ struct Renderer<W: Into<wgpu::SurfaceTarget<'static>>> {
     profiler: Profiler,
 }
 
-impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Renderer<W> {
+impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
     async fn new(window: W, size: (u32, u32)) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 

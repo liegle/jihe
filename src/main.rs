@@ -1,10 +1,9 @@
 use std::{
     mem,
     sync::Arc,
-    thread::{self, JoinHandle},
 };
 
-use crate::renderer::Task;
+use crate::renderer::Renderer;
 
 mod renderer;
 
@@ -18,10 +17,7 @@ fn main() {
 
 enum App {
     Uninitialized,
-    Ready {
-        join_handle: JoinHandle<()>,
-        sender: tokio::sync::mpsc::UnboundedSender<Task>,
-    },
+    Ready { renderer: Renderer },
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -36,23 +32,10 @@ impl winit::application::ApplicationHandler for App {
                 return;
             }
         };
-        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let window = Arc::new(window);
-        let join_handle = thread::spawn(move || {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_time()
-                .build()
-                .unwrap()
-                .block_on(renderer::run(
-                    window.clone(),
-                    window.inner_size().into(),
-                    receiver,
-                ));
-        });
-        *self = App::Ready {
-            join_handle,
-            sender,
-        };
+        let size = window.inner_size().into();
+        let renderer = Renderer::new(window, size);
+        *self = App::Ready { renderer };
     }
 
     fn window_event(
@@ -61,27 +44,27 @@ impl winit::application::ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let App::Ready { sender, .. } = self else {
+        let App::Ready { renderer } = self else {
             return;
         };
         match event {
             winit::event::WindowEvent::CloseRequested => {
-                sender.send(Task::Exit).unwrap();
+                renderer.exit();
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                sender.send(Task::Render).unwrap();
+                renderer.render();
             }
             winit::event::WindowEvent::Resized(size) => {
-                sender.send(Task::Resize(size.into())).unwrap();
+                renderer.resize(size.into());
             }
             _ => (),
         }
     }
 
     fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let App::Ready { join_handle, .. } = mem::replace(self, App::Uninitialized) {
-            join_handle.join().unwrap();
+        if let App::Ready { renderer } = mem::replace(self, App::Uninitialized) {
+            renderer.join();
         }
     }
 }
