@@ -50,7 +50,6 @@ pub async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
     let mut next_size = (1, 1);
 
     loop {
-        let now = tokio::time::Instant::now();
         tokio::select! {
             task = receiver.recv() => {
                 let now = tokio::time::Instant::now();
@@ -77,14 +76,16 @@ pub async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
                     }
                 }
             }
-            _ = tokio::time::sleep_until(next_render), if render_scheduled && next_render > now => {
+            _ = tokio::time::sleep_until(next_render),
+                if render_scheduled && next_render > tokio::time::Instant::now() => {
                 renderer.render();
-                next_render = now + REDRAW_INTERVAL;
+                next_render = tokio::time::Instant::now() + REDRAW_INTERVAL;
                 render_scheduled = false;
             },
-            _ = tokio::time::sleep_until(next_resize), if resize_scheduled && next_resize > now => {
+            _ = tokio::time::sleep_until(next_resize),
+                if resize_scheduled && next_resize > tokio::time::Instant::now() => {
                 renderer.resize(next_size);
-                next_resize = now + RESIZE_INTERVAL;
+                next_resize = tokio::time::Instant::now() + RESIZE_INTERVAL;
                 resize_scheduled = false;
             },
             else => break,
