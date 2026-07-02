@@ -4,7 +4,6 @@ use std::{
 };
 
 use encase::ShaderType;
-use thiserror;
 
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;
@@ -34,18 +33,21 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new<W: Into<wgpu::SurfaceTarget<'static>> + Clone + Send + 'static>(
+    pub fn new<W: Into<wgpu::SurfaceTarget<'static>> + Clone + Send + Sync + 'static>(
         window: W,
         size: (u32, u32),
     ) -> Self {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-        let join_handle = thread::spawn(move || {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_time()
-                .build()
-                .unwrap()
-                .block_on(run(window, size, receiver));
-        });
+        let join_handle = {
+            let sender = sender.clone();
+            thread::spawn(move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .unwrap()
+                    .block_on(run(window, size, sender, receiver));
+            })
+        };
         Self {
             join_handle,
             sender,
@@ -76,6 +78,7 @@ impl Renderer {
 async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
     window: W,
     size: (u32, u32),
+    sender: tokio::sync::mpsc::UnboundedSender<Task>,
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
 ) {
     let mut renderer = match Inner::new(window, size).await {
@@ -86,6 +89,7 @@ async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
         }
     };
 
+    // TODO: from config
     const REDRAW_INTERVAL: tokio::time::Duration =
         tokio::time::Duration::from_millis((1000. / 60.) as u64);
     const RESIZE_INTERVAL: tokio::time::Duration =
@@ -118,6 +122,7 @@ async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
                         if now > next_render {
                             renderer.resize(size);
                             next_resize = now + RESIZE_INTERVAL;
+                            sender.send(Task::Render).unwrap();
                         } else {
                             resize_scheduled = true;
                             next_size = size;
@@ -136,13 +141,14 @@ async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
                 renderer.resize(next_size);
                 next_resize = tokio::time::Instant::now() + RESIZE_INTERVAL;
                 resize_scheduled = false;
+                sender.send(Task::Render).unwrap();
             },
             else => break,
         }
     }
 }
 
-struct Inner<W: Into<wgpu::SurfaceTarget<'static>>> {
+struct Inner<W> {
     instance: wgpu::Instance,
     window: W,
     surface: wgpu::Surface<'static>,
@@ -240,8 +246,7 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
     fn resize(&mut self, size: (u32, u32)) {
         if size.0 > 0
             && size.1 > 0
-            && size.0 != self.surface_config.width
-            && size.1 != self.surface_config.height
+            && (size.0 != self.surface_config.width || size.1 != self.surface_config.height)
         {
             self.surface_config.width = size.0;
             self.surface_config.height = size.1;
