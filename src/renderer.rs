@@ -7,12 +7,13 @@ use encase::ShaderType;
 
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;
-use crate::renderer::{buffer::AsUniformBytes, curve::Curve};
+use crate::renderer::{buffer::AsUniformBytes, curve::Curve, scheduler::Scheduler};
 
 mod buffer;
 mod curve;
 #[cfg(feature = "profile")]
 mod profile;
+mod scheduler;
 
 #[derive(encase::ShaderType)]
 pub struct Camera {
@@ -93,54 +94,36 @@ async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
     const REDRAW_INTERVAL: tokio::time::Duration =
         tokio::time::Duration::from_millis((1000. / 60.) as u64);
     const RESIZE_INTERVAL: tokio::time::Duration =
-        tokio::time::Duration::from_millis((2000. / 1.) as u64);
+        tokio::time::Duration::from_millis((1000. / 10.) as u64);
 
-    let mut next_render = tokio::time::Instant::now();
-    let mut next_resize = next_render;
-
-    let mut render_scheduled = false;
-    let mut resize_scheduled = false;
-    let mut next_size = (1, 1);
+    let mut render_scheduler = Scheduler::new(REDRAW_INTERVAL);
+    let mut resize_scheduler = Scheduler::new(RESIZE_INTERVAL);
 
     loop {
         tokio::select! {
             task = receiver.recv() => {
-                let now = tokio::time::Instant::now();
                 match task.unwrap() {
                     Task::Exit => {
                         break;
                     }
                     Task::Render => {
-                        if now > next_render {
+                        if let Some(_) = render_scheduler.push_task(()) {
                             renderer.render();
-                            next_render = now + REDRAW_INTERVAL;
-                        } else {
-                            render_scheduled = true;
                         }
                     }
                     Task::Resize(size) => {
-                        if now > next_render {
+                        if let Some(size) = resize_scheduler.push_task(size) {
                             renderer.resize(size);
-                            next_resize = now + RESIZE_INTERVAL;
                             sender.send(Task::Render).unwrap();
-                        } else {
-                            resize_scheduled = true;
-                            next_size = size;
                         }
                     }
                 }
             }
-            _ = tokio::time::sleep_until(next_render),
-                if render_scheduled && next_render > tokio::time::Instant::now() => {
+            Some(_) = render_scheduler.sleep() => {
                 renderer.render();
-                next_render = tokio::time::Instant::now() + REDRAW_INTERVAL;
-                render_scheduled = false;
             },
-            _ = tokio::time::sleep_until(next_resize),
-                if resize_scheduled && next_resize > tokio::time::Instant::now() => {
-                renderer.resize(next_size);
-                next_resize = tokio::time::Instant::now() + RESIZE_INTERVAL;
-                resize_scheduled = false;
+            Some(size) = resize_scheduler.sleep() => {
+                renderer.resize(size);
                 sender.send(Task::Render).unwrap();
             },
             else => break,
