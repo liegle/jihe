@@ -168,9 +168,9 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features,
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 required_limits: Default::default(),
-                memory_hints: Default::default(),
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,
             })
             .await?;
