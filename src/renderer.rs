@@ -234,7 +234,8 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
             self.surface_config.width = size.0;
             self.surface_config.height = size.1;
             self.surface.configure(&self.device, &self.surface_config);
-            self.curve.dst_resize(&self.device, size);
+            self.curve
+                .dst_resize(&self.device, size, &self.camera_buffer);
         }
     }
 

@@ -33,8 +33,6 @@ struct CurveConfig {
 }
 
 pub struct Curve {
-    camera_buffer: wgpu::Buffer,
-
     evaluates: Vec<Evaluate>,
     trace: Trace,
     write: Write,
@@ -79,7 +77,6 @@ impl Curve {
         );
 
         Self {
-            camera_buffer: camera_buffer.clone(),
             evaluates,
             trace,
             write,
@@ -87,7 +84,7 @@ impl Curve {
         }
     }
 
-    pub fn dst_resize(&mut self, device: &wgpu::Device, dst_size: (u32, u32)) {
+    pub fn dst_resize(&mut self, device: &wgpu::Device, dst_size: (u32, u32), camera_buffer: &wgpu::Buffer) {
         let residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
         let residual_texture_view = create_residual_texture_view(&residual_texture);
         let trace_texture = create_trace_texture(&device, dst_size, CURVES.len() as u32);
@@ -96,7 +93,7 @@ impl Curve {
         for (layer, evaluate) in &mut self.evaluates.iter_mut().enumerate() {
             evaluate.remake_bind_group(
                 &device,
-                &self.camera_buffer,
+                camera_buffer,
                 &residual_texture,
                 layer as u32,
             );

@@ -99,7 +99,7 @@ fn create_bind_group(
     residual_texture: &wgpu::Texture,
     layer: u32,
 ) -> wgpu::BindGroup {
-    let offset_texture_view = residual_texture.create_view(&wgpu::TextureViewDescriptor {
+    let residual_texture_view = residual_texture.create_view(&wgpu::TextureViewDescriptor {
         label: None,
         format: Some(residual_texture.format()),
         dimension: Some(wgpu::TextureViewDimension::D2),
@@ -124,7 +124,7 @@ fn create_bind_group(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(&offset_texture_view),
+                resource: wgpu::BindingResource::TextureView(&residual_texture_view),
             },
         ],
     })
