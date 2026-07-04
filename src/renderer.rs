@@ -7,13 +7,13 @@ use encase::ShaderType;
 
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;
-use crate::renderer::{buffer::AsUniformBytes, curve::Curve, scheduler::Scheduler};
+use crate::renderer::{buffer::AsUniformBytes, curve::Curve, schedule::Scheduler};
 
 mod buffer;
 mod curve;
 #[cfg(feature = "profile")]
 mod profile;
-mod scheduler;
+mod schedule;
 
 #[derive(encase::ShaderType)]
 pub struct Camera {
