@@ -1,5 +1,5 @@
 struct CurveConfig {
-    thickness: i32,
+    thickness: u32,
     color: vec4<f32>,
 }
 
@@ -30,7 +30,22 @@ fn vs(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instanc
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    if textureLoad(trace_texture, vec3<u32>(vec2<u32>(in.position.xy), in.instance_index)).x == 0 {
+    let thickness = i32(curve_configs[in.instance_index].thickness);
+    let thickness2 = thickness * thickness;
+    let pos = vec2<i32>(in.position.xy);
+
+    var least_dist2 = thickness2 + 1;
+    for (var i = -thickness; i <= thickness; i++) {
+        for (var j = -thickness; j <= thickness; j++) {
+            let v = textureLoad(trace_texture,
+                vec3<u32>(vec2<u32>(pos + vec2<i32>(i, j)), in.instance_index)).x;
+            let dist2 = i * i + j * j;
+            if dist2 <= thickness2 && dist2 < least_dist2 && v == 1 {
+                least_dist2 = dist2;
+            }
+        }
+    }
+    if least_dist2 > thickness2 {
         discard;
     }
     return curve_configs[in.instance_index].color;

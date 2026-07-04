@@ -28,7 +28,7 @@ const CURVES: &[(CurveConfig, &str)] = &[
 
 #[derive(encase::ShaderType, Clone)]
 struct CurveConfig {
-    thickness: i32,
+    thickness: u32,
     color: glam::Vec4,
 }
 
