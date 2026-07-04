@@ -37,6 +37,8 @@ pub struct Curve {
     trace: Trace,
     write: Write,
 
+    residual_texture: wgpu::Texture,
+    trace_texture: wgpu::Texture,
     curve_configs_buffer: wgpu::Buffer,
 }
 
@@ -80,21 +82,25 @@ impl Curve {
             evaluates,
             trace,
             write,
+            residual_texture,
+            trace_texture,
             curve_configs_buffer,
         }
     }
 
     pub fn dst_resize(&mut self, device: &wgpu::Device, dst_size: (u32, u32), camera_buffer: &wgpu::Buffer) {
-        let residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
-        let residual_texture_view = create_residual_texture_view(&residual_texture);
-        let trace_texture = create_trace_texture(&device, dst_size, CURVES.len() as u32);
-        let trace_texture_view = create_trace_texture_view(&trace_texture);
+        self.residual_texture.destroy();
+        self.residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
+        let residual_texture_view = create_residual_texture_view(&self.residual_texture);
+        self.trace_texture.destroy();
+        self.trace_texture = create_trace_texture(&device, dst_size, CURVES.len() as u32);
+        let trace_texture_view = create_trace_texture_view(&self.trace_texture);
 
         for (layer, evaluate) in &mut self.evaluates.iter_mut().enumerate() {
             evaluate.remake_bind_group(
                 &device,
                 camera_buffer,
-                &residual_texture,
+                &self.residual_texture,
                 layer as u32,
             );
         }
