@@ -288,8 +288,8 @@ impl Inner {
                 &self.camera_buffer,
                 0,
                 &buffer::Camera {
-                    scale: scene.scale,
-                    pos: scene.pos,
+                    scale: scene.camera.scale,
+                    pos: scene.camera.pos,
                 }
                 .as_uniform_bytes()
                 .unwrap(),

@@ -65,7 +65,9 @@ impl winit::application::ApplicationHandler for App {
                 renderer.resize(size.into());
             }
             winit::event::WindowEvent::KeyboardInput { device_id: _, event, is_synthetic: _ } => {
-                scene.handle_key(&event);
+                if scene.handle_key(&event) {
+                    renderer.render();
+                }
             }
             _ => (),
         }
