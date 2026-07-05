@@ -10,7 +10,7 @@ use encase::ShaderType as _;
 use crate::renderer::profile::Profiler;
 use crate::{
     renderer::{buffer::AsUniformBytes, curve::Curve, schedule::Scheduler},
-    scene::Scene,
+    scene::SceneData,
 };
 
 mod buffer;
@@ -33,7 +33,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new<W: Into<wgpu::SurfaceTarget<'static>> + Clone + Send + Sync + 'static>(
-        scene: Arc<Mutex<Scene>>,
+        scene: Arc<Mutex<SceneData>>,
         window: W,
         size: (u32, u32),
     ) -> Self {
@@ -76,7 +76,7 @@ impl Renderer {
 }
 
 async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
-    scene: Arc<Mutex<Scene>>,
+    scene: Arc<Mutex<SceneData>>,
     window: W,
     size: (u32, u32),
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
@@ -132,7 +132,7 @@ async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
 }
 
 struct Inner<W> {
-    scene: Arc<Mutex<Scene>>,
+    scene: Arc<Mutex<SceneData>>,
 
     instance: wgpu::Instance,
     window: W,
@@ -150,7 +150,7 @@ struct Inner<W> {
 
 impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
     async fn new(
-        scene: Arc<Mutex<Scene>>,
+        scene: Arc<Mutex<SceneData>>,
         window: W,
         size: (u32, u32),
     ) -> Result<Self, CreateRendererError> {
@@ -278,24 +278,22 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
         };
 
         let view = output.texture.create_view(&Default::default());
-        self.queue.write_buffer(
-            &self.camera_buffer,
-            0,
-            &{
-                let scene = self.scene.lock().unwrap();
-                buffer::Camera {
-                    scale: scene.scale,
-                    pos: scene.pos,
-                }
-            }
-            .as_uniform_bytes()
-            .unwrap(),
-        );
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
         {
             let scene = self.scene.lock().unwrap();
+
+            self.queue.write_buffer(
+                &self.camera_buffer,
+                0,
+                &buffer::Camera {
+                    scale: scene.scale,
+                    pos: scene.pos,
+                }
+                .as_uniform_bytes()
+                .unwrap(),
+            );
             #[cfg(feature = "profile")]
             self.profiler.encode(&mut encoder, &mut |scope| {
                 self.curve.render(&scene.curves, &self.queue, scope, &view);
