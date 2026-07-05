@@ -27,7 +27,7 @@ impl Curve {
         dst_format: wgpu::TextureFormat,
         dst_size: (u32, u32),
     ) -> Self {
-        // TODO: Store 1 residual in 1 bit, to store 32 curves in 1 texture layer
+        // TODO: Maybe residual can be stored in f16 storage buffers
         let residual_texture = create_residual_texture(&device, dst_size, curves.len() as u32);
         let residual_texture_view = create_residual_texture_view(&residual_texture);
         let trace_texture = create_trace_texture(&device, dst_size, curves.len() as u32);
