@@ -22,6 +22,8 @@ pub struct Config {
 pub struct Curve {
     pub thickness: u32,
     pub color: glam::Vec4,
+    // TODO: When parsing, prevent pow(minus, xxx);
+    // replace log/log2 with safeLog/safeLog2
     pub expr: String,
 }
 
@@ -55,7 +57,7 @@ impl Scene {
                     Curve {
                         thickness: 2,
                         color: glam::vec4(1., 1., 1., 1.),
-                        expr: "pow(x, 3) + log(y) - 10".to_string(),
+                        expr: "pow(x, 3) + safeLog(y) - 10".to_string(),
                     },
                 ],
             })),

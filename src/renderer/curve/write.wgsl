@@ -35,6 +35,7 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     let pos = vec2<i32>(in.position.xy);
 
     var least_dist2 = thickness2 + 1;
+    // TODO: Still looks strange
     for (var i = -thickness; i <= thickness; i++) {
         for (var j = -thickness; j <= thickness; j++) {
             let word = textureLoad(trace_texture,

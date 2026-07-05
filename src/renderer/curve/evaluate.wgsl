@@ -1,3 +1,6 @@
+const F32_MAX: f32 = 3.40282347e+38;
+const F32_MIN: f32 = -F32_MAX;
+
 struct Camera {
     scale: f32,
     pos: vec2<f32>,
@@ -20,4 +23,12 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
         f32(i32(dst_size.y) / 2 - i32(id.y)) * camera.scale + camera.pos.y,
     );
     textureStore(residual_texture, id.xy, vec4<f32>(residual, 0, 0, 0));
+}
+
+fn safeLog(x: f32) -> f32 {
+    return select(F32_MIN, log(x), x > 0);
+}
+
+fn safeLog2(x: f32) -> f32 {
+    return select(F32_MIN, log2(x), x > 0);
 }
