@@ -32,9 +32,9 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new<W: Into<wgpu::SurfaceTarget<'static>> + Clone + Send + Sync + 'static>(
+    pub fn new(
         scene: Arc<Mutex<SceneData>>,
-        window: W,
+        window: Arc<winit::window::Window>,
         size: (u32, u32),
     ) -> Self {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -75,9 +75,9 @@ impl Renderer {
     }
 }
 
-async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
+async fn run(
     scene: Arc<Mutex<SceneData>>,
-    window: W,
+    window: Arc<winit::window::Window>,
     size: (u32, u32),
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
@@ -131,11 +131,11 @@ async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
     }
 }
 
-struct Inner<W> {
+struct Inner {
     scene: Arc<Mutex<SceneData>>,
 
     instance: wgpu::Instance,
-    window: W,
+    window: Arc<winit::window::Window>,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -148,10 +148,10 @@ struct Inner<W> {
     profiler: Profiler,
 }
 
-impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
+impl Inner {
     async fn new(
         scene: Arc<Mutex<SceneData>>,
-        window: W,
+        window: Arc<winit::window::Window>,
         size: (u32, u32),
     ) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
