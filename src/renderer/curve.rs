@@ -1,36 +1,13 @@
 use encase::ShaderType;
 
-use crate::renderer::{
-    buffer::AsDynamicStorageBytes,
+use crate::{renderer::{
+    buffer::{self, AsDynamicStorageBytes},
     curve::{evaluate::Evaluate, trace::Trace, write::Write},
-};
+}, scene};
 
 mod evaluate;
 mod trace;
 mod write;
-
-const CURVES: &[(CurveConfig, &str)] = &[
-    (
-        CurveConfig {
-            thickness: 3,
-            color: glam::vec4(1., 0., 0., 1.),
-        },
-        "pow(x, 5) + pow(y, 2) - y",
-    ),
-    (
-        CurveConfig {
-            thickness: 3,
-            color: glam::vec4(0., 0., 1., 1.),
-        },
-        "pow(x, 2) + pow(y, 2) - 4",
-    ),
-];
-
-#[derive(encase::ShaderType, Clone)]
-struct CurveConfig {
-    thickness: u32,
-    color: glam::Vec4,
-}
 
 pub struct Curve {
     evaluates: Vec<Evaluate>,
@@ -39,33 +16,34 @@ pub struct Curve {
 
     residual_texture: wgpu::Texture,
     trace_texture: wgpu::Texture,
-    curve_configs_buffer: wgpu::Buffer,
+    curves_buffer: wgpu::Buffer,
 }
 
 impl Curve {
     pub fn new(
+        curves: &Vec<scene::Curve>,
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
         dst_format: wgpu::TextureFormat,
         dst_size: (u32, u32),
     ) -> Self {
         // TODO: Store 1 residual in 1 bit, to store 32 curves in 1 texture layer
-        let residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
+        let residual_texture = create_residual_texture(&device, dst_size, curves.len() as u32);
         let residual_texture_view = create_residual_texture_view(&residual_texture);
-        let trace_texture = create_trace_texture(&device, dst_size, CURVES.len() as u32);
+        let trace_texture = create_trace_texture(&device, dst_size, curves.len() as u32);
         let trace_texture_view = create_trace_texture_view(&trace_texture);
 
-        let curve_configs_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let curves_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: CurveConfig::min_size().get() * CURVES.len() as u64,
+            size: buffer::Curve::min_size().get() * curves.len().max(1) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let evaluates = CURVES
+        let evaluates = curves
             .iter()
             .enumerate()
-            .map(|(i, c)| Evaluate::new(c.1, i as u32, device, camera_buffer, &residual_texture))
+            .map(|(i, c)| Evaluate::new(&c.expr, i as u32, device, camera_buffer, &residual_texture))
             .collect();
         let trace = Trace::new(&device, &residual_texture_view, &trace_texture_view);
         // TODO: Current write can only write to dst out of order
@@ -73,7 +51,7 @@ impl Curve {
         // and then write it back to dst
         let write = Write::new(
             &device,
-            &curve_configs_buffer,
+            &curves_buffer,
             &trace_texture_view,
             dst_format,
         );
@@ -84,16 +62,16 @@ impl Curve {
             write,
             residual_texture,
             trace_texture,
-            curve_configs_buffer,
+            curves_buffer,
         }
     }
 
     pub fn dst_resize(&mut self, device: &wgpu::Device, dst_size: (u32, u32), camera_buffer: &wgpu::Buffer) {
         self.residual_texture.destroy();
-        self.residual_texture = create_residual_texture(&device, dst_size, CURVES.len() as u32);
+        self.residual_texture = create_residual_texture(&device, dst_size, self.evaluates.len() as u32);
         let residual_texture_view = create_residual_texture_view(&self.residual_texture);
         self.trace_texture.destroy();
-        self.trace_texture = create_trace_texture(&device, dst_size, CURVES.len() as u32);
+        self.trace_texture = create_trace_texture(&device, dst_size, self.evaluates.len() as u32);
         let trace_texture_view = create_trace_texture_view(&self.trace_texture);
 
         for (layer, evaluate) in &mut self.evaluates.iter_mut().enumerate() {
@@ -107,11 +85,12 @@ impl Curve {
         self.trace
             .remake_bind_group(&device, &residual_texture_view, &trace_texture_view);
         self.write
-            .remake_bind_group(&device, &self.curve_configs_buffer, &trace_texture_view);
+            .remake_bind_group(&device, &self.curves_buffer, &trace_texture_view);
     }
 
     pub fn render(
         &self,
+        curves: &Vec<scene::Curve>,
         queue: &wgpu::Queue,
         #[cfg(feature = "profile")] encoder: &mut wgpu_profiler::Scope<'_, wgpu::CommandEncoder>,
         #[cfg(not(feature = "profile"))] encoder: &mut wgpu::CommandEncoder,
@@ -124,12 +103,15 @@ impl Curve {
             dst_texture_view.texture().height(),
         );
         queue.write_buffer(
-            &self.curve_configs_buffer,
+            &self.curves_buffer,
             0,
-            &CURVES
+            &curves
                 .iter()
-                .map(|c| c.0.clone())
-                .collect::<Vec<CurveConfig>>()
+                .map(|c| buffer::Curve {
+                    thickness: c.thickness,
+                    color: c.color
+                })
+                .collect::<Vec<_>>()
                 .as_dynamic_storage_bytes()
                 .unwrap(),
         );
@@ -151,7 +133,7 @@ impl Curve {
                 #[cfg(feature = "profile")]
                 let _ = compute_pass.scope("Curve trace");
                 self.trace
-                    .render(&mut compute_pass, dst_size, CURVES.len() as u32);
+                    .render(&mut compute_pass, dst_size, curves.len() as u32);
             }
         }
         '_render: {
@@ -179,7 +161,7 @@ impl Curve {
             {
                 #[cfg(feature = "profile")]
                 let _ = render_pass.scope("Curve write");
-                self.write.render(&mut render_pass, CURVES.len() as u32);
+                self.write.render(&mut render_pass, curves.len() as u32);
             }
         }
     }
@@ -195,7 +177,7 @@ fn create_residual_texture(
         size: wgpu::Extent3d {
             width: dst_size.0,
             height: dst_size.1,
-            depth_or_array_layers: layer_count,
+            depth_or_array_layers: layer_count.max(1),
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -230,7 +212,7 @@ fn create_trace_texture(
         size: wgpu::Extent3d {
             width: dst_size.0,
             height: dst_size.1,
-            depth_or_array_layers: layer_count,
+            depth_or_array_layers: layer_count.max(1),
         },
         mip_level_count: 1,
         sample_count: 1,

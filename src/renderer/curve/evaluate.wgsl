@@ -1,5 +1,5 @@
 struct Camera {
-    pixel_delta: f32,
+    scale: f32,
     pos: vec2<f32>,
 }
 
@@ -16,8 +16,8 @@ var residual_texture: texture_storage_2d<r32float, write>;
 fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     let dst_size = textureDimensions(residual_texture);
     let residual = f(
-        f32(i32(id.x) - i32(dst_size.x) / 2) * camera.pixel_delta + camera.pos.x,
-        f32(i32(dst_size.y) / 2 - i32(id.y)) * camera.pixel_delta + camera.pos.y,
+        f32(i32(id.x) - i32(dst_size.x) / 2) * camera.scale + camera.pos.x,
+        f32(i32(dst_size.y) / 2 - i32(id.y)) * camera.scale + camera.pos.y,
     );
     textureStore(residual_texture, id.xy, vec4<f32>(residual, 0, 0, 0));
 }

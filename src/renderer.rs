@@ -1,25 +1,23 @@
 use std::{
     iter,
+    sync::{Arc, Mutex},
     thread::{self, JoinHandle},
 };
 
-use encase::ShaderType;
+use encase::ShaderType as _;
 
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;
-use crate::renderer::{buffer::AsUniformBytes, curve::Curve, schedule::Scheduler};
+use crate::{
+    renderer::{buffer::AsUniformBytes, curve::Curve, schedule::Scheduler},
+    scene::Scene,
+};
 
 mod buffer;
 mod curve;
 #[cfg(feature = "profile")]
 mod profile;
 mod schedule;
-
-#[derive(encase::ShaderType)]
-pub struct Camera {
-    pixel_delta: f32,
-    pos: glam::Vec2,
-}
 
 enum Task {
     Exit,
@@ -35,6 +33,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new<W: Into<wgpu::SurfaceTarget<'static>> + Clone + Send + Sync + 'static>(
+        scene: Arc<Mutex<Scene>>,
         window: W,
         size: (u32, u32),
     ) -> Self {
@@ -46,7 +45,7 @@ impl Renderer {
                     .enable_time()
                     .build()
                     .unwrap()
-                    .block_on(run(window, size, sender, receiver));
+                    .block_on(run(scene, window, size, sender, receiver));
             })
         };
         Self {
@@ -77,12 +76,13 @@ impl Renderer {
 }
 
 async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
+    scene: Arc<Mutex<Scene>>,
     window: W,
     size: (u32, u32),
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
 ) {
-    let mut renderer = match Inner::new(window, size).await {
+    let mut renderer = match Inner::new(scene, window, size).await {
         Ok(r) => r,
         Err(e) => {
             log::error!("Can't create renderer: {}", e);
@@ -132,6 +132,8 @@ async fn run<W: Into<wgpu::SurfaceTarget<'static>> + Clone>(
 }
 
 struct Inner<W> {
+    scene: Arc<Mutex<Scene>>,
+
     instance: wgpu::Instance,
     window: W,
     surface: wgpu::Surface<'static>,
@@ -147,7 +149,11 @@ struct Inner<W> {
 }
 
 impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
-    async fn new(window: W, size: (u32, u32)) -> Result<Self, CreateRendererError> {
+    async fn new(
+        scene: Arc<Mutex<Scene>>,
+        window: W,
+        size: (u32, u32),
+    ) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
         let surface = instance.create_surface(window.clone())?;
@@ -200,17 +206,21 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
 
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: Camera::min_size().get(),
+            size: buffer::Camera::min_size().get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let curve = Curve::new(&device, &camera_buffer, surface_format, size);
+        let curve = {
+            let scene = &scene.lock().unwrap();
+            Curve::new(&scene.curves, &device, &camera_buffer, surface_format, size)
+        };
 
         #[cfg(feature = "profile")]
         let profiler = Profiler::new(&device, 180);
 
         Ok(Self {
+            scene,
             instance,
             window,
             surface,
@@ -268,22 +278,32 @@ impl<W: Into<wgpu::SurfaceTarget<'static>> + Clone> Inner<W> {
         };
 
         let view = output.texture.create_view(&Default::default());
-        let camera = Camera {
-            pixel_delta: 0.01,
-            pos: glam::vec2(0., 0.),
-        };
-        self.queue
-            .write_buffer(&self.camera_buffer, 0, &camera.as_uniform_bytes().unwrap());
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            &{
+                let scene = self.scene.lock().unwrap();
+                buffer::Camera {
+                    scale: scene.scale,
+                    pos: scene.pos,
+                }
+            }
+            .as_uniform_bytes()
+            .unwrap(),
+        );
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
-        #[cfg(feature = "profile")]
-        self.profiler.encode(&mut encoder, &mut |scope| {
-            self.curve.render(&self.queue, scope, &view);
-        });
-        #[cfg(not(feature = "profile"))]
-        self.curve.render(&self.queue, &mut encoder, &view);
-
+        {
+            let scene = self.scene.lock().unwrap();
+            #[cfg(feature = "profile")]
+            self.profiler.encode(&mut encoder, &mut |scope| {
+                self.curve.render(&scene.curves, &self.queue, scope, &view);
+            });
+            #[cfg(not(feature = "profile"))]
+            self.curve
+                .render(&scene.curves, &self.queue, &mut encoder, &view);
+        }
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
         #[cfg(feature = "profile")]

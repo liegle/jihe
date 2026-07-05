@@ -1,11 +1,11 @@
-struct CurveConfig {
+struct Curve {
     thickness: u32,
     color: vec4<f32>,
 }
 
 @group(0)
 @binding(0)
-var<storage, read> curve_configs: array<CurveConfig>;
+var<storage, read> curves: array<Curve>;
 
 @group(0)
 @binding(1)
@@ -30,7 +30,7 @@ fn vs(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instanc
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    let thickness = i32(curve_configs[in.instance_index].thickness);
+    let thickness = i32(curves[in.instance_index].thickness);
     let thickness2 = thickness * thickness;
     let pos = vec2<i32>(in.position.xy);
 
@@ -48,5 +48,5 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     if least_dist2 > thickness2 {
         discard;
     }
-    return curve_configs[in.instance_index].color;
+    return curves[in.instance_index].color;
 }

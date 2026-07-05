@@ -1,3 +1,15 @@
+#[derive(encase::ShaderType)]
+pub struct Camera {
+    pub scale: f32,
+    pub pos: glam::Vec2,
+}
+
+#[derive(encase::ShaderType)]
+pub struct Curve {
+    pub thickness: u32,
+    pub color: glam::Vec4,
+}
+
 pub trait AsUniformBytes {
     fn as_uniform_bytes(&self) -> encase::internal::Result<Vec<u8>>;
 }

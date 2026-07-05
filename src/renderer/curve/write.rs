@@ -17,7 +17,7 @@ pub struct Write {
 impl Write {
     pub fn new(
         device: &wgpu::Device,
-        curve_configs_buffer: &wgpu::Buffer,
+        curves_buffer: &wgpu::Buffer,
         trace_texture_view: &wgpu::TextureView,
         dst_format: wgpu::TextureFormat,
     ) -> Self {
@@ -25,7 +25,7 @@ impl Write {
         let bind_group = create_bind_group(
             device,
             &bind_group_layout,
-            curve_configs_buffer,
+            curves_buffer,
             trace_texture_view,
         );
         let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
@@ -39,13 +39,13 @@ impl Write {
     pub fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
-        curve_configs_buffer: &wgpu::Buffer,
+        curves_buffer: &wgpu::Buffer,
         trace_texture_view: &wgpu::TextureView,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
-            curve_configs_buffer,
+            curves_buffer,
             trace_texture_view,
         );
     }
@@ -87,7 +87,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    curve_configs_buffer: &wgpu::Buffer,
+    curves_buffer: &wgpu::Buffer,
     trace_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -97,7 +97,7 @@ fn create_bind_group(
             wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: curve_configs_buffer,
+                    buffer: curves_buffer,
                     offset: 0,
                     size: None,
                 }),
