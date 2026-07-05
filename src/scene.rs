@@ -93,5 +93,6 @@ impl Scene {
                 Direction::Up => glam::vec2(0., 1.),
             };
         data.camera.pos += delta;
+        log::info!("Current pos: {}", data.camera.pos);
     }
 }
