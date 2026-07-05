@@ -212,7 +212,7 @@ fn create_trace_texture(
         size: wgpu::Extent3d {
             width: dst_size.0,
             height: dst_size.1,
-            depth_or_array_layers: layer_count.max(1),
+            depth_or_array_layers: layer_count / 32 + 1,
         },
         mip_level_count: 1,
         sample_count: 1,

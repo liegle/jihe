@@ -37,8 +37,9 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     var least_dist2 = thickness2 + 1;
     for (var i = -thickness; i <= thickness; i++) {
         for (var j = -thickness; j <= thickness; j++) {
-            let v = textureLoad(trace_texture,
-                vec3<u32>(vec2<u32>(pos + vec2<i32>(i, j)), in.instance_index)).x;
+            let word = textureLoad(trace_texture,
+                vec3<u32>(vec2<u32>(pos + vec2<i32>(i, j)), in.instance_index / 32)).x;
+            let v = extractBits(word, in.instance_index % 32, 1);
             let dist2 = i * i + j * j;
             if dist2 <= thickness2 && dist2 < least_dist2 && v == 1 {
                 least_dist2 = dist2;
