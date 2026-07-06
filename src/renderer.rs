@@ -132,15 +132,16 @@ async fn run(
     }
 }
 
-#[cfg(not(feature = "profile"))]
-type ComputePass<'a> = wgpu::ComputePass<'a>;
-#[cfg(feature = "profile")]
-type ComputePass<'a> = wgpu_profiler::OwningScope<'a, wgpu::ComputePass<'a>>;
-
-#[cfg(not(feature = "profile"))]
-type RenderPass<'a> = wgpu::RenderPass<'a>;
-#[cfg(feature = "profile")]
-type RenderPass<'a> = wgpu_profiler::OwningScope<'a, wgpu::RenderPass<'a>>;
+cfg_select! {
+    feature = "profile" => {
+        type ComputePass<'a> = wgpu_profiler::OwningScope<'a, wgpu::ComputePass<'a>>;
+        type RenderPass<'a> = wgpu_profiler::OwningScope<'a, wgpu::RenderPass<'a>>;
+    }
+    _ => {
+        type ComputePass<'a> = wgpu::ComputePass<'a>;
+        type RenderPass<'a> = wgpu::RenderPass<'a>;
+    }
+}
 
 struct Inner {
     scene: Arc<Mutex<SceneData>>,
@@ -176,11 +177,14 @@ impl Inner {
             })
             .await?;
 
-        #[cfg(feature = "profile")]
-        let required_features =
-            adapter.features() & wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES;
-        #[cfg(not(feature = "profile"))]
-        let required_features = wgpu::Features::empty();
+        let required_features = cfg_select! {
+             feature = "profile" => {
+                 adapter.features() & wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES
+             }
+             _ => {
+                 wgpu::Features::empty()
+             }
+        };
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
@@ -311,14 +315,17 @@ impl Inner {
                 #[cfg(feature = "profile")]
                 let mut encoder = self.profiler.scope("Encode", &mut encoder);
                 '_compute_pass: {
-                    #[cfg(feature = "profile")]
-                    let mut compute_pass = encoder.scoped_compute_pass("Compute Pass");
-                    #[cfg(not(feature = "profile"))]
-                    let mut compute_pass =
-                        encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                            label: Some("Compute Pass"),
-                            timestamp_writes: None,
-                        });
+                    let mut compute_pass = cfg_select! {
+                        feature = "profile" => {
+                            encoder.scoped_compute_pass("Compute Pass")
+                        }
+                        _ => {
+                            encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                                label: Some("Compute Pass"),
+                                timestamp_writes: None,
+                            })
+                        }
+                    };
                     self.curve
                         .compute(&scene.curves, &mut compute_pass, dst_size);
                 }
@@ -339,11 +346,14 @@ impl Inner {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     };
-                    #[cfg(feature = "profile")]
-                    let mut render_pass =
-                        encoder.scoped_render_pass("Render Pass", render_pass_descriptor);
-                    #[cfg(not(feature = "profile"))]
-                    let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
+                    let mut render_pass = cfg_select! {
+                        feature = "profile" => {
+                            encoder.scoped_render_pass("Render Pass", render_pass_descriptor)
+                        }
+                        _ => {
+                            encoder.begin_render_pass(&render_pass_descriptor)
+                        }
+                    };
                     self.curve.render(&scene.curves, &mut render_pass);
                 }
             }
