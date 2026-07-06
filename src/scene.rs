@@ -1,12 +1,17 @@
 use std::sync::{Arc, Mutex};
 
 pub struct Scene {
+    pub config: Config,
     pub data: Arc<Mutex<SceneData>>,
+}
+
+pub struct Config {
+    pub move_speed: f32,
 }
 
 pub struct SceneData {
     pub camera: Camera,
-    pub config: Config,
+    pub bg: Bg,
     pub curves: Vec<Curve>,
 }
 
@@ -15,8 +20,8 @@ pub struct Camera {
     pub pos: glam::Vec2,
 }
 
-pub struct Config {
-    pub move_speed: f32,
+pub struct Bg {
+    pub color: glam::Vec4,
 }
 
 pub struct Curve {
@@ -37,12 +42,15 @@ enum Direction {
 impl Scene {
     pub fn new() -> Self {
         Self {
+            config: Config { move_speed: 0.3 },
             data: Arc::new(Mutex::new(SceneData {
                 camera: Camera {
                     scale: 0.01,
                     pos: glam::Vec2::ZERO,
                 },
-                config: Config { move_speed: 0.3 },
+                bg: Bg {
+                    color: glam::vec4(1., 1., 1., 1.),
+                },
                 curves: vec![
                     Curve {
                         thickness: 2,
@@ -66,15 +74,20 @@ impl Scene {
 
     pub fn handle_key(&mut self, event: &winit::event::KeyEvent) -> bool {
         if event.state == winit::event::ElementState::Pressed {
+            use winit::keyboard::{Key, NamedKey};
             match event.logical_key.as_ref() {
-                winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowDown)
-                | winit::keyboard::Key::Character("j") => self.scene_move(Direction::Down),
-                winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowLeft)
-                | winit::keyboard::Key::Character("h") => self.scene_move(Direction::Left),
-                winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowRight)
-                | winit::keyboard::Key::Character("l") => self.scene_move(Direction::Right),
-                winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowUp)
-                | winit::keyboard::Key::Character("k") => self.scene_move(Direction::Up),
+                Key::Named(NamedKey::ArrowDown) | Key::Character("j") => {
+                    self.scene_move(Direction::Down)
+                }
+                Key::Named(NamedKey::ArrowLeft) | Key::Character("h") => {
+                    self.scene_move(Direction::Left)
+                }
+                Key::Named(NamedKey::ArrowRight) | Key::Character("l") => {
+                    self.scene_move(Direction::Right)
+                }
+                Key::Named(NamedKey::ArrowUp) | Key::Character("k") => {
+                    self.scene_move(Direction::Up)
+                }
                 _ => {
                     return false;
                 }
@@ -86,14 +99,13 @@ impl Scene {
     }
 
     fn scene_move(&mut self, dir: Direction) {
+        let delta = match dir {
+            Direction::Down => glam::vec2(0., -1.),
+            Direction::Left => glam::vec2(-1., 0.),
+            Direction::Right => glam::vec2(1., 0.),
+            Direction::Up => glam::vec2(0., 1.),
+        } * self.config.move_speed;
         let data = &mut self.data.lock().unwrap();
-        let delta = data.config.move_speed
-            * match dir {
-                Direction::Down => glam::vec2(0., -1.),
-                Direction::Left => glam::vec2(-1., 0.),
-                Direction::Right => glam::vec2(1., 0.),
-                Direction::Up => glam::vec2(0., 1.),
-            };
         data.camera.pos += delta;
         log::info!("Current pos: {}", data.camera.pos);
     }

@@ -15,16 +15,16 @@ impl Profiler {
         }
     }
 
-    pub fn encode<E: FnMut(&mut wgpu_profiler::Scope<'_, wgpu::CommandEncoder>)>(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        encode: &mut E,
-    ) {
-        {
-            let mut encoder = self.gpu_profiler.scope("Render", encoder);
-            encode(&mut encoder);
-        }
-        self.gpu_profiler.resolve_queries(encoder);
+    pub fn scope<'a>(
+        &'a self,
+        label: impl Into<String>,
+        encoder: &'a mut wgpu::CommandEncoder,
+    ) -> wgpu_profiler::Scope<'a, wgpu::CommandEncoder> {
+        self.gpu_profiler.scope(label, encoder)
+    }
+
+    pub fn resolve_queries(&mut self, mut encoder: &mut wgpu::CommandEncoder) {
+        self.gpu_profiler.resolve_queries(&mut encoder);
     }
 
     pub fn end_frame(&mut self, queue: &wgpu::Queue) {

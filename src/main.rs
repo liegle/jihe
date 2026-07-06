@@ -1,12 +1,6 @@
-use std::{
-    mem,
-    sync::Arc,
-};
+use std::{mem, sync::Arc};
 
-use crate::{
-    renderer::Renderer,
-    scene::Scene,
-};
+use crate::{renderer::Renderer, scene::Scene};
 
 mod renderer;
 mod scene;
@@ -64,7 +58,11 @@ impl winit::application::ApplicationHandler for App {
             winit::event::WindowEvent::Resized(size) => {
                 renderer.resize(size.into());
             }
-            winit::event::WindowEvent::KeyboardInput { device_id: _, event, is_synthetic: _ } => {
+            winit::event::WindowEvent::KeyboardInput {
+                device_id: _,
+                event,
+                is_synthetic: _,
+            } => {
                 if scene.handle_key(&event) {
                     renderer.render();
                 }

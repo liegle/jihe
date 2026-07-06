@@ -13,6 +13,7 @@ use crate::{
     scene::SceneData,
 };
 
+mod bg;
 mod buffer;
 mod curve;
 #[cfg(feature = "profile")]
@@ -278,10 +279,11 @@ impl Inner {
         };
 
         let view = output.texture.create_view(&Default::default());
+        let dst_size = (view.texture().width(), view.texture().height());
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
-        {
+        '_lock_scene: {
             let scene = self.scene.lock().unwrap();
 
             self.queue.write_buffer(
@@ -294,14 +296,51 @@ impl Inner {
                 .as_uniform_bytes()
                 .unwrap(),
             );
-            #[cfg(feature = "profile")]
-            self.profiler.encode(&mut encoder, &mut |scope| {
-                self.curve.render(&scene.curves, &self.queue, scope, &view);
-            });
-            #[cfg(not(feature = "profile"))]
-            self.curve
-                .render(&scene.curves, &self.queue, &mut encoder, &view);
+            self.curve.prepare(&scene.curves, &self.queue);
+            '_profile_scope: {
+                #[cfg(feature = "profile")]
+                let mut encoder = self.profiler.scope("Encode", &mut encoder);
+                '_compute_pass: {
+                    #[cfg(feature = "profile")]
+                    let mut compute_pass = encoder.scoped_compute_pass("ComputePass");
+                    #[cfg(not(feature = "profile"))]
+                    let mut compute_pass =
+                        encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                            label: Some("ComputePass"),
+                            timestamp_writes: None,
+                        });
+                    self.curve
+                        .compute(&scene.curves, &mut compute_pass, dst_size);
+                }
+                '_render_pass: {
+                    let render_pass_descriptor = wgpu::RenderPassDescriptor {
+                        label: Some("RenderPass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    };
+                    #[cfg(feature = "profile")]
+                    let mut render_pass =
+                        encoder.scoped_render_pass("RenderPass", render_pass_descriptor);
+                    #[cfg(not(feature = "profile"))]
+                    let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
+                    self.curve.render(&scene.curves, &mut render_pass);
+                }
+            }
         }
+        #[cfg(feature = "profile")]
+        self.profiler.resolve_queries(&mut encoder);
+
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
         #[cfg(feature = "profile")]
