@@ -15,6 +15,7 @@ pub struct SceneData {
     pub curves: Vec<Curve>,
 }
 
+#[derive(encase::ShaderType)]
 pub struct Camera {
     pub scale: f32,
     pub pos: glam::Vec2,
@@ -25,11 +26,16 @@ pub struct Bg {
 }
 
 pub struct Curve {
-    pub thickness: u32,
-    pub color: glam::Vec4,
+    pub config: CurveConfig,
     // TODO: When parsing, prevent pow(minus, xxx);
     // replace log/log2 with safeLog/safeLog2
     pub expr: String,
+}
+
+#[derive(encase::ShaderType, Clone, Copy)]
+pub struct CurveConfig {
+    pub thickness: u32,
+    pub color: glam::Vec4,
 }
 
 enum Direction {
@@ -53,18 +59,24 @@ impl Scene {
                 },
                 curves: vec![
                     Curve {
-                        thickness: 2,
-                        color: glam::vec4(1., 0., 0., 1.),
+                        config: CurveConfig {
+                            thickness: 2,
+                            color: glam::vec4(1., 0., 0., 1.),
+                        },
                         expr: "pow(x, x) + pow(2, y) - 10".to_string(),
                     },
                     Curve {
-                        thickness: 2,
-                        color: glam::vec4(0., 0., 1., 1.),
+                        config: CurveConfig {
+                            thickness: 2,
+                            color: glam::vec4(0., 0., 1., 1.),
+                        },
                         expr: "y - 3".to_string(),
                     },
                     Curve {
-                        thickness: 2,
-                        color: glam::vec4(0., 1., 1., 1.),
+                        config: CurveConfig {
+                            thickness: 2,
+                            color: glam::vec4(0., 1., 1., 1.),
+                        },
                         expr: "pow(x, 3) + safeLog(y) - 10".to_string(),
                     },
                 ],

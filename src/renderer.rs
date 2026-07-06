@@ -10,7 +10,7 @@ use encase::ShaderType as _;
 use crate::renderer::profile::Profiler;
 use crate::{
     renderer::{buffer::AsUniformBytes, curve::Curve, schedule::Scheduler},
-    scene::SceneData,
+    scene::{self, SceneData},
 };
 
 mod bg;
@@ -46,7 +46,14 @@ impl Renderer {
                     .enable_time()
                     .build()
                     .unwrap()
-                    .block_on(run(scene, window, size, sender, receiver));
+                    .block_on(async {
+                        match Inner::new(scene, window, size).await {
+                            Ok(renderer) => run(renderer, sender, receiver).await,
+                            Err(err) => {
+                                log::error!("Can't create renderer: {}", err);
+                            }
+                        };
+                    });
             })
         };
         Self {
@@ -77,20 +84,10 @@ impl Renderer {
 }
 
 async fn run(
-    scene: Arc<Mutex<SceneData>>,
-    window: Arc<winit::window::Window>,
-    size: (u32, u32),
+    mut renderer: Inner,
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
 ) {
-    let mut renderer = match Inner::new(scene, window, size).await {
-        Ok(r) => r,
-        Err(e) => {
-            log::error!("Can't create renderer: {}", e);
-            return;
-        }
-    };
-
     // TODO: from config
     const REDRAW_INTERVAL: tokio::time::Duration =
         tokio::time::Duration::from_millis((1000. / 60.) as u64);
@@ -216,12 +213,11 @@ impl Inner {
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &surface_config);
-
         log::info!("Surface config: {surface_config:?}");
 
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: buffer::Camera::min_size().get(),
+            size: scene::Camera::min_size().get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -303,12 +299,7 @@ impl Inner {
             self.queue.write_buffer(
                 &self.camera_buffer,
                 0,
-                &buffer::Camera {
-                    scale: scene.camera.scale,
-                    pos: scene.camera.pos,
-                }
-                .as_uniform_bytes()
-                .unwrap(),
+                &scene.camera.as_uniform_bytes().unwrap(),
             );
             self.curve.prepare(&scene.curves, &self.queue);
             '_profile_scope: {

@@ -38,7 +38,7 @@ impl Curve {
 
         let curves_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: buffer::Curve::min_size().get() * curves.len().max(1) as u64,
+            size: scene::CurveConfig::min_size().get() * curves.len().max(1) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -100,10 +100,7 @@ impl Curve {
             0,
             &curves
                 .iter()
-                .map(|c| buffer::Curve {
-                    thickness: c.thickness,
-                    color: c.color,
-                })
+                .map(|c| c.config)
                 .collect::<Vec<_>>()
                 .as_dynamic_storage_bytes()
                 .unwrap(),
@@ -129,11 +126,7 @@ impl Curve {
         }
     }
 
-    pub fn render(
-        &self,
-        curves: &Vec<scene::Curve>,
-        mut render_pass: &mut super::RenderPass,
-    ) {
+    pub fn render(&self, curves: &Vec<scene::Curve>, mut render_pass: &mut super::RenderPass) {
         #[cfg(feature = "profile")]
         let _ = render_pass.scope("Curve write");
         self.write.render(&mut render_pass, curves.len() as u32);
