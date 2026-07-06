@@ -132,6 +132,16 @@ async fn run(
     }
 }
 
+#[cfg(not(feature = "profile"))]
+type ComputePass<'a> = wgpu::ComputePass<'a>;
+#[cfg(feature = "profile")]
+type ComputePass<'a> = wgpu_profiler::OwningScope<'a, wgpu::ComputePass<'a>>;
+
+#[cfg(not(feature = "profile"))]
+type RenderPass<'a> = wgpu::RenderPass<'a>;
+#[cfg(feature = "profile")]
+type RenderPass<'a> = wgpu_profiler::OwningScope<'a, wgpu::RenderPass<'a>>;
+
 struct Inner {
     scene: Arc<Mutex<SceneData>>,
 
@@ -302,11 +312,11 @@ impl Inner {
                 let mut encoder = self.profiler.scope("Encode", &mut encoder);
                 '_compute_pass: {
                     #[cfg(feature = "profile")]
-                    let mut compute_pass = encoder.scoped_compute_pass("ComputePass");
+                    let mut compute_pass = encoder.scoped_compute_pass("Compute Pass");
                     #[cfg(not(feature = "profile"))]
                     let mut compute_pass =
                         encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                            label: Some("ComputePass"),
+                            label: Some("Compute Pass"),
                             timestamp_writes: None,
                         });
                     self.curve
@@ -314,7 +324,7 @@ impl Inner {
                 }
                 '_render_pass: {
                     let render_pass_descriptor = wgpu::RenderPassDescriptor {
-                        label: Some("RenderPass"),
+                        label: Some("Render Pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                             view: &view,
                             depth_slice: None,
@@ -331,7 +341,7 @@ impl Inner {
                     };
                     #[cfg(feature = "profile")]
                     let mut render_pass =
-                        encoder.scoped_render_pass("RenderPass", render_pass_descriptor);
+                        encoder.scoped_render_pass("Render Pass", render_pass_descriptor);
                     #[cfg(not(feature = "profile"))]
                     let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
                     self.curve.render(&scene.curves, &mut render_pass);

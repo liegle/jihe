@@ -113,11 +113,7 @@ impl Curve {
     pub fn compute(
         &self,
         curves: &Vec<scene::Curve>,
-        #[cfg(feature = "profile")] mut compute_pass: &mut wgpu_profiler::OwningScope<
-            '_,
-            wgpu::ComputePass,
-        >,
-        #[cfg(not(feature = "profile"))] mut compute_pass: &mut wgpu::ComputePass,
+        mut compute_pass: &mut super::ComputePass,
         dst_size: (u32, u32),
     ) {
         for evaluate in &self.evaluates {
@@ -136,11 +132,7 @@ impl Curve {
     pub fn render(
         &self,
         curves: &Vec<scene::Curve>,
-        #[cfg(feature = "profile")] mut render_pass: &mut wgpu_profiler::OwningScope<
-            '_,
-            wgpu::RenderPass,
-        >,
-        #[cfg(not(feature = "profile"))] mut render_pass: &mut wgpu::RenderPass,
+        mut render_pass: &mut super::RenderPass,
     ) {
         #[cfg(feature = "profile")]
         let _ = render_pass.scope("Curve write");
