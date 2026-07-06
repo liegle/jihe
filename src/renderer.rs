@@ -337,7 +337,12 @@ impl Inner {
                             depth_slice: None,
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: scene.bg.color.x as f64,
+                                    g: scene.bg.color.y as f64,
+                                    b: scene.bg.color.z as f64,
+                                    a: scene.bg.color.w as f64,
+                                }),
                                 store: wgpu::StoreOp::Store,
                             },
                         })],

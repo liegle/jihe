@@ -42,7 +42,7 @@ enum Direction {
 impl Scene {
     pub fn new() -> Self {
         Self {
-            config: Config { move_speed: 0.3 },
+            config: Config { move_speed: 30. },
             data: Arc::new(Mutex::new(SceneData {
                 camera: Camera {
                     scale: 0.01,
@@ -64,7 +64,7 @@ impl Scene {
                     },
                     Curve {
                         thickness: 2,
-                        color: glam::vec4(1., 1., 1., 1.),
+                        color: glam::vec4(0., 1., 1., 1.),
                         expr: "pow(x, 3) + safeLog(y) - 10".to_string(),
                     },
                 ],
@@ -99,13 +99,14 @@ impl Scene {
     }
 
     fn scene_move(&mut self, dir: Direction) {
+        let data = &mut self.data.lock().unwrap();
         let delta = match dir {
             Direction::Down => glam::vec2(0., -1.),
             Direction::Left => glam::vec2(-1., 0.),
             Direction::Right => glam::vec2(1., 0.),
             Direction::Up => glam::vec2(0., 1.),
-        } * self.config.move_speed;
-        let data = &mut self.data.lock().unwrap();
+        } * self.config.move_speed
+            * data.camera.scale;
         data.camera.pos += delta;
         log::info!("Current pos: {}", data.camera.pos);
     }
