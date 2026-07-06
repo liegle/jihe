@@ -296,11 +296,8 @@ impl Inner {
         '_lock_scene: {
             let scene = self.scene.lock().unwrap();
 
-            self.queue.write_buffer(
-                &self.camera_buffer,
-                0,
-                &scene.camera.as_uniform_bytes().unwrap(),
-            );
+            self.queue
+                .write_buffer(&self.camera_buffer, 0, &scene.camera.as_uniform_bytes());
             self.curve.prepare(&scene.curves, &self.queue);
             '_profile_scope: {
                 #[cfg(feature = "profile")]

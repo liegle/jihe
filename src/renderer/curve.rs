@@ -2,7 +2,7 @@ use encase::ShaderType;
 
 use crate::{
     renderer::{
-        buffer::{self, AsDynamicStorageBytes},
+        buffer::AsDynamicStorageBytes,
         curve::{evaluate::Evaluate, trace::Trace, write::Write},
     },
     scene,
@@ -102,8 +102,7 @@ impl Curve {
                 .iter()
                 .map(|c| c.config)
                 .collect::<Vec<_>>()
-                .as_dynamic_storage_bytes()
-                .unwrap(),
+                .as_dynamic_storage_bytes(),
         );
     }
 
