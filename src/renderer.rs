@@ -9,7 +9,7 @@ use encase::ShaderType as _;
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;
 use crate::{
-    renderer::{buffer::AsUniformBytes, curve::Curve, schedule::Scheduler},
+    renderer::{bg::Bg, buffer::AsUniformBytes, curve::Curve, schedule::Scheduler},
     scene::{self, SceneData},
 };
 
@@ -151,6 +151,7 @@ struct Inner {
     surface_config: wgpu::SurfaceConfiguration,
 
     camera_buffer: wgpu::Buffer,
+    bg: Bg,
     curve: Curve,
 
     #[cfg(feature = "profile")]
@@ -222,6 +223,7 @@ impl Inner {
             mapped_at_creation: false,
         });
 
+        let bg = Bg::new(&device, surface_format);
         let curve = {
             let scene = &scene.lock().unwrap();
             Curve::new(&scene.curves, &device, &camera_buffer, surface_format, size)
@@ -240,6 +242,7 @@ impl Inner {
             surface_config,
 
             camera_buffer,
+            bg,
             curve,
 
             #[cfg(feature = "profile")]
@@ -298,6 +301,7 @@ impl Inner {
 
             self.queue
                 .write_buffer(&self.camera_buffer, 0, &scene.camera.as_uniform_bytes());
+            self.bg.prepare(&scene.bg, &scene.camera, &self.queue, dst_size);
             self.curve.prepare(&scene.curves, &self.queue);
             '_profile_scope: {
                 #[cfg(feature = "profile")]
@@ -315,7 +319,7 @@ impl Inner {
                         }
                     };
                     self.curve
-                        .compute(&scene.curves, &mut compute_pass, dst_size);
+                        .compute(scene.curves.len() as u32, &mut compute_pass, dst_size);
                 }
                 '_render_pass: {
                     let render_pass_descriptor = wgpu::RenderPassDescriptor {
@@ -342,7 +346,8 @@ impl Inner {
                             encoder.begin_render_pass(&render_pass_descriptor)
                         }
                     };
-                    self.curve.render(&scene.curves, &mut render_pass);
+                    self.bg.render(&mut render_pass);
+                    self.curve.render(scene.curves.len() as u32, &mut render_pass);
                 }
             }
         }

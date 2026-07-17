@@ -116,11 +116,7 @@ fn create_bind_group(
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: camera_buffer,
-                    offset: 0,
-                    size: None,
-                }),
+                resource: camera_buffer.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 1,

@@ -108,27 +108,26 @@ impl Curve {
 
     pub fn compute(
         &self,
-        curves: &Vec<scene::Curve>,
-        mut compute_pass: &mut super::ComputePass,
+        layers: u32,
+        compute_pass: &mut super::ComputePass,
         dst_size: (u32, u32),
     ) {
         for evaluate in &self.evaluates {
             #[cfg(feature = "profile")]
             let _ = compute_pass.scope(format!("Curve evalute {}", evaluate.layer));
-            evaluate.render(&mut compute_pass, dst_size);
+            evaluate.render(compute_pass, dst_size);
         }
         {
             #[cfg(feature = "profile")]
             let _ = compute_pass.scope("Curve trace");
-            self.trace
-                .render(&mut compute_pass, dst_size, curves.len() as u32);
+            self.trace.render(compute_pass, dst_size, layers);
         }
     }
 
-    pub fn render(&self, curves: &Vec<scene::Curve>, mut render_pass: &mut super::RenderPass) {
+    pub fn render(&self, layers: u32, render_pass: &mut super::RenderPass) {
         #[cfg(feature = "profile")]
         let _ = render_pass.scope("Curve write");
-        self.write.render(&mut render_pass, curves.len() as u32);
+        self.write.render(render_pass, layers);
     }
 }
 

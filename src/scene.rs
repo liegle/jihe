@@ -59,13 +59,13 @@ impl Scene {
                 },
                 bg: Bg {
                     color: wgpu::Color {
-                        r: 1.,
-                        g: 1.,
-                        b: 1.,
-                        a: 1.,
+                        r: 0.8,
+                        g: 0.8,
+                        b: 0.8,
+                        a: 0.8,
                     },
-                    axis: Some(glam::vec4(0.1, 0.1, 0.1, 0.1)),
-                    grid: Some(glam::vec4(0.1, 0.1, 0.1, 0.1)),
+                    axis: Some(glam::vec4(0.1, 0.1, 0.1, 1.)),
+                    grid: Some(glam::vec4(0.1, 0.1, 0.1, 1.)),
                     spacing: 100,
                 },
                 curves: vec![
