@@ -25,16 +25,6 @@ pub struct Bg {
 
 impl Bg {
     pub fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: glam::Vec4::min_size().get(),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
-        let bind_group = create_bind_group(device, &bind_group_layout, &buffer);
-        let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: glam::Vec2::min_size().get() * 4,
@@ -53,6 +43,10 @@ impl Bg {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+
+        let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
+        let bind_group = create_bind_group(device, &bind_group_layout, &axis_buffer);
+        let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
         Self {
             bind_group,
             render_pipeline,
@@ -72,13 +66,13 @@ impl Bg {
         let size = (dst_size.0 as i32, dst_size.1 as i32);
         let half_size = (size.0 / 2, size.1 / 2);
         let axis_pos = (
-            ((-camera.pos.x / camera.scale) as i32 + half_size.0),
-            ((camera.pos.y / camera.scale) as i32 + half_size.1),
+            (-camera.pos.x / camera.scale) as i32,
+            (-camera.pos.y / camera.scale) as i32,
         );
 
         let clamped_axis_pos = (
-            axis_pos.0.clamp(0, size.0) as f32,
-            axis_pos.1.clamp(0, size.1) as f32,
+            ((axis_pos.0 as f32) / (half_size.0 as f32)).clamp(-1., 1.),
+            ((axis_pos.1 as f32) / (half_size.1 as f32)).clamp(-1., 1.),
         );
         let vertices = vec![
             // y axis
@@ -103,7 +97,7 @@ impl Bg {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.draw(0..3, 0..1);
+        render_pass.draw(0..4, 0..1);
     }
 }
 
@@ -154,7 +148,15 @@ fn create_render_pipeline(
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: VERTEX_ENTRY,
-            buffers: &[],
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: glam::Vec2::min_size().get(),
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &[wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: 0,
+                    shader_location: 0,
+                }],
+            }],
             compilation_options: Default::default(),
         },
         primitive: wgpu::PrimitiveState {
