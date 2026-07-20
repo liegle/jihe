@@ -66,13 +66,13 @@ impl Bg {
         let size = (dst_size.0 as i32, dst_size.1 as i32);
         let half_size = (size.0 / 2, size.1 / 2);
         let axis_pos = (
-            (-camera.pos.x / camera.scale) as i32,
-            (-camera.pos.y / camera.scale) as i32,
+            (-camera.pos.x / camera.scale) as i32 + 1,
+            (-camera.pos.y / camera.scale) as i32 - 1,
         );
 
         let clamped_axis_pos = (
-            ((axis_pos.0 as f32) / (half_size.0 as f32)).clamp(-1., 1.),
-            ((axis_pos.1 as f32) / (half_size.1 as f32)).clamp(-1., 1.),
+            ((axis_pos.0 as f32) / (half_size.0 as f32)).clamp(-0.99, 0.99),
+            ((axis_pos.1 as f32) / (half_size.1 as f32)).clamp(-0.99, 0.99),
         );
         let vertices = vec![
             // y axis
