@@ -41,19 +41,16 @@ impl Renderer {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let join_handle = {
             let sender = sender.clone();
-            thread::spawn(move || {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_time()
-                    .build()
-                    .unwrap()
-                    .block_on(async {
-                        match Inner::new(scene, window, size).await {
-                            Ok(renderer) => run(renderer, sender, receiver).await,
-                            Err(err) => {
-                                log::error!("Can't create renderer: {}", err);
-                            }
-                        };
-                    });
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .unwrap();
+            let renderer = rt.block_on(Inner::new(scene, window, size));
+            thread::spawn(move || match renderer {
+                Ok(renderer) => rt.block_on(run(renderer, sender, receiver)),
+                Err(err) => {
+                    log::error!("Can't create renderer: {}", err);
+                }
             })
         };
         Self {
@@ -301,7 +298,8 @@ impl Inner {
 
             self.queue
                 .write_buffer(&self.camera_buffer, 0, &scene.camera.as_uniform_bytes());
-            self.bg.prepare(&scene.bg, &scene.camera, &self.queue, dst_size);
+            self.bg
+                .prepare(&scene.bg, &scene.camera, &self.queue, dst_size);
             self.curve.prepare(&scene.curves, &self.queue);
             '_profile_scope: {
                 #[cfg(feature = "profile")]
@@ -347,7 +345,8 @@ impl Inner {
                         }
                     };
                     self.bg.render(&mut render_pass);
-                    self.curve.render(scene.curves.len() as u32, &mut render_pass);
+                    self.curve
+                        .render(scene.curves.len() as u32, &mut render_pass);
                 }
             }
         }
