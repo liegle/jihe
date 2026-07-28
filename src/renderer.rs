@@ -298,8 +298,13 @@ impl Inner {
 
             self.queue
                 .write_buffer(&self.camera_buffer, 0, &scene.camera.as_uniform_bytes());
-            self.bg
-                .prepare(&scene.bg, &scene.camera, &self.queue, dst_size);
+            self.bg.prepare(
+                &scene.bg,
+                &scene.camera,
+                &self.device,
+                &self.queue,
+                dst_size,
+            );
             self.curve.prepare(&scene.curves, &self.queue);
             '_profile_scope: {
                 #[cfg(feature = "profile")]

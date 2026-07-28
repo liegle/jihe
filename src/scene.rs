@@ -65,7 +65,7 @@ impl Scene {
                         a: 0.7,
                     },
                     axis: Some(glam::vec4(0.1, 0.1, 0.1, 1.)),
-                    grid: Some(glam::vec4(0.1, 0.1, 0.1, 1.)),
+                    grid: None,
                     spacing: 100,
                 },
                 curves: vec![
