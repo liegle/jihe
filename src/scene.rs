@@ -22,7 +22,7 @@ pub struct Camera {
 }
 
 pub struct Bg {
-    pub color: wgpu::Color,
+    pub color: glam::Vec3,
     pub axis: Option<glam::Vec4>,
     pub grid: Option<glam::Vec4>,
     pub spacing: u32,
@@ -58,12 +58,7 @@ impl Scene {
                     pos: glam::Vec2::ZERO,
                 },
                 bg: Bg {
-                    color: wgpu::Color {
-                        r: 0.8,
-                        g: 0.8,
-                        b: 0.8,
-                        a: 1.,
-                    },
+                    color: glam::vec3(0.8, 0.8, 0.8),
                     axis: Some(glam::vec4(0.1, 0.1, 0.1, 1.)),
                     grid: Some(glam::vec4(0.4, 0.4, 0.4, 1.)),
                     spacing: 100,

@@ -1,72 +1,19 @@
-use std::borrow::Cow;
+use crate::{renderer::bg::line::Line, scene};
 
-use encase::ShaderType;
-
-use crate::{
-    renderer::buffer::{AsDynamicStorageBytes, AsUniformBytes},
-    scene,
-};
-
-const SHADER: &str = include_str!("color.wgsl");
-const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: None,
-    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER)),
-};
-const VERTEX_ENTRY: Option<&str> = Some("vs");
-const FRAGMENT_ENTRY: Option<&str> = Some("fs");
+mod line;
 
 const GRADUATION_HEIGHT: f32 = 5.;
 
 pub struct Bg {
-    axis_bind_group: wgpu::BindGroup,
-    grid_bind_group: wgpu::BindGroup,
-    render_pipeline: wgpu::RenderPipeline,
-    axis_vertex_buffer: wgpu::Buffer,
-    grid_vertex_buffer: wgpu::Buffer,
-    axis_buffer: wgpu::Buffer,
-    grid_buffer: wgpu::Buffer,
+    axis: Line,
+    grid: Line,
 }
 
 impl Bg {
     pub fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
-        let axis_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: glam::Vec2::min_size().get(),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let grid_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: glam::Vec2::min_size().get(),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let axis_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: glam::Vec4::min_size().get(),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let grid_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: glam::Vec4::min_size().get(),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
-        let axis_bind_group = create_bind_group(device, &bind_group_layout, &axis_buffer);
-        let grid_bind_group = create_bind_group(device, &bind_group_layout, &grid_buffer);
-        let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
-        Self {
-            axis_bind_group,
-            grid_bind_group,
-            render_pipeline,
-            axis_vertex_buffer,
-            grid_vertex_buffer,
-            axis_buffer,
-            grid_buffer,
-        }
+        let axis = Line::new(device, dst_format);
+        let grid = Line::new(device, dst_format);
+        Self { axis, grid }
     }
 
     pub fn prepare(
@@ -84,20 +31,18 @@ impl Bg {
             (-camera.pos.x / camera.scale) as i32 + 1,
             (-camera.pos.y / camera.scale) as i32 - 1,
         );
-        let l0 = ((-half_size.0 - axis_pos.0) / spacing) * spacing + axis_pos.0;
-        let h_count = (half_size.0 - l0) / spacing + 1;
-        let b0 = ((-half_size.1 - axis_pos.1) / spacing) * spacing + axis_pos.1;
-        let v_count = (half_size.1 - b0) / spacing + 1;
+        let h_begin = ((-half_size.0 - axis_pos.0) / spacing) * spacing + axis_pos.0;
+        let h_count = (half_size.0 - h_begin) / spacing + 1;
+        let v_begin = ((-half_size.1 - axis_pos.1) / spacing) * spacing + axis_pos.1;
+        let v_count = (half_size.1 - v_begin) / spacing + 1;
 
         let clamped_axis_pos = (
             ((axis_pos.0 as f32) / (half_size.0 as f32)).clamp(-0.99, 0.99),
             ((axis_pos.1 as f32) / (half_size.1 as f32)).clamp(-0.99, 0.99),
         );
-        let mut axis_vertices = Vec::<glam::Vec2>::new();
-        let mut grid_vertices = Vec::<glam::Vec2>::new();
         if let Some(color) = bg.axis {
-            queue.write_buffer(&self.axis_buffer, 0, &color.as_uniform_bytes());
-            axis_vertices.extend(&[
+            let mut vertices = Vec::<glam::Vec2>::new();
+            vertices.extend(&[
                 // y axis
                 glam::vec2(clamped_axis_pos.0, -1.),
                 glam::vec2(clamped_axis_pos.0, 1.),
@@ -105,183 +50,42 @@ impl Bg {
                 glam::vec2(-1., clamped_axis_pos.1),
                 glam::vec2(1., clamped_axis_pos.1),
             ]);
-            if bg.grid.is_none() {
-                for i in 0..h_count {
-                    let x = ((l0 + spacing * i) as f32) / (half_size.0 as f32);
-                    axis_vertices.extend(&[
-                        glam::vec2(x, clamped_axis_pos.1),
-                        glam::vec2(
-                            x,
-                            clamped_axis_pos.1 + GRADUATION_HEIGHT / (half_size.1 as f32),
-                        ),
-                    ])
-                }
-                for i in 0..v_count {
-                    let y = ((b0 + spacing * i) as f32) / (half_size.1 as f32);
-                    axis_vertices.extend(&[
-                        glam::vec2(clamped_axis_pos.0, y),
-                        glam::vec2(
-                            clamped_axis_pos.0 + GRADUATION_HEIGHT / (half_size.0 as f32),
-                            y,
-                        ),
-                    ])
-                }
-            }
-        }
-        if let Some(color) = bg.grid {
-            queue.write_buffer(&self.grid_buffer, 0, &color.as_uniform_bytes());
+            let h_end = clamped_axis_pos.1 + GRADUATION_HEIGHT / (half_size.1 as f32);
+            let v_end = clamped_axis_pos.0 + GRADUATION_HEIGHT / (half_size.0 as f32);
             for i in 0..h_count {
-                let x = ((l0 + spacing * i) as f32) / (half_size.0 as f32);
-                grid_vertices.extend(&[glam::vec2(x, -1.), glam::vec2(x, 1.)])
+                let x = ((h_begin + spacing * i) as f32) / (half_size.0 as f32);
+                vertices.extend(&[glam::vec2(x, clamped_axis_pos.1), glam::vec2(x, h_end)])
             }
             for i in 0..v_count {
-                let y = ((b0 + spacing * i) as f32) / (half_size.1 as f32);
-                grid_vertices.extend(&[glam::vec2(-1., y), glam::vec2(1., y)])
+                let y = ((v_begin + spacing * i) as f32) / (half_size.1 as f32);
+                vertices.extend(&[glam::vec2(clamped_axis_pos.0, y), glam::vec2(v_end, y)])
             }
+            self.axis.prepare(&vertices, color, queue, device);
         }
-
-        let axis_vertex_buffer_size = axis_vertices.len() as u64 * glam::Vec2::min_size().get();
-        if axis_vertex_buffer_size != self.axis_vertex_buffer.size() {
-            self.axis_vertex_buffer.destroy();
-            self.axis_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: None,
-                size: axis_vertex_buffer_size,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+        if let Some(color) = bg.grid {
+            let mut vertices = Vec::<glam::Vec2>::new();
+            for i in 0..h_count {
+                let x = ((h_begin + spacing * i) as f32) / (half_size.0 as f32);
+                vertices.extend(&[glam::vec2(x, -1.), glam::vec2(x, 1.)])
+            }
+            for i in 0..v_count {
+                let y = ((v_begin + spacing * i) as f32) / (half_size.1 as f32);
+                vertices.extend(&[glam::vec2(-1., y), glam::vec2(1., y)])
+            }
+            self.grid.prepare(&vertices, color, queue, device);
         }
-        queue.write_buffer(
-            &self.axis_vertex_buffer,
-            0,
-            &axis_vertices.as_dynamic_storage_bytes(),
-        );
-
-        let grid_vertex_buffer_size = grid_vertices.len() as u64 * glam::Vec2::min_size().get();
-        if grid_vertex_buffer_size != self.grid_vertex_buffer.size() {
-            self.grid_vertex_buffer.destroy();
-            self.grid_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: None,
-                size: grid_vertex_buffer_size,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-        }
-        queue.write_buffer(
-            &self.grid_vertex_buffer,
-            0,
-            &grid_vertices.as_dynamic_storage_bytes(),
-        );
     }
 
     pub fn render(&self, render_pass: &mut super::RenderPass) {
         {
             #[cfg(feature = "profile")]
             let _ = render_pass.scope("Grid");
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.grid_vertex_buffer.slice(..));
-            render_pass.set_bind_group(0, &self.grid_bind_group, &[]);
-            render_pass.draw(
-                0..((self.grid_vertex_buffer.size() / glam::Vec2::min_size().get()) as u32),
-                0..1,
-            );
+            self.grid.render(render_pass);
         }
         {
             #[cfg(feature = "profile")]
             let _ = render_pass.scope("Axis");
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.axis_vertex_buffer.slice(..));
-            render_pass.set_bind_group(0, &self.axis_bind_group, &[]);
-            render_pass.draw(
-                0..((self.axis_vertex_buffer.size() / glam::Vec2::min_size().get()) as u32),
-                0..1,
-            );
+            self.axis.render(render_pass);
         }
     }
-}
-
-const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
-    wgpu::BindGroupLayoutDescriptor {
-        label: None,
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }],
-    };
-
-fn create_bind_group(
-    device: &wgpu::Device,
-    bind_group_layout: &wgpu::BindGroupLayout,
-    buffer: &wgpu::Buffer,
-) -> wgpu::BindGroup {
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: buffer.as_entire_binding(),
-        }],
-    })
-}
-
-fn create_render_pipeline(
-    device: &wgpu::Device,
-    bind_group_layout: &wgpu::BindGroupLayout,
-    dst_format: wgpu::TextureFormat,
-) -> wgpu::RenderPipeline {
-    let shader = device.create_shader_module(SHADER_MODULE_DESCRIPTOR);
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
-        bind_group_layouts: &[Some(bind_group_layout)],
-        immediate_size: 0,
-    });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: None,
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: VERTEX_ENTRY,
-            buffers: &[wgpu::VertexBufferLayout {
-                array_stride: glam::Vec2::min_size().get(),
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &[wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x2,
-                    offset: 0,
-                    shader_location: 0,
-                }],
-            }],
-            compilation_options: Default::default(),
-        },
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::LineList,
-            strip_index_format: None,
-            front_face: wgpu::FrontFace::Cw,
-            cull_mode: None,
-            unclipped_depth: false,
-            polygon_mode: wgpu::PolygonMode::Fill,
-            conservative: false,
-        },
-        depth_stencil: None,
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: FRAGMENT_ENTRY,
-            compilation_options: Default::default(),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: dst_format,
-                blend: Some(wgpu::BlendState {
-                    alpha: wgpu::BlendComponent::REPLACE,
-                    color: wgpu::BlendComponent::OVER,
-                }),
-                write_mask: wgpu::ColorWrites::COLOR,
-            })],
-        }),
-        multiview_mask: None,
-        cache: None,
-    })
 }
