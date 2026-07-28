@@ -59,13 +59,13 @@ impl Scene {
                 },
                 bg: Bg {
                     color: wgpu::Color {
-                        r: 0.7,
-                        g: 0.7,
-                        b: 0.7,
-                        a: 0.7,
+                        r: 0.8,
+                        g: 0.8,
+                        b: 0.8,
+                        a: 1.,
                     },
                     axis: Some(glam::vec4(0.1, 0.1, 0.1, 1.)),
-                    grid: None,
+                    grid: Some(glam::vec4(0.4, 0.4, 0.4, 1.)),
                     spacing: 100,
                 },
                 curves: vec![
@@ -86,7 +86,7 @@ impl Scene {
                     Curve {
                         config: CurveConfig {
                             thickness: 0,
-                            color: glam::vec4(0., 1., 1., 1.),
+                            color: glam::vec4(0., 1., 0., 1.),
                         },
                         expr: "pow(x, 3) + safeLog(y) - 10".to_string(),
                     },
