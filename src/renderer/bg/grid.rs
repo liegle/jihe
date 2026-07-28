@@ -12,24 +12,25 @@ const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModul
 const VERTEX_ENTRY: Option<&str> = Some("vs");
 const FRAGMENT_ENTRY: Option<&str> = Some("fs");
 
-pub struct Line {
+pub struct Grid {
     bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
+    vertex_count: u32,
 }
 
-impl Line {
+impl Grid {
     pub fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: glam::Vec2::min_size().get(),
+            size: glam::Vec2::min_size().get() * 2,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: glam::Vec4::min_size().get(),
+            size: glam::Vec3::min_size().get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -41,19 +42,37 @@ impl Line {
             render_pipeline,
             vertex_buffer,
             uniform_buffer,
+            vertex_count: 2,
         }
     }
 
     pub fn prepare(
         &mut self,
-        vertices: &[glam::Vec2],
-        color: glam::Vec4,
+        spacing: i32,
+        half_size: (i32, i32),
+        axis_pos: (i32, i32),
+        h_ends: (f32, f32),
+        v_ends: (f32, f32),
+        color: glam::Vec3,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
     ) {
-        queue.write_buffer(&self.uniform_buffer, 0, &color.as_uniform_bytes());
+        let h_begin = ((-half_size.0 - axis_pos.0) / spacing) * spacing + axis_pos.0;
+        let h_count = (half_size.0 - h_begin) / spacing + 1;
+        let v_begin = ((-half_size.1 - axis_pos.1) / spacing) * spacing + axis_pos.1;
+        let v_count = (half_size.1 - v_begin) / spacing + 1;
+        let mut vertices = Vec::<glam::Vec2>::new();
+        for i in 0..h_count {
+            let x = ((h_begin + spacing * i) as f32) / (half_size.0 as f32);
+            vertices.extend(&[glam::vec2(x, h_ends.0), glam::vec2(x, h_ends.1)])
+        }
+        for i in 0..v_count {
+            let y = ((v_begin + spacing * i) as f32) / (half_size.1 as f32);
+            vertices.extend(&[glam::vec2(v_ends.0, y), glam::vec2(v_ends.1, y)])
+        }
+        self.vertex_count = vertices.len() as u32;
         let vertex_buffer_size = vertices.len() as u64 * glam::Vec2::min_size().get();
-        if self.vertex_buffer.size() != vertex_buffer_size {
+        if self.vertex_buffer.size() < vertex_buffer_size {
             self.vertex_buffer.destroy();
             self.vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
@@ -63,16 +82,14 @@ impl Line {
             });
         }
         queue.write_buffer(&self.vertex_buffer, 0, &vertices.as_dynamic_storage_bytes());
+        queue.write_buffer(&self.uniform_buffer, 0, &color.as_uniform_bytes());
     }
 
     pub fn render(&self, render_pass: &mut wgpu::RenderPass) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.draw(
-            0..((self.vertex_buffer.size() / glam::Vec2::min_size().get()) as u32),
-            0..1,
-        );
+        render_pass.draw(0..self.vertex_count, 0..1);
     }
 }
 
@@ -153,7 +170,11 @@ fn create_render_pipeline(
                 format: dst_format,
                 blend: Some(wgpu::BlendState {
                     alpha: wgpu::BlendComponent::REPLACE,
-                    color: wgpu::BlendComponent::OVER,
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
+                        dst_factor: wgpu::BlendFactor::Zero,
+                        operation: wgpu::BlendOperation::Add,
+                    },
                 }),
                 write_mask: wgpu::ColorWrites::COLOR,
             })],

@@ -23,8 +23,8 @@ pub struct Camera {
 
 pub struct Bg {
     pub color: glam::Vec3,
-    pub axis: Option<glam::Vec4>,
-    pub grid: Option<glam::Vec4>,
+    pub axis: Option<glam::Vec3>,
+    pub grid: Option<glam::Vec3>,
     pub spacing: u32,
 }
 
@@ -59,8 +59,8 @@ impl Scene {
                 },
                 bg: Bg {
                     color: glam::vec3(0.8, 0.8, 0.8),
-                    axis: Some(glam::vec4(0.1, 0.1, 0.1, 1.)),
-                    grid: Some(glam::vec4(0.4, 0.4, 0.4, 1.)),
+                    axis: Some(glam::vec3(0.1, 0.1, 0.1)),
+                    grid: Some(glam::vec3(0.4, 0.4, 0.4)),
                     spacing: 100,
                 },
                 curves: vec![
