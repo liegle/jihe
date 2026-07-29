@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use encase::ShaderType;
 
-use crate::renderer::buffer::{AsDynamicStorageBytes, AsUniformBytes};
+use crate::renderer::{bg::Bounds, buffer::{AsDynamicStorageBytes, AsUniformBytes}};
 
 const SHADER: &str = include_str!("line.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
@@ -51,25 +51,27 @@ impl Grid {
         spacing: i32,
         half_size: (i32, i32),
         axis_pos: (i32, i32),
-        h_ends: (f32, f32),
-        v_ends: (f32, f32),
+        grid_ends_cs: Bounds<f32>,
         color: glam::Vec3,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
     ) {
+        let mut vertices = Vec::<glam::Vec2>::new();
+
         let h_begin = ((-half_size.0 - axis_pos.0) / spacing) * spacing + axis_pos.0;
         let h_count = (half_size.0 - h_begin) / spacing + 1;
-        let v_begin = ((-half_size.1 - axis_pos.1) / spacing) * spacing + axis_pos.1;
-        let v_count = (half_size.1 - v_begin) / spacing + 1;
-        let mut vertices = Vec::<glam::Vec2>::new();
         for i in 0..h_count {
             let x = ((h_begin + spacing * i) as f32) / (half_size.0 as f32);
-            vertices.extend(&[glam::vec2(x, h_ends.0), glam::vec2(x, h_ends.1)])
+            vertices.extend(&[glam::vec2(x, grid_ends_cs.l), glam::vec2(x, grid_ends_cs.r)])
         }
+
+        let v_begin = ((-half_size.1 - axis_pos.1) / spacing) * spacing + axis_pos.1;
+        let v_count = (half_size.1 - v_begin) / spacing + 1;
         for i in 0..v_count {
             let y = ((v_begin + spacing * i) as f32) / (half_size.1 as f32);
-            vertices.extend(&[glam::vec2(v_ends.0, y), glam::vec2(v_ends.1, y)])
+            vertices.extend(&[glam::vec2(grid_ends_cs.b, y), glam::vec2(grid_ends_cs.t, y)])
         }
+
         self.vertex_count = vertices.len() as u32;
         let vertex_buffer_size = vertices.len() as u64 * glam::Vec2::min_size().get();
         if self.vertex_buffer.size() < vertex_buffer_size {

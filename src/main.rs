@@ -63,7 +63,16 @@ impl winit::application::ApplicationHandler for App {
                 event,
                 is_synthetic: _,
             } => {
-                if scene.handle_key(&event) {
+                if scene.handle_keyboard_input(&event) {
+                    renderer.render();
+                }
+            }
+            winit::event::WindowEvent::MouseWheel {
+                device_id: _,
+                delta,
+                phase,
+            } => {
+                if scene.handle_mouse_wheel(&delta, &phase) {
                     renderer.render();
                 }
             }

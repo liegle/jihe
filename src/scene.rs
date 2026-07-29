@@ -7,6 +7,7 @@ pub struct Scene {
 
 pub struct Config {
     pub move_speed: f32,
+    pub zoom_factor: f32,
 }
 
 pub struct SceneData {
@@ -17,6 +18,7 @@ pub struct SceneData {
 
 #[derive(encase::ShaderType)]
 pub struct Camera {
+    /// Coord units per pixel
     pub scale: f32,
     pub pos: glam::Vec2,
 }
@@ -51,7 +53,7 @@ enum Direction {
 impl Scene {
     pub fn new() -> Self {
         Self {
-            config: Config { move_speed: 30. },
+            config: Config { move_speed: 30., zoom_factor: 0.2 },
             data: Arc::new(Mutex::new(SceneData {
                 camera: Camera {
                     scale: 0.01,
@@ -90,7 +92,7 @@ impl Scene {
         }
     }
 
-    pub fn handle_key(&mut self, event: &winit::event::KeyEvent) -> bool {
+    pub fn handle_keyboard_input(&mut self, event: &winit::event::KeyEvent) -> bool {
         if event.state == winit::event::ElementState::Pressed {
             use winit::keyboard::{Key, NamedKey};
             match event.logical_key.as_ref() {
@@ -110,6 +112,29 @@ impl Scene {
                     return false;
                 }
             }
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn handle_mouse_wheel(
+        &mut self,
+        delta: &winit::event::MouseScrollDelta,
+        phase: &winit::event::TouchPhase,
+    ) -> bool {
+        use winit::{
+            dpi::PhysicalPosition,
+            event::{MouseScrollDelta, TouchPhase},
+        };
+        if *phase == TouchPhase::Moved {
+            let (x, y) = match delta {
+                MouseScrollDelta::LineDelta(x, y) => (*x, *y),
+                MouseScrollDelta::PixelDelta(PhysicalPosition { x, y }) => (*x as f32, *y as f32),
+            };
+            let zoom = if x.abs() > y.abs() { x } else { y };
+            let data = &mut self.data.lock().unwrap();
+            data.camera.scale *= 2f32.powf(-zoom * self.config.zoom_factor);
             true
         } else {
             false
