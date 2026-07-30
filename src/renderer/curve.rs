@@ -1,4 +1,4 @@
-use encase::ShaderSize;
+use encase::ShaderSize as _;
 
 use crate::{
     renderer::{

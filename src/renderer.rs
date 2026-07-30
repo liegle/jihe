@@ -4,7 +4,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use encase::ShaderSize;
+use encase::ShaderSize as _;
 
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;

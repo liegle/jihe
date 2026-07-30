@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use encase::ShaderSize;
+use encase::ShaderSize as _;
 
 use crate::renderer::buffer::{AsDynamicStorageBytes, AsUniformBytes};
 
