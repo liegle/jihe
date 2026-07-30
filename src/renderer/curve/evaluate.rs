@@ -38,7 +38,9 @@ impl Evaluate {
         }
     }
 
-    pub(super) fn expr(&self) -> &str { &self.expr }
+    pub(super) fn expr(&self) -> &str {
+        &self.expr
+    }
 
     pub(super) fn remake_bind_group(
         &mut self,
