@@ -37,6 +37,8 @@ impl Renderer {
         scene: Arc<Mutex<SceneData>>,
         window: Arc<winit::window::Window>,
         size: (u32, u32),
+        render_per_sec: u64,
+        resize_per_sec: u64,
     ) -> Self {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let join_handle = {
@@ -47,7 +49,13 @@ impl Renderer {
                 .unwrap();
             let renderer = rt.block_on(Inner::new(scene, window, size));
             thread::spawn(move || match renderer {
-                Ok(renderer) => rt.block_on(run(renderer, sender, receiver)),
+                Ok(renderer) => rt.block_on(run(
+                    renderer,
+                    sender,
+                    receiver,
+                    render_per_sec,
+                    resize_per_sec,
+                )),
                 Err(err) => {
                     log::error!("Can't create renderer: {}", err);
                 }
@@ -84,15 +92,11 @@ async fn run(
     mut renderer: Inner,
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
+    render_per_sec: u64,
+    resize_per_sec: u64,
 ) {
-    // TODO: from config
-    const REDRAW_INTERVAL: tokio::time::Duration =
-        tokio::time::Duration::from_millis((1000. / 60.) as u64);
-    const RESIZE_INTERVAL: tokio::time::Duration =
-        tokio::time::Duration::from_millis((1000. / 10.) as u64);
-
-    let mut render_scheduler = Scheduler::new(REDRAW_INTERVAL);
-    let mut resize_scheduler = Scheduler::new(RESIZE_INTERVAL);
+    let mut render_scheduler = Scheduler::new(render_per_sec);
+    let mut resize_scheduler = Scheduler::new(resize_per_sec);
 
     loop {
         tokio::select! {

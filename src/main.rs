@@ -36,7 +36,13 @@ impl winit::application::ApplicationHandler for App {
         };
         let window = Arc::new(window);
         let size = window.inner_size().into();
-        let renderer = Renderer::new(scene.data.clone(), window, size);
+        let renderer = Renderer::new(
+            scene.data.clone(),
+            window,
+            size,
+            scene.config.render_per_sec,
+            scene.config.resize_per_sec,
+        );
         *self = App::Ready { scene, renderer };
     }
 

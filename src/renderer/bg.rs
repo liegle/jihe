@@ -6,9 +6,6 @@ use crate::{
 mod axis;
 mod grid;
 
-// TODO: from config
-const GRADUATION_HEIGHT: f32 = 5.;
-
 pub struct Bg {
     axis: Axis,
     grid: Grid,
@@ -35,20 +32,23 @@ impl Bg {
             (-camera.pos.y / camera.scale / half_size.y).clamp(-0.99, 0.99),
         );
 
-        if let Some(color) = bg.axis {
+        if let Some(scene::Axis {
+            color,
+            grad_height: _,
+        }) = bg.axis
+        {
             self.axis.prepare(axis_pos_cs, color, queue);
         }
         'grid: {
-            let (color, grid_ends_cs) = match (bg.axis, bg.grid) {
-                (_, Some(color)) => (color, Bounds::new(-1., 1., -1., 1.)),
-                (Some(color), None) => (
-                    color,
+            let (color, grid_ends_cs) = match (&bg.axis, &bg.grid) {
+                (_, Some(scene::Grid { color })) => (*color, Bounds::new(-1., 1., -1., 1.)),
+                (Some(scene::Axis { color, grad_height }), None) => (
+                    *color,
                     Bounds::with_pos_and_size(
                         axis_pos_cs,
-                        // TODO: reverse
                         glam::vec2(
-                            GRADUATION_HEIGHT / (half_size.x as f32) * -axis_pos_cs.x.signum(),
-                            GRADUATION_HEIGHT / (half_size.y as f32) * -axis_pos_cs.y.signum(),
+                            (*grad_height as f32 / half_size.x).copysign(camera.pos.x),
+                            (*grad_height as f32 / half_size.y).copysign(camera.pos.y),
                         ),
                     ),
                 ),

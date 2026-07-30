@@ -2,7 +2,10 @@ use std::borrow::Cow;
 
 use encase::ShaderSize;
 
-use crate::renderer::{bg::Bounds, buffer::{AsDynamicStorageBytes, AsUniformBytes}};
+use crate::renderer::{
+    bg::Bounds,
+    buffer::{AsDynamicStorageBytes, AsUniformBytes},
+};
 
 const SHADER: &str = include_str!("line.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
@@ -61,14 +64,20 @@ impl Grid {
         let mut x = (screen_bounds_ws.l / distance).ceil() * distance;
         while x < screen_bounds_ws.r {
             let x_cs = 2. * (x - screen_bounds_ws.l) / w - 1.;
-            vertices.extend(&[glam::vec2(x_cs, grid_ends_cs.b), glam::vec2(x_cs, grid_ends_cs.t)]);
+            vertices.extend(&[
+                glam::vec2(x_cs, grid_ends_cs.b),
+                glam::vec2(x_cs, grid_ends_cs.t),
+            ]);
             x += distance;
         }
 
         let mut y = (screen_bounds_ws.b / distance).ceil() * distance;
         while y < screen_bounds_ws.t {
             let y_cs = 2. * (y - screen_bounds_ws.b) / h - 1.;
-            vertices.extend(&[glam::vec2(grid_ends_cs.l, y_cs), glam::vec2(grid_ends_cs.r, y_cs)]);
+            vertices.extend(&[
+                glam::vec2(grid_ends_cs.l, y_cs),
+                glam::vec2(grid_ends_cs.r, y_cs),
+            ]);
             y += distance;
         }
 

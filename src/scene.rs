@@ -6,6 +6,8 @@ pub struct Scene {
 }
 
 pub struct Config {
+    pub render_per_sec: u64,
+    pub resize_per_sec: u64,
     pub move_speed: f32,
     pub zoom_factor: f32,
 }
@@ -25,9 +27,18 @@ pub struct Camera {
 
 pub struct Bg {
     pub color: glam::Vec3,
-    pub axis: Option<glam::Vec3>,
-    pub grid: Option<glam::Vec3>,
+    pub axis: Option<Axis>,
+    pub grid: Option<Grid>,
     pub spacing: u32,
+}
+
+pub struct Axis {
+    pub color: glam::Vec3,
+    pub grad_height: u32,
+}
+
+pub struct Grid {
+    pub color: glam::Vec3,
 }
 
 pub struct Curve {
@@ -53,7 +64,12 @@ enum Direction {
 impl Scene {
     pub fn new() -> Self {
         Self {
-            config: Config { move_speed: 30., zoom_factor: 0.2 },
+            config: Config {
+                render_per_sec: 60,
+                resize_per_sec: 60,
+                move_speed: 30.,
+                zoom_factor: 0.2,
+            },
             data: Arc::new(Mutex::new(SceneData {
                 camera: Camera {
                     scale: 0.01,
@@ -61,8 +77,13 @@ impl Scene {
                 },
                 bg: Bg {
                     color: glam::vec3(0.8, 0.8, 0.8),
-                    axis: Some(glam::vec3(0.1, 0.1, 0.1)),
-                    grid: None,
+                    axis: Some(Axis {
+                        color: glam::vec3(0.1, 0.1, 0.1),
+                        grad_height: 5,
+                    }),
+                    grid: Some(Grid {
+                        color: glam::vec3(0.5, 0.5, 0.5),
+                    }),
                     spacing: 100,
                 },
                 curves: vec![

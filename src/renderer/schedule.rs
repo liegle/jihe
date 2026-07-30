@@ -17,9 +17,9 @@ enum State<T> {
 }
 
 impl<T: Copy> Scheduler<T> {
-    pub fn new(interval: tokio::time::Duration) -> Self {
+    pub fn new(frequency: u64) -> Self {
         Self {
-            interval,
+            interval: tokio::time::Duration::from_micros(1000_000 / frequency),
             state: State::Idle,
         }
     }
