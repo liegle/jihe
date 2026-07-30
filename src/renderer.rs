@@ -1,3 +1,5 @@
+// TODO: add label to everything
+
 use std::{
     iter,
     sync::{Arc, Mutex},
@@ -259,9 +261,6 @@ impl Inner {
             self.surface_config.width = size.0;
             self.surface_config.height = size.1;
             self.surface.configure(&self.device, &self.surface_config);
-            // TODO: resize in prepare()
-            self.curve
-                .dst_resize(&self.device, size, &self.camera_buffer);
         }
     }
 
@@ -310,7 +309,13 @@ impl Inner {
                 &self.queue,
                 dst_size,
             );
-            self.curve.prepare(&scene.curves, &self.queue);
+            self.curve.prepare(
+                &scene.curves,
+                &self.device,
+                &self.queue,
+                (self.surface_config.width, self.surface_config.height),
+                &self.camera_buffer,
+            );
             '_profile_scope: {
                 #[cfg(feature = "profile")]
                 let mut encoder = self.profiler.scope("Encode", &mut encoder);

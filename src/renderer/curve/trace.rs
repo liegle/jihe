@@ -49,7 +49,7 @@ impl Trace {
         );
     }
 
-    pub fn render(
+    pub fn compute(
         &self,
         compute_pass: &mut wgpu::ComputePass,
         dst_size: (u32, u32),

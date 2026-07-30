@@ -10,12 +10,12 @@ pub struct Evaluate {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     compute_pipeline: wgpu::ComputePipeline,
-    pub layer: u32,
+    pub expr: String,
 }
 
 impl Evaluate {
     pub fn new(
-        function: &str,
+        expr: &str,
         layer: u32,
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
@@ -29,12 +29,12 @@ impl Evaluate {
             residual_texture,
             layer,
         );
-        let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, function);
+        let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, expr);
         Self {
             bind_group_layout,
             bind_group,
             compute_pipeline,
-            layer,
+            expr: expr.to_string(),
         }
     }
 
@@ -54,7 +54,7 @@ impl Evaluate {
         )
     }
 
-    pub fn render(&self, compute_pass: &mut wgpu::ComputePass, dst_size: (u32, u32)) {
+    pub fn compute(&self, compute_pass: &mut wgpu::ComputePass, dst_size: (u32, u32)) {
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
         compute_pass.dispatch_workgroups(
@@ -129,12 +129,9 @@ fn create_bind_group(
 fn create_compute_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    function: &str,
+    expr: &str,
 ) -> wgpu::ComputePipeline {
-    let mut source = String::from(SHADER_BASE);
-    source.push_str(FN_START);
-    source.push_str(function);
-    source.push_str(FN_END);
+    let source = String::from_iter([SHADER_BASE, FN_START, expr, FN_END]);
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(Cow::Owned(source)),

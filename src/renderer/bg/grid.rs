@@ -25,12 +25,7 @@ pub struct Grid {
 
 impl Grid {
     pub fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: glam::Vec2::SHADER_SIZE.get() * 2,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let vertex_buffer = create_vertex_buffer(device, glam::Vec2::SHADER_SIZE.get() * 2);
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: glam::Vec3::SHADER_SIZE.get(),
@@ -85,12 +80,7 @@ impl Grid {
         let vertex_buffer_size = vertices.len() as u64 * glam::Vec2::SHADER_SIZE.get();
         if self.vertex_buffer.size() < vertex_buffer_size {
             self.vertex_buffer.destroy();
-            self.vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: None,
-                size: vertex_buffer_size,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+            self.vertex_buffer = create_vertex_buffer(device, vertex_buffer_size);
         }
         queue.write_buffer(&self.vertex_buffer, 0, &vertices.as_dynamic_storage_bytes());
         queue.write_buffer(&self.uniform_buffer, 0, &color.as_uniform_bytes());
@@ -102,6 +92,15 @@ impl Grid {
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..self.vertex_count, 0..1);
     }
+}
+
+fn create_vertex_buffer(device: &wgpu::Device, size: u64) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
 }
 
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
