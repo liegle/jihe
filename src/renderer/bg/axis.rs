@@ -44,14 +44,14 @@ impl Axis {
         }
     }
 
-    pub fn prepare(&self, axis_positions: (f32, f32), color: glam::Vec3, queue: &wgpu::Queue) {
+    pub fn prepare(&self, axis_pos_cs: glam::Vec2, color: glam::Vec3, queue: &wgpu::Queue) {
         let vertices = &[
             // y axis
-            glam::vec2(axis_positions.0, -1.),
-            glam::vec2(axis_positions.0, 1.),
+            glam::vec2(axis_pos_cs.x, -1.),
+            glam::vec2(axis_pos_cs.x, 1.),
             // x axis
-            glam::vec2(-1., axis_positions.1),
-            glam::vec2(1., axis_positions.1),
+            glam::vec2(-1., axis_pos_cs.y),
+            glam::vec2(1., axis_pos_cs.y),
         ];
         queue.write_buffer(&self.vertex_buffer, 0, &vertices.as_dynamic_storage_bytes());
         queue.write_buffer(&self.uniform_buffer, 0, &color.as_uniform_bytes());

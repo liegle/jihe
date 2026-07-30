@@ -48,28 +48,28 @@ impl Grid {
 
     pub fn prepare(
         &mut self,
-        spacing: i32,
-        half_size: (i32, i32),
-        axis_pos: (i32, i32),
-        grid_ends_cs: Bounds<f32>,
+        distance: f32,
+        screen_bounds_ws: Bounds,
+        grid_ends_cs: Bounds,
         color: glam::Vec3,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
     ) {
+        let (w, h) = (screen_bounds_ws.w(), screen_bounds_ws.h());
         let mut vertices = Vec::<glam::Vec2>::new();
 
-        let h_begin = ((-half_size.0 - axis_pos.0) / spacing) * spacing + axis_pos.0;
-        let h_count = (half_size.0 - h_begin) / spacing + 1;
-        for i in 0..h_count {
-            let x = ((h_begin + spacing * i) as f32) / (half_size.0 as f32);
-            vertices.extend(&[glam::vec2(x, grid_ends_cs.l), glam::vec2(x, grid_ends_cs.r)])
+        let mut x = (screen_bounds_ws.l / distance).ceil() * distance;
+        while x < screen_bounds_ws.r {
+            let x_cs = 2. * (x - screen_bounds_ws.l) / w - 1.;
+            vertices.extend(&[glam::vec2(x_cs, grid_ends_cs.l), glam::vec2(x_cs, grid_ends_cs.r)]);
+            x += distance;
         }
 
-        let v_begin = ((-half_size.1 - axis_pos.1) / spacing) * spacing + axis_pos.1;
-        let v_count = (half_size.1 - v_begin) / spacing + 1;
-        for i in 0..v_count {
-            let y = ((v_begin + spacing * i) as f32) / (half_size.1 as f32);
-            vertices.extend(&[glam::vec2(grid_ends_cs.b, y), glam::vec2(grid_ends_cs.t, y)])
+        let mut y = (screen_bounds_ws.b / distance).ceil() * distance;
+        while y < screen_bounds_ws.t {
+            let y_cs = 2. * (y - screen_bounds_ws.b) / h - 1.;
+            vertices.extend(&[glam::vec2(grid_ends_cs.b, y_cs), glam::vec2(grid_ends_cs.t, y_cs)]);
+            y += distance;
         }
 
         self.vertex_count = vertices.len() as u32;

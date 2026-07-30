@@ -28,15 +28,10 @@ impl Bg {
         queue: &wgpu::Queue,
         dst_size: (u32, u32),
     ) {
-        let half_size = (dst_size.0 as i32 / 2, dst_size.1 as i32 / 2);
-        let axis_pos_ss = (
-            (-camera.pos.x / camera.scale) as i32,
-            (-camera.pos.y / camera.scale) as i32,
-        );
-
-        let axis_pos_cs = (
-            ((axis_pos_ss.0 as f32) / (half_size.0 as f32)).clamp(-0.99, 0.99),
-            ((axis_pos_ss.1 as f32) / (half_size.1 as f32)).clamp(-0.99, 0.99),
+        let half_size = glam::vec2(dst_size.0 as f32 / 2., dst_size.1 as f32 / 2.);
+        let axis_pos_cs = glam::vec2(
+            (-camera.pos.x / camera.scale / half_size.x).clamp(-0.99, 0.99),
+            (-camera.pos.y / camera.scale / half_size.y).clamp(-0.99, 0.99),
         );
 
         if let Some(color) = bg.axis {
@@ -47,11 +42,12 @@ impl Bg {
                 (_, Some(color)) => (color, Bounds::new(-1., 1., -1., 1.)),
                 (Some(color), None) => (
                     color,
-                    Bounds::new(
-                        axis_pos_cs.1,
-                        axis_pos_cs.1 + GRADUATION_HEIGHT / (half_size.1 as f32),
-                        axis_pos_cs.0,
-                        axis_pos_cs.0 + GRADUATION_HEIGHT / (half_size.0 as f32),
+                    Bounds::with_pos_and_size(
+                        axis_pos_cs,
+                        glam::vec2(
+                            GRADUATION_HEIGHT / (half_size.x as f32),
+                            GRADUATION_HEIGHT / (half_size.y as f32),
+                        ),
                     ),
                 ),
                 (None, None) => {
@@ -67,8 +63,16 @@ impl Bg {
             while spacing > spacing_range.1 {
                 spacing /= 2.;
             }
+
+            let half_size_ws = glam::vec2(half_size.x * camera.scale, half_size.y * camera.scale);
+            let screen_bounds_ws = Bounds::with_center_and_extend(camera.pos, half_size_ws);
             self.grid.prepare(
-                spacing as i32, half_size, axis_pos_ss, grid_ends_cs, color, queue, device,
+                spacing * camera.scale,
+                screen_bounds_ws,
+                grid_ends_cs,
+                color,
+                queue,
+                device,
             );
         }
     }
@@ -87,15 +91,41 @@ impl Bg {
     }
 }
 
-struct Bounds<T> {
-    l: T,
-    r: T,
-    b: T,
-    t: T,
+struct Bounds {
+    l: f32,
+    r: f32,
+    b: f32,
+    t: f32,
 }
 
-impl<T> Bounds<T> {
-    fn new(l: T, r: T, b: T, t: T) -> Self {
+impl Bounds {
+    fn new(l: f32, r: f32, b: f32, t: f32) -> Self {
         Self { l, r, b, t }
+    }
+
+    fn with_pos_and_size(pos: glam::Vec2, size: glam::Vec2) -> Self {
+        Self {
+            l: pos.x,
+            r: pos.x + size.x,
+            b: pos.y,
+            t: pos.y + size.y,
+        }
+    }
+
+    fn with_center_and_extend(center: glam::Vec2, extend: glam::Vec2) -> Self {
+        Self {
+            l: center.x - extend.x,
+            r: center.x + extend.x,
+            b: center.y - extend.y,
+            t: center.y + extend.y,
+        }
+    }
+
+    fn w(&self) -> f32 {
+        self.r - self.l
+    }
+
+    fn h(&self) -> f32 {
+        self.t - self.b
     }
 }
