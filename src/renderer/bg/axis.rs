@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use encase::ShaderType;
+use encase::ShaderSize;
 
 use crate::renderer::buffer::{AsDynamicStorageBytes, AsUniformBytes};
 
@@ -23,13 +23,13 @@ impl Axis {
     pub fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: glam::Vec2::min_size().get() * 4,
+            size: glam::Vec2::SHADER_SIZE.get() * 4,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: glam::Vec3::min_size().get(),
+            size: glam::Vec3::SHADER_SIZE.get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -113,7 +113,7 @@ fn create_render_pipeline(
             module: &shader,
             entry_point: VERTEX_ENTRY,
             buffers: &[wgpu::VertexBufferLayout {
-                array_stride: glam::Vec2::min_size().get(),
+                array_stride: glam::Vec2::SHADER_SIZE.get(),
                 step_mode: wgpu::VertexStepMode::Vertex,
                 attributes: &[wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x2,

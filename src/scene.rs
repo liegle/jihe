@@ -62,7 +62,7 @@ impl Scene {
                 bg: Bg {
                     color: glam::vec3(0.8, 0.8, 0.8),
                     axis: Some(glam::vec3(0.1, 0.1, 0.1)),
-                    grid: Some(glam::vec3(0.4, 0.4, 0.4)),
+                    grid: None,
                     spacing: 100,
                 },
                 curves: vec![

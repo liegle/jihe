@@ -1,3 +1,5 @@
+// TODO: change pubs to pub(crate)s and pub(super)s
+
 use std::{mem, sync::Arc};
 
 use crate::{renderer::Renderer, scene::Scene};
@@ -76,6 +78,7 @@ impl winit::application::ApplicationHandler for App {
                     renderer.render();
                 }
             }
+            // TODO: mouse control
             _ => (),
         }
     }

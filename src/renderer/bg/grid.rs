@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use encase::ShaderType;
+use encase::ShaderSize;
 
 use crate::renderer::{bg::Bounds, buffer::{AsDynamicStorageBytes, AsUniformBytes}};
 
@@ -24,13 +24,13 @@ impl Grid {
     pub fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: glam::Vec2::min_size().get() * 2,
+            size: glam::Vec2::SHADER_SIZE.get() * 2,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: glam::Vec3::min_size().get(),
+            size: glam::Vec3::SHADER_SIZE.get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -61,19 +61,19 @@ impl Grid {
         let mut x = (screen_bounds_ws.l / distance).ceil() * distance;
         while x < screen_bounds_ws.r {
             let x_cs = 2. * (x - screen_bounds_ws.l) / w - 1.;
-            vertices.extend(&[glam::vec2(x_cs, grid_ends_cs.l), glam::vec2(x_cs, grid_ends_cs.r)]);
+            vertices.extend(&[glam::vec2(x_cs, grid_ends_cs.b), glam::vec2(x_cs, grid_ends_cs.t)]);
             x += distance;
         }
 
         let mut y = (screen_bounds_ws.b / distance).ceil() * distance;
         while y < screen_bounds_ws.t {
             let y_cs = 2. * (y - screen_bounds_ws.b) / h - 1.;
-            vertices.extend(&[glam::vec2(grid_ends_cs.b, y_cs), glam::vec2(grid_ends_cs.t, y_cs)]);
+            vertices.extend(&[glam::vec2(grid_ends_cs.l, y_cs), glam::vec2(grid_ends_cs.r, y_cs)]);
             y += distance;
         }
 
         self.vertex_count = vertices.len() as u32;
-        let vertex_buffer_size = vertices.len() as u64 * glam::Vec2::min_size().get();
+        let vertex_buffer_size = vertices.len() as u64 * glam::Vec2::SHADER_SIZE.get();
         if self.vertex_buffer.size() < vertex_buffer_size {
             self.vertex_buffer.destroy();
             self.vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -143,7 +143,7 @@ fn create_render_pipeline(
             module: &shader,
             entry_point: VERTEX_ENTRY,
             buffers: &[wgpu::VertexBufferLayout {
-                array_stride: glam::Vec2::min_size().get(),
+                array_stride: glam::Vec2::SHADER_SIZE.get(),
                 step_mode: wgpu::VertexStepMode::Vertex,
                 attributes: &[wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x2,

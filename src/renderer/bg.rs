@@ -6,6 +6,7 @@ use crate::{
 mod axis;
 mod grid;
 
+// TODO: from config
 const GRADUATION_HEIGHT: f32 = 5.;
 
 pub struct Bg {
@@ -44,9 +45,10 @@ impl Bg {
                     color,
                     Bounds::with_pos_and_size(
                         axis_pos_cs,
+                        // TODO: reverse
                         glam::vec2(
-                            GRADUATION_HEIGHT / (half_size.x as f32),
-                            GRADUATION_HEIGHT / (half_size.y as f32),
+                            GRADUATION_HEIGHT / (half_size.x as f32) * -axis_pos_cs.x.signum(),
+                            GRADUATION_HEIGHT / (half_size.y as f32) * -axis_pos_cs.y.signum(),
                         ),
                     ),
                 ),
@@ -104,15 +106,15 @@ impl Bounds {
     }
 
     fn with_pos_and_size(pos: glam::Vec2, size: glam::Vec2) -> Self {
-        Self {
-            l: pos.x,
-            r: pos.x + size.x,
-            b: pos.y,
-            t: pos.y + size.y,
-        }
+        let (l, r) = (pos.x, pos.x + size.x);
+        let (l, r) = if size.x < 0. { (r, l) } else { (l, r) };
+        let (b, t) = (pos.y, pos.y + size.y);
+        let (b, t) = if size.y < 0. { (t, b) } else { (b, t) };
+        Self { l, r, b, t }
     }
 
     fn with_center_and_extend(center: glam::Vec2, extend: glam::Vec2) -> Self {
+        let extend = extend.abs();
         Self {
             l: center.x - extend.x,
             r: center.x + extend.x,

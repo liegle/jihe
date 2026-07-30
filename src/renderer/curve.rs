@@ -1,4 +1,4 @@
-use encase::ShaderType;
+use encase::ShaderSize;
 
 use crate::{
     renderer::{
@@ -38,7 +38,7 @@ impl Curve {
 
         let curves_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: scene::CurveConfig::min_size().get() * curves.len().max(1) as u64,
+            size: scene::CurveConfig::SHADER_SIZE.get() * curves.len().max(1) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });

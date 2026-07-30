@@ -4,7 +4,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use encase::ShaderType as _;
+use encase::ShaderSize;
 
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;
@@ -215,7 +215,7 @@ impl Inner {
 
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: scene::Camera::min_size().get(),
+            size: scene::Camera::SHADER_SIZE.get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -255,6 +255,7 @@ impl Inner {
             self.surface_config.width = size.0;
             self.surface_config.height = size.1;
             self.surface.configure(&self.device, &self.surface_config);
+            // TODO: resize in prepare()
             self.curve
                 .dst_resize(&self.device, size, &self.camera_buffer);
         }
