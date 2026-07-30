@@ -1,5 +1,5 @@
 use std::{
-    iter,
+    io, iter,
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
 };
@@ -36,55 +36,54 @@ impl Renderer {
     pub fn new(
         scene: Arc<Mutex<SceneData>>,
         window: Arc<winit::window::Window>,
-        size: (u32, u32),
         render_per_sec: u64,
         resize_per_sec: u64,
-    ) -> Self {
+    ) -> Result<Self, CreateRendererError> {
+        let size = window.inner_size().into();
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let join_handle = {
             let sender = sender.clone();
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_time()
-                .build()
-                .unwrap();
-            let renderer = rt.block_on(Inner::new(scene, window, size));
-            thread::spawn(move || match renderer {
-                Ok(renderer) => rt.block_on(run(
+                .build()?;
+            let renderer = rt.block_on(Inner::new(scene, window))?;
+            thread::spawn(move || {
+                rt.block_on(run(
                     renderer,
                     sender,
                     receiver,
                     render_per_sec,
                     resize_per_sec,
-                )),
-                Err(err) => {
-                    log::error!("Can't create renderer: {}", err);
-                }
+                ))
             })
         };
-        Self {
+        Ok(Self {
             join_handle,
             sender,
             size,
-        }
+        })
     }
 
-    pub fn join(self) {
-        self.join_handle.join().unwrap();
+    pub fn join(self) -> thread::Result<()> {
+        self.join_handle.join()
     }
 
-    pub fn exit(&self) {
-        self.sender.send(Task::Exit).unwrap();
+    pub fn exit(&self) -> Result<(), SendError> {
+        self.sender.send(Task::Exit)?;
+        Ok(())
     }
 
-    pub fn render(&self) {
-        self.sender.send(Task::Render).unwrap();
+    pub fn render(&self) -> Result<(), SendError> {
+        self.sender.send(Task::Render)?;
+        Ok(())
     }
 
-    pub fn resize(&mut self, size: (u32, u32)) {
+    pub fn resize(&mut self, size: (u32, u32)) -> Result<(), SendError> {
         if size != self.size {
             self.size = size;
-            self.sender.send(Task::Resize(size)).unwrap();
+            self.sender.send(Task::Resize(size))?;
         }
+        Ok(())
     }
 }
 
@@ -101,7 +100,11 @@ async fn run(
     loop {
         tokio::select! {
             task = receiver.recv() => {
-                match task.unwrap() {
+                let Some(task) = task else {
+                    log::error!("Render task channel has been closed");
+                    break;
+                };
+                match task {
                     Task::Exit => {
                         break;
                     }
@@ -113,7 +116,11 @@ async fn run(
                     Task::Resize(size) => {
                         if let Some(size) = resize_scheduler.push_task(size) {
                             renderer.resize(size);
-                            sender.send(Task::Render).unwrap();
+                            if let Err(e) = sender.send(Task::Render) {
+                                log::error!("{e}");
+                                log::error!("Render task channel has been closed");
+                                break;
+                            }
                         }
                     }
                 }
@@ -123,7 +130,11 @@ async fn run(
             },
             Some(size) = resize_scheduler.sleep() => {
                 renderer.resize(size);
-                sender.send(Task::Render).unwrap();
+                if let Err(e) = sender.send(Task::Render) {
+                    log::error!("{e}");
+                    log::error!("Render task channel has been closed");
+                    break;
+                }
             },
             else => break,
         }
@@ -163,7 +174,6 @@ impl Inner {
     async fn new(
         scene: Arc<Mutex<SceneData>>,
         window: Arc<winit::window::Window>,
-        size: (u32, u32),
     ) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
@@ -207,8 +217,8 @@ impl Inner {
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: size.0,
-            height: size.1,
+            width: window.inner_size().width,
+            height: window.inner_size().height,
             present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: Vec::new(),
@@ -227,7 +237,13 @@ impl Inner {
         let bg = Bg::new(&device, surface_format);
         let curve = {
             let scene = &scene.lock().unwrap();
-            Curve::new(&scene.curves, &device, &camera_buffer, surface_format, size)
+            Curve::new(
+                &scene.curves,
+                &device,
+                &camera_buffer,
+                surface_format,
+                window.inner_size().into(),
+            )
         };
 
         #[cfg(feature = "profile")]
@@ -393,11 +409,23 @@ impl Inner {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum CreateRendererError {
-    #[error("Failed to create surface, err: {0}")]
+pub enum CreateRendererError {
+    #[error("Failed to create tokio runtime because:\n{0}")]
+    CreateTokioRuntime(#[from] io::Error),
+    #[error("Failed to create surface because:\n{0}")]
     CreateSurface(#[from] wgpu::CreateSurfaceError),
-    #[error("Failed to request adapter, err: {0}")]
+    #[error("Failed to request adapter because:\n{0}")]
     RequestAdapter(#[from] wgpu::RequestAdapterError),
-    #[error("Failed to request device, err: {0}")]
+    #[error("Failed to request device because:\n{0}")]
     RequestDevice(#[from] wgpu::RequestDeviceError),
+}
+
+#[derive(thiserror::Error, Debug)]
+#[error("Render task receiver has closed")]
+pub struct SendError;
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for SendError {
+    fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        Self
+    }
 }
