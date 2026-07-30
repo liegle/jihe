@@ -2,20 +2,20 @@ use std::borrow::Cow;
 
 const SHADER: &str = include_str!("write.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: None,
+    label: Some("Write Shader"),
     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER)),
 };
 const VERTEX_ENTRY: Option<&str> = Some("vs");
 const FRAGMENT_ENTRY: Option<&str> = Some("fs");
 
-pub struct Write {
+pub(super) struct Write {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
 }
 
 impl Write {
-    pub fn new(
+    pub(super) fn new(
         device: &wgpu::Device,
         curves_buffer: &wgpu::Buffer,
         trace_texture_view: &wgpu::TextureView,
@@ -36,7 +36,7 @@ impl Write {
         }
     }
 
-    pub fn remake_bind_group(
+    pub(super) fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
         curves_buffer: &wgpu::Buffer,
@@ -50,7 +50,7 @@ impl Write {
         );
     }
 
-    pub fn render(&self, render_pass: &mut wgpu::RenderPass, layer_count: u32) {
+    pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass, layer_count: u32) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, Some(&self.bind_group), &[]);
         render_pass.draw(0..4, 0..layer_count);
@@ -59,7 +59,7 @@ impl Write {
 
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
     wgpu::BindGroupLayoutDescriptor {
-        label: None,
+        label: Some("Write Bind Group Layout"),
         entries: &[
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
@@ -91,7 +91,7 @@ fn create_bind_group(
     trace_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
+        label: Some("Write Bind Group"),
         layout: bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
@@ -113,12 +113,12 @@ fn create_render_pipeline(
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(SHADER_MODULE_DESCRIPTOR);
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
+        label: Some("Write Pipeline Layout"),
         bind_group_layouts: &[Some(bind_group_layout)],
         immediate_size: 0,
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: None,
+        label: Some("Write Render Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,

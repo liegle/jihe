@@ -1,6 +1,6 @@
 use std::future;
 
-pub struct Scheduler<T: Copy> {
+pub(super) struct Scheduler<T: Copy> {
     interval: tokio::time::Duration,
     state: State<T>,
 }
@@ -17,14 +17,14 @@ enum State<T> {
 }
 
 impl<T: Copy> Scheduler<T> {
-    pub fn new(frequency: u64) -> Self {
+    pub(super) fn new(frequency: u64) -> Self {
         Self {
             interval: tokio::time::Duration::from_micros(1000_000 / frequency),
             state: State::Idle,
         }
     }
 
-    pub fn push_task(&mut self, payload: T) -> Option<T> {
+    pub(super) fn push_task(&mut self, payload: T) -> Option<T> {
         let result;
         (self.state, result) = match &self.state {
             State::Idle => (
@@ -54,7 +54,7 @@ impl<T: Copy> Scheduler<T> {
         result
     }
 
-    pub async fn sleep(&mut self) -> Option<T> {
+    pub(super) async fn sleep(&mut self) -> Option<T> {
         let result;
         (self.state, result) = match &self.state {
             State::Idle => {

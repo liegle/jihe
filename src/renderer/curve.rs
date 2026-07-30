@@ -14,7 +14,7 @@ mod evaluate;
 mod trace;
 mod write;
 
-pub struct Curve {
+pub(super) struct Curve {
     evaluates: Vec<Evaluate>,
     trace: Trace,
     write: Write,
@@ -27,7 +27,7 @@ pub struct Curve {
 }
 
 impl Curve {
-    pub fn new(
+    pub(super) fn new(
         curves: &Vec<scene::Curve>,
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
@@ -65,7 +65,7 @@ impl Curve {
         }
     }
 
-    pub fn prepare(
+    pub(super) fn prepare(
         &mut self,
         curves: &Vec<scene::Curve>,
         device: &wgpu::Device,
@@ -99,7 +99,7 @@ impl Curve {
             // TODO: need test in the future when dynamic scene is implemented
             let mut previous = mem::replace(&mut self.evaluates, Vec::with_capacity(curves.len()));
             for (layer, curve) in curves.iter().enumerate() {
-                match previous.iter().position(|e| e.expr == curve.expr) {
+                match previous.iter().position(|e| e.expr() == curve.expr) {
                     Some(index) => {
                         let evaluate = self.evaluates.push_mut(previous.remove(index));
                         if index != layer || resized {
@@ -124,12 +124,12 @@ impl Curve {
             }
         } else if resized {
             for (layer, evaluate) in &mut self.evaluates.iter_mut().enumerate() {
-                 evaluate.remake_bind_group(
-                     &device,
-                     camera_buffer,
-                     &self.residual_texture,
-                     layer as u32,
-                 );
+                evaluate.remake_bind_group(
+                    &device,
+                    camera_buffer,
+                    &self.residual_texture,
+                    layer as u32,
+                );
             }
         }
 
@@ -144,7 +144,7 @@ impl Curve {
         );
     }
 
-    pub fn compute(
+    pub(super) fn compute(
         &self,
         layers: u32,
         compute_pass: &mut super::ComputePass,
@@ -162,7 +162,7 @@ impl Curve {
         }
     }
 
-    pub fn render(&self, layers: u32, render_pass: &mut super::RenderPass) {
+    pub(super) fn render(&self, layers: u32, render_pass: &mut super::RenderPass) {
         #[cfg(feature = "profile")]
         let _ = render_pass.scope("Curve write");
         self.write.render(render_pass, layers);

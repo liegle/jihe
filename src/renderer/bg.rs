@@ -6,19 +6,19 @@ use crate::{
 mod axis;
 mod grid;
 
-pub struct Bg {
+pub(super) struct Bg {
     axis: Axis,
     grid: Grid,
 }
 
 impl Bg {
-    pub fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
+    pub(super) fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
         let axis = Axis::new(device, dst_format);
         let grid = Grid::new(device, dst_format);
         Self { axis, grid }
     }
 
-    pub fn prepare(
+    pub(super) fn prepare(
         &mut self,
         bg: &scene::Bg,
         camera: &scene::Camera,
@@ -79,7 +79,7 @@ impl Bg {
         }
     }
 
-    pub fn render(&self, render_pass: &mut super::RenderPass) {
+    pub(super) fn render(&self, render_pass: &mut super::RenderPass) {
         {
             #[cfg(feature = "profile")]
             let _ = render_pass.scope("Axis");

@@ -1,4 +1,4 @@
-pub trait AsUniformBytes {
+pub(crate) trait AsUniformBytes {
     fn as_uniform_bytes(&self) -> Vec<u8>;
 }
 
@@ -10,7 +10,7 @@ impl<T: encase::ShaderType + encase::internal::WriteInto> AsUniformBytes for T {
     }
 }
 
-pub trait AsDynamicStorageBytes {
+pub(crate) trait AsDynamicStorageBytes {
     fn as_dynamic_storage_bytes(&self) -> Vec<u8>;
 }
 

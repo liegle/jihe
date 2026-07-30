@@ -2,20 +2,20 @@ use std::borrow::Cow;
 
 const SHADER: &str = include_str!("trace.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: None,
+    label: Some("Trace Shader"),
     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER)),
 };
 const COMPUTE_ENTRY: Option<&str> = Some("cs");
 const COMPUTE_WORKGROUP_SIZE: (u32, u32, u32) = (16, 16, 1);
 
-pub struct Trace {
+pub(super) struct Trace {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     compute_pipeline: wgpu::ComputePipeline,
 }
 
 impl Trace {
-    pub fn new(
+    pub(super) fn new(
         device: &wgpu::Device,
         residual_texture_view: &wgpu::TextureView,
         trace_texture_view: &wgpu::TextureView,
@@ -35,7 +35,7 @@ impl Trace {
         }
     }
 
-    pub fn remake_bind_group(
+    pub(super) fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
         residual_texture_view: &wgpu::TextureView,
@@ -49,7 +49,7 @@ impl Trace {
         );
     }
 
-    pub fn compute(
+    pub(super) fn compute(
         &self,
         compute_pass: &mut wgpu::ComputePass,
         dst_size: (u32, u32),
@@ -67,7 +67,7 @@ impl Trace {
 
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
     wgpu::BindGroupLayoutDescriptor {
-        label: None,
+        label: Some("Trace Bind Group Layout"),
         entries: &[
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
@@ -99,7 +99,7 @@ fn create_bind_group(
     trace_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
+        label: Some("Trace Bind Group"),
         layout: bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
@@ -120,12 +120,12 @@ fn create_compute_pipeline(
 ) -> wgpu::ComputePipeline {
     let shader = device.create_shader_module(SHADER_MODULE_DESCRIPTOR);
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
+        label: Some("Trace Pipeline Layout"),
         bind_group_layouts: &[Some(bind_group_layout)],
         immediate_size: 0,
     });
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: None,
+        label: Some("Trace Compute Pipeline"),
         layout: Some(&pipeline_layout),
         module: &shader,
         entry_point: COMPUTE_ENTRY,

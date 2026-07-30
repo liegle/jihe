@@ -1,5 +1,3 @@
-// TODO: add label to everything
-
 use std::{
     iter,
     sync::{Arc, Mutex},
@@ -188,7 +186,7 @@ impl Inner {
         };
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
-                label: None,
+                label: Some("Device"),
                 required_features,
                 required_limits: Default::default(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
@@ -220,7 +218,7 @@ impl Inner {
         log::info!("Surface config: {surface_config:?}");
 
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+            label: Some("Camera Buffer"),
             size: scene::Camera::SHADER_SIZE.get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -292,10 +290,24 @@ impl Inner {
             }
         };
 
-        let view = output.texture.create_view(&Default::default());
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("Dst Texture View"),
+            format: Some(output.texture.format()),
+            dimension: Some(wgpu::TextureViewDimension::D2),
+            usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        });
         let dst_size = (view.texture().width(), view.texture().height());
 
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Command Encoder"),
+            });
 
         '_lock_scene: {
             let scene = self.scene.lock().unwrap();

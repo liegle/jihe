@@ -2,20 +2,20 @@
 
 use std::{f64, time::Instant};
 
-pub struct Profiler {
+pub(super) struct Profiler {
     frame_counter: FrameCounter,
     gpu_profiler: wgpu_profiler::GpuProfiler,
 }
 
 impl Profiler {
-    pub fn new(device: &wgpu::Device, fps_sample_size: u32) -> Self {
+    pub(super) fn new(device: &wgpu::Device, fps_sample_size: u32) -> Self {
         Self {
             frame_counter: FrameCounter::new(fps_sample_size),
             gpu_profiler: wgpu_profiler::GpuProfiler::new(device, Default::default()).unwrap(),
         }
     }
 
-    pub fn scope<'a>(
+    pub(super) fn scope<'a>(
         &'a self,
         label: impl Into<String>,
         encoder: &'a mut wgpu::CommandEncoder,
@@ -23,11 +23,11 @@ impl Profiler {
         self.gpu_profiler.scope(label, encoder)
     }
 
-    pub fn resolve_queries(&mut self, mut encoder: &mut wgpu::CommandEncoder) {
+    pub(super) fn resolve_queries(&mut self, mut encoder: &mut wgpu::CommandEncoder) {
         self.gpu_profiler.resolve_queries(&mut encoder);
     }
 
-    pub fn end_frame(&mut self, queue: &wgpu::Queue) {
+    pub(super) fn end_frame(&mut self, queue: &wgpu::Queue) {
         self.gpu_profiler.end_frame().unwrap();
         self.frame_counter.frame();
         if self.frame_counter.counted_frames == 0 {
