@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 pub struct Scene {
     pub config: Config,
     pub data: Arc<Mutex<SceneData>>,
-    mouse: MouseState,
+    drag: DragState,
 }
 
 pub struct Config {
@@ -19,11 +19,11 @@ pub struct SceneData {
     pub curves: Vec<Curve>,
 }
 
-enum MouseState {
+enum DragState {
     Released {
         mouse_current: glam::Vec2,
     },
-    Pressed {
+    Dragging {
         mouse_pressed: glam::Vec2,
         camera_anchor: glam::Vec2,
     },
@@ -63,13 +63,6 @@ pub struct Curve {
 pub struct CurveConfig {
     pub thickness: u32,
     pub color: glam::Vec4,
-}
-
-enum Direction {
-    Down,
-    Left,
-    Right,
-    Up,
 }
 
 impl Scene {
@@ -121,27 +114,47 @@ impl Scene {
                     },
                 ],
             })),
-            mouse: MouseState::Released {
+            drag: DragState::Released {
                 mouse_current: glam::vec2(0., 0.),
             },
         }
     }
 
     pub fn handle_keyboard_input(&mut self, event: &winit::event::KeyEvent) -> bool {
+        enum Direction {
+            Down,
+            Left,
+            Right,
+            Up,
+        }
+
+        fn scene_move(this: &mut Scene, dir: Direction) {
+            let data = &mut this.data.lock().unwrap();
+            let delta = match dir {
+                Direction::Down => glam::vec2(0., -1.),
+                Direction::Left => glam::vec2(-1., 0.),
+                Direction::Right => glam::vec2(1., 0.),
+                Direction::Up => glam::vec2(0., 1.),
+            } * this.config.move_speed
+                * data.camera.scale;
+            data.camera.pos += delta;
+            log::info!("Current pos: {}", data.camera.pos);
+        }
+
         if event.state == winit::event::ElementState::Pressed {
             use winit::keyboard::{Key, NamedKey};
             match event.logical_key.as_ref() {
                 Key::Named(NamedKey::ArrowDown) | Key::Character("j") => {
-                    self.scene_move(Direction::Down)
+                    scene_move(self, Direction::Down)
                 }
                 Key::Named(NamedKey::ArrowLeft) | Key::Character("h") => {
-                    self.scene_move(Direction::Left)
+                    scene_move(self, Direction::Left)
                 }
                 Key::Named(NamedKey::ArrowRight) | Key::Character("l") => {
-                    self.scene_move(Direction::Right)
+                    scene_move(self, Direction::Right)
                 }
                 Key::Named(NamedKey::ArrowUp) | Key::Character("k") => {
-                    self.scene_move(Direction::Up)
+                    scene_move(self, Direction::Up)
                 }
                 _ => {
                     return false;
@@ -155,14 +168,14 @@ impl Scene {
 
     pub fn handle_cursor_moved(&mut self, position: &winit::dpi::PhysicalPosition<f64>) -> bool {
         let position = glam::vec2(-position.x as f32, position.y as f32);
-        match &self.mouse {
-            MouseState::Released { mouse_current: _ } => {
-                self.mouse = MouseState::Released {
+        match &self.drag {
+            DragState::Released { mouse_current: _ } => {
+                self.drag = DragState::Released {
                     mouse_current: position,
                 };
                 false
             }
-            MouseState::Pressed {
+            DragState::Dragging {
                 mouse_pressed,
                 camera_anchor,
             } => {
@@ -176,32 +189,38 @@ impl Scene {
     pub fn handle_mouse_input(
         &mut self,
         state: &winit::event::ElementState,
-        _button: &winit::event::MouseButton,
+        button: &winit::event::MouseButton,
     ) -> bool {
-        use winit::event::ElementState;
-        match (&self.mouse, state) {
-            (MouseState::Released { mouse_current }, ElementState::Pressed) => {
-                self.mouse = MouseState::Pressed {
+        let winit::event::MouseButton::Left = button else {
+            return matches!(self.drag, DragState::Dragging { .. });
+        };
+        match (&self.drag, state) {
+            (DragState::Released { mouse_current }, winit::event::ElementState::Pressed) => {
+                self.drag = DragState::Dragging {
                     mouse_pressed: *mouse_current,
                     camera_anchor: self.data.lock().unwrap().camera.pos,
-                }
+                };
+                true
             }
             (
-                MouseState::Pressed {
+                DragState::Dragging {
                     mouse_pressed,
                     camera_anchor,
                 },
-                ElementState::Released,
+                winit::event::ElementState::Released,
             ) => {
                 let camera = &self.data.lock().unwrap().camera;
                 let delta = (camera.pos - camera_anchor) / camera.scale;
-                self.mouse = MouseState::Released {
+                self.drag = DragState::Released {
                     mouse_current: mouse_pressed + delta,
-                }
+                };
+                false
             }
-            _ => {}
-        };
-        false
+            _ => {
+                log::warn!("Mouse state not changed");
+                matches!(self.drag, DragState::Dragging { .. })
+            }
+        }
     }
 
     pub fn handle_mouse_wheel(
@@ -225,18 +244,5 @@ impl Scene {
         } else {
             false
         }
-    }
-
-    fn scene_move(&mut self, dir: Direction) {
-        let data = &mut self.data.lock().unwrap();
-        let delta = match dir {
-            Direction::Down => glam::vec2(0., -1.),
-            Direction::Left => glam::vec2(-1., 0.),
-            Direction::Right => glam::vec2(1., 0.),
-            Direction::Up => glam::vec2(0., 1.),
-        } * self.config.move_speed
-            * data.camera.scale;
-        data.camera.pos += delta;
-        log::info!("Current pos: {}", data.camera.pos);
     }
 }

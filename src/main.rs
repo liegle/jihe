@@ -15,7 +15,11 @@ fn main() {
 
 enum App {
     Uninitialized,
-    Ready { scene: Scene, renderer: Renderer },
+    Ready {
+        scene: Scene,
+        window: Arc<winit::window::Window>,
+        renderer: Renderer,
+    },
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -35,7 +39,7 @@ impl winit::application::ApplicationHandler for App {
         let window = Arc::new(window);
         let renderer = match Renderer::new(
             scene.data.clone(),
-            window,
+            window.clone(),
             scene.config.render_per_sec,
             scene.config.resize_per_sec,
         ) {
@@ -45,7 +49,11 @@ impl winit::application::ApplicationHandler for App {
                 return;
             }
         };
-        *self = App::Ready { scene, renderer };
+        *self = App::Ready {
+            scene,
+            window,
+            renderer,
+        };
     }
 
     fn window_event(
@@ -54,17 +62,23 @@ impl winit::application::ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let App::Ready { scene, renderer } = self else {
+        let App::Ready {
+            scene,
+            window,
+            renderer,
+        } = self
+        else {
             return;
         };
+        use winit::event::WindowEvent;
         if let Err(e) = match event {
-            winit::event::WindowEvent::CloseRequested => {
+            WindowEvent::CloseRequested => {
                 event_loop.exit();
                 renderer.exit()
             }
-            winit::event::WindowEvent::RedrawRequested => renderer.render(),
-            winit::event::WindowEvent::Resized(size) => renderer.resize(size.into()),
-            winit::event::WindowEvent::KeyboardInput {
+            WindowEvent::RedrawRequested => renderer.render(),
+            WindowEvent::Resized(size) => renderer.resize(size.into()),
+            WindowEvent::KeyboardInput {
                 device_id: _,
                 event,
                 is_synthetic: _,
@@ -76,25 +90,30 @@ impl winit::application::ApplicationHandler for App {
                     Ok(())
                 }
             }
-            winit::event::WindowEvent::CursorMoved { device_id: _, position } => {
+            WindowEvent::CursorMoved {
+                device_id: _,
+                position,
+            } => {
                 if scene.handle_cursor_moved(&position) {
                     renderer.render()
                 } else {
                     Ok(())
                 }
             }
-            winit::event::WindowEvent::MouseInput {
+            WindowEvent::MouseInput {
                 device_id: _,
                 state,
                 button,
             } => {
+                use winit::window::{Cursor, CursorIcon};
                 if scene.handle_mouse_input(&state, &button) {
-                    renderer.render()
+                    window.set_cursor(Cursor::Icon(CursorIcon::Grabbing));
                 } else {
-                    Ok(())
+                    window.set_cursor(Cursor::Icon(CursorIcon::Default));
                 }
+                Ok(())
             }
-            winit::event::WindowEvent::MouseWheel {
+            WindowEvent::MouseWheel {
                 device_id: _,
                 delta,
                 phase,
@@ -112,7 +131,12 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let App::Ready { scene: _, renderer } = mem::replace(self, App::Uninitialized) {
+        if let App::Ready {
+            scene: _,
+            window: _,
+            renderer,
+        } = mem::replace(self, App::Uninitialized)
+        {
             // TODO: how to handle this?
             if let Err(_) = renderer.join() {
                 log::error!("Render thread is found panicked when exiting");
