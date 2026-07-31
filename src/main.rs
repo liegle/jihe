@@ -69,7 +69,26 @@ impl winit::application::ApplicationHandler for App {
                 event,
                 is_synthetic: _,
             } => {
+                // TODO: move send out of renderer to reduce duplicated code
                 if scene.handle_keyboard_input(&event) {
+                    renderer.render()
+                } else {
+                    Ok(())
+                }
+            }
+            winit::event::WindowEvent::CursorMoved { device_id: _, position } => {
+                if scene.handle_cursor_moved(&position) {
+                    renderer.render()
+                } else {
+                    Ok(())
+                }
+            }
+            winit::event::WindowEvent::MouseInput {
+                device_id: _,
+                state,
+                button,
+            } => {
+                if scene.handle_mouse_input(&state, &button) {
                     renderer.render()
                 } else {
                     Ok(())
@@ -86,7 +105,6 @@ impl winit::application::ApplicationHandler for App {
                     Ok(())
                 }
             }
-            // TODO: mouse control
             _ => Ok(()),
         } {
             log::error!("{e}")

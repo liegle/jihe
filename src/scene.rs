@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 pub struct Scene {
     pub config: Config,
     pub data: Arc<Mutex<SceneData>>,
+    mouse: MouseState,
 }
 
 pub struct Config {
@@ -16,6 +17,16 @@ pub struct SceneData {
     pub camera: Camera,
     pub bg: Bg,
     pub curves: Vec<Curve>,
+}
+
+enum MouseState {
+    Released {
+        mouse_current: glam::Vec2,
+    },
+    Pressed {
+        mouse_pressed: glam::Vec2,
+        camera_anchor: glam::Vec2,
+    },
 }
 
 #[derive(encase::ShaderType)]
@@ -110,6 +121,9 @@ impl Scene {
                     },
                 ],
             })),
+            mouse: MouseState::Released {
+                mouse_current: glam::vec2(0., 0.),
+            },
         }
     }
 
@@ -137,6 +151,57 @@ impl Scene {
         } else {
             false
         }
+    }
+
+    pub fn handle_cursor_moved(&mut self, position: &winit::dpi::PhysicalPosition<f64>) -> bool {
+        let position = glam::vec2(-position.x as f32, position.y as f32);
+        match &self.mouse {
+            MouseState::Released { mouse_current: _ } => {
+                self.mouse = MouseState::Released {
+                    mouse_current: position,
+                };
+                false
+            }
+            MouseState::Pressed {
+                mouse_pressed,
+                camera_anchor,
+            } => {
+                let camera = &mut self.data.lock().unwrap().camera;
+                camera.pos = (position - mouse_pressed) * camera.scale + camera_anchor;
+                true
+            }
+        }
+    }
+
+    pub fn handle_mouse_input(
+        &mut self,
+        state: &winit::event::ElementState,
+        _button: &winit::event::MouseButton,
+    ) -> bool {
+        use winit::event::ElementState;
+        match (&self.mouse, state) {
+            (MouseState::Released { mouse_current }, ElementState::Pressed) => {
+                self.mouse = MouseState::Pressed {
+                    mouse_pressed: *mouse_current,
+                    camera_anchor: self.data.lock().unwrap().camera.pos,
+                }
+            }
+            (
+                MouseState::Pressed {
+                    mouse_pressed,
+                    camera_anchor,
+                },
+                ElementState::Released,
+            ) => {
+                let camera = &self.data.lock().unwrap().camera;
+                let delta = (camera.pos - camera_anchor) / camera.scale;
+                self.mouse = MouseState::Released {
+                    mouse_current: mouse_pressed + delta,
+                }
+            }
+            _ => {}
+        };
+        false
     }
 
     pub fn handle_mouse_wheel(
