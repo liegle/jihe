@@ -20,13 +20,8 @@ pub struct SceneData {
 }
 
 enum DragState {
-    Released {
-        mouse_current: glam::Vec2,
-    },
-    Dragging {
-        mouse_pressed: glam::Vec2,
-        camera_anchor: glam::Vec2,
-    },
+    Released { mouse: glam::Vec2 },
+    DraggingFrom { mouse: glam::Vec2, cam: glam::Vec2 },
 }
 
 #[derive(encase::ShaderType)]
@@ -115,7 +110,7 @@ impl Scene {
                 ],
             })),
             drag: DragState::Released {
-                mouse_current: glam::vec2(0., 0.),
+                mouse: glam::vec2(0., 0.),
             },
         }
     }
@@ -169,18 +164,13 @@ impl Scene {
     pub fn handle_cursor_moved(&mut self, position: &winit::dpi::PhysicalPosition<f64>) -> bool {
         let position = glam::vec2(-position.x as f32, position.y as f32);
         match &self.drag {
-            DragState::Released { mouse_current: _ } => {
-                self.drag = DragState::Released {
-                    mouse_current: position,
-                };
+            DragState::Released { mouse: _ } => {
+                self.drag = DragState::Released { mouse: position };
                 false
             }
-            DragState::Dragging {
-                mouse_pressed,
-                camera_anchor,
-            } => {
+            DragState::DraggingFrom { mouse, cam } => {
                 let camera = &mut self.data.lock().unwrap().camera;
-                camera.pos = (position - mouse_pressed) * camera.scale + camera_anchor;
+                camera.pos = (position - mouse) * camera.scale + cam;
                 true
             }
         }
@@ -191,34 +181,29 @@ impl Scene {
         state: &winit::event::ElementState,
         button: &winit::event::MouseButton,
     ) -> bool {
-        let winit::event::MouseButton::Left = button else {
-            return matches!(self.drag, DragState::Dragging { .. });
+        use winit::event::{ElementState, MouseButton};
+        let MouseButton::Left = button else {
+            return matches!(self.drag, DragState::DraggingFrom { .. });
         };
         match (&self.drag, state) {
-            (DragState::Released { mouse_current }, winit::event::ElementState::Pressed) => {
-                self.drag = DragState::Dragging {
-                    mouse_pressed: *mouse_current,
-                    camera_anchor: self.data.lock().unwrap().camera.pos,
+            (DragState::Released { mouse }, ElementState::Pressed) => {
+                self.drag = DragState::DraggingFrom {
+                    mouse: *mouse,
+                    cam: self.data.lock().unwrap().camera.pos,
                 };
                 true
             }
-            (
-                DragState::Dragging {
-                    mouse_pressed,
-                    camera_anchor,
-                },
-                winit::event::ElementState::Released,
-            ) => {
+            (DragState::DraggingFrom { mouse, cam }, ElementState::Released) => {
                 let camera = &self.data.lock().unwrap().camera;
-                let delta = (camera.pos - camera_anchor) / camera.scale;
+                let delta = (camera.pos - cam) / camera.scale;
                 self.drag = DragState::Released {
-                    mouse_current: mouse_pressed + delta,
+                    mouse: mouse + delta,
                 };
                 false
             }
             _ => {
                 log::warn!("Mouse state not changed");
-                matches!(self.drag, DragState::Dragging { .. })
+                matches!(self.drag, DragState::DraggingFrom { .. })
             }
         }
     }

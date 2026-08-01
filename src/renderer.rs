@@ -68,22 +68,25 @@ impl Renderer {
         self.join_handle.join()
     }
 
-    pub fn exit(&self) -> Result<(), SendError> {
-        self.sender.send(Task::Exit)?;
-        Ok(())
+    pub fn exit(&self) {
+        self.send(Task::Exit);
     }
 
-    pub fn render(&self) -> Result<(), SendError> {
-        self.sender.send(Task::Render)?;
-        Ok(())
+    pub fn render(&self) {
+        self.send(Task::Render);
     }
 
-    pub fn resize(&mut self, size: (u32, u32)) -> Result<(), SendError> {
+    pub fn resize(&mut self, size: (u32, u32)) {
         if size != self.size {
             self.size = size;
-            self.sender.send(Task::Resize(size))?;
+            self.send(Task::Resize(size));
         }
-        Ok(())
+    }
+
+    fn send(&self, task: Task) {
+        if let Err(_) = self.sender.send(task) {
+            log::error!("Render task receiver has closed")
+        }
     }
 }
 
@@ -418,14 +421,4 @@ pub enum CreateRendererError {
     RequestAdapter(#[from] wgpu::RequestAdapterError),
     #[error("Failed to request device because:\n{0}")]
     RequestDevice(#[from] wgpu::RequestDeviceError),
-}
-
-#[derive(thiserror::Error, Debug)]
-#[error("Render task receiver has closed")]
-pub struct SendError;
-
-impl<T> From<tokio::sync::mpsc::error::SendError<T>> for SendError {
-    fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
-        Self
-    }
 }

@@ -1,3 +1,5 @@
+// TODO: add logs
+
 use std::{mem, sync::Arc};
 
 use crate::{renderer::Renderer, scene::Scene};
@@ -71,7 +73,7 @@ impl winit::application::ApplicationHandler for App {
             return;
         };
         use winit::event::WindowEvent;
-        if let Err(e) = match event {
+        match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
                 renderer.exit()
@@ -83,11 +85,8 @@ impl winit::application::ApplicationHandler for App {
                 event,
                 is_synthetic: _,
             } => {
-                // TODO: move send out of renderer to reduce duplicated code
                 if scene.handle_keyboard_input(&event) {
-                    renderer.render()
-                } else {
-                    Ok(())
+                    window.request_redraw();
                 }
             }
             WindowEvent::CursorMoved {
@@ -95,9 +94,7 @@ impl winit::application::ApplicationHandler for App {
                 position,
             } => {
                 if scene.handle_cursor_moved(&position) {
-                    renderer.render()
-                } else {
-                    Ok(())
+                    window.request_redraw();
                 }
             }
             WindowEvent::MouseInput {
@@ -111,7 +108,6 @@ impl winit::application::ApplicationHandler for App {
                 } else {
                     window.set_cursor(Cursor::Icon(CursorIcon::Default));
                 }
-                Ok(())
             }
             WindowEvent::MouseWheel {
                 device_id: _,
@@ -119,14 +115,10 @@ impl winit::application::ApplicationHandler for App {
                 phase,
             } => {
                 if scene.handle_mouse_wheel(&delta, &phase) {
-                    renderer.render()
-                } else {
-                    Ok(())
+                    window.request_redraw();
                 }
             }
-            _ => Ok(()),
-        } {
-            log::error!("{e}")
+            _ => {}
         }
     }
 
