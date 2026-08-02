@@ -4,7 +4,7 @@ use encase::ShaderSize as _;
 
 use crate::renderer::{
     bg::Bounds,
-    buffer::{AsDynamicStorageBytes, AsUniformBytes},
+    buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
 };
 
 const SHADER: &str = include_str!("line.wgsl");

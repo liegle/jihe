@@ -4,7 +4,7 @@ use encase::ShaderSize as _;
 
 use crate::{
     renderer::{
-        buffer::AsDynamicStorageBytes,
+        buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
         curve::{evaluate::Evaluate, trace::Trace, write::Write},
     },
     scene,
@@ -21,6 +21,7 @@ pub(super) struct Curve {
 
     residual_texture: wgpu::Texture,
     trace_texture: wgpu::Texture,
+    camera_buffer: wgpu::Buffer,
     curves_buffer: wgpu::Buffer,
 
     dst_size: (u32, u32),
@@ -28,9 +29,8 @@ pub(super) struct Curve {
 
 impl Curve {
     pub(super) fn new(
-        curves: &Vec<scene::Curve>,
         device: &wgpu::Device,
-        camera_buffer: &wgpu::Buffer,
+        curves: &Vec<scene::Curve>,
         dst_format: wgpu::TextureFormat,
         dst_size: (u32, u32),
     ) -> Self {
@@ -39,13 +39,14 @@ impl Curve {
         let residual_texture_view = create_residual_texture_view(&residual_texture);
         let trace_texture = create_trace_texture(&device, dst_size, curves.len() as u32);
         let trace_texture_view = create_trace_texture_view(&trace_texture);
+        let camera_buffer = create_camera_buffer(device);
         let curves_buffer = create_curves_buffer(device, curves.len());
 
         let evaluates = curves
             .iter()
             .enumerate()
             .map(|(i, c)| {
-                Evaluate::new(&c.expr, i as u32, device, camera_buffer, &residual_texture)
+                Evaluate::new(&c.expr, i as u32, device, &camera_buffer, &residual_texture)
             })
             .collect();
         let trace = Trace::new(&device, &residual_texture_view, &trace_texture_view);
@@ -60,6 +61,7 @@ impl Curve {
             write,
             residual_texture,
             trace_texture,
+            camera_buffer,
             curves_buffer,
             dst_size,
         }
@@ -67,12 +69,13 @@ impl Curve {
 
     pub(super) fn prepare(
         &mut self,
-        curves: &Vec<scene::Curve>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        curves: &Vec<scene::Curve>,
+        camera: &scene::Camera,
         dst_size: (u32, u32),
-        camera_buffer: &wgpu::Buffer,
     ) {
+        queue.write_buffer(&self.camera_buffer, 0, &camera.as_uniform_bytes());
         let resized = self.dst_size != dst_size;
         if resized {
             self.dst_size = dst_size;
@@ -95,41 +98,32 @@ impl Curve {
         if self.evaluates.len() != curves.len() {
             self.curves_buffer.destroy();
             self.curves_buffer = create_curves_buffer(device, curves.len());
+        }
 
-            // TODO: need test in the future when dynamic scene is implemented
-            let mut previous = mem::replace(&mut self.evaluates, Vec::with_capacity(curves.len()));
-            for (layer, curve) in curves.iter().enumerate() {
-                match previous.iter().position(|e| e.expr() == curve.expr) {
-                    Some(index) => {
-                        let evaluate = self.evaluates.push_mut(previous.remove(index));
-                        if index != layer || resized {
-                            evaluate.remake_bind_group(
-                                device,
-                                camera_buffer,
-                                &self.residual_texture,
-                                layer as u32,
-                            );
-                        }
-                    }
-                    None => {
-                        self.evaluates.push(Evaluate::new(
-                            &curve.expr,
-                            layer as u32,
+        // TODO: need test in the future when dynamic scene is implemented
+        let mut previous = mem::replace(&mut self.evaluates, Vec::with_capacity(curves.len()));
+        for (layer, curve) in curves.iter().enumerate() {
+            match previous.iter().position(|e| e.expr() == curve.expr) {
+                Some(index) => {
+                    let evaluate = self.evaluates.push_mut(previous.remove(index));
+                    if index != layer || resized {
+                        evaluate.remake_bind_group(
                             device,
-                            camera_buffer,
+                            &self.camera_buffer,
                             &self.residual_texture,
-                        ));
+                            layer as u32,
+                        );
                     }
                 }
-            }
-        } else if resized {
-            for (layer, evaluate) in &mut self.evaluates.iter_mut().enumerate() {
-                evaluate.remake_bind_group(
-                    &device,
-                    camera_buffer,
-                    &self.residual_texture,
-                    layer as u32,
-                );
+                None => {
+                    self.evaluates.push(Evaluate::new(
+                        &curve.expr,
+                        layer as u32,
+                        device,
+                        &self.camera_buffer,
+                        &self.residual_texture,
+                    ));
+                }
             }
         }
 
@@ -146,9 +140,9 @@ impl Curve {
 
     pub(super) fn compute(
         &self,
-        layers: u32,
         compute_pass: &mut super::ComputePass,
         dst_size: (u32, u32),
+        layers: u32,
     ) {
         #[cfg(not(feature = "profile"))]
         for evaluate in &self.evaluates {
@@ -167,7 +161,7 @@ impl Curve {
         }
     }
 
-    pub(super) fn render(&self, layers: u32, render_pass: &mut super::RenderPass) {
+    pub(super) fn render(&self, render_pass: &mut super::RenderPass, layers: u32) {
         #[cfg(feature = "profile")]
         let _ = render_pass.scope("Curve write");
         self.write.render(render_pass, layers);
@@ -241,6 +235,15 @@ fn create_trace_texture_view(trace_texture: &wgpu::Texture) -> wgpu::TextureView
         mip_level_count: None,
         base_array_layer: 0,
         array_layer_count: None,
+    })
+}
+
+fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Camera Buffer"),
+        size: scene::Camera::SHADER_SIZE.get(),
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
     })
 }
 

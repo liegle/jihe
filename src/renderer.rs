@@ -4,13 +4,11 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use encase::ShaderSize as _;
-
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;
 use crate::{
-    renderer::{bg::Bg, buffer::AsUniformBytes, curve::Curve, schedule::Scheduler},
-    scene::{self, SceneData},
+    renderer::{bg::Bg, curve::Curve, schedule::Scheduler},
+    scene::SceneData,
 };
 
 mod bg;
@@ -22,7 +20,7 @@ mod schedule;
 
 enum Task {
     Exit,
-    Render,
+    Draw,
     Resize((u32, u32)),
 }
 
@@ -73,8 +71,8 @@ impl Renderer {
         self.send(Task::Exit);
     }
 
-    pub fn render(&self) {
-        self.send(Task::Render);
+    pub fn draw(&self) {
+        self.send(Task::Draw);
     }
 
     pub fn resize(&mut self, size: (u32, u32)) {
@@ -116,15 +114,15 @@ async fn run(
                     Some(Task::Exit) => {
                         break;
                     }
-                    Some(Task::Render) => {
+                    Some(Task::Draw) => {
                         if let Some(_) = render_scheduler.push_task(()) {
-                            renderer.render();
+                            renderer.draw();
                         }
                     }
                     Some(Task::Resize(size)) => {
                         if let Some(size) = resize_scheduler.push_task(size) {
                             renderer.resize(size);
-                            if let Err(e) = sender.send(Task::Render) {
+                            if let Err(e) = sender.send(Task::Draw) {
                                 log::error!("{e}");
                                 log::error!("Render task channel has been closed");
                                 break;
@@ -134,11 +132,11 @@ async fn run(
                 }
             }
             Some(_) = render_scheduler.sleep() => {
-                renderer.render();
+                renderer.draw();
             },
             Some(size) = resize_scheduler.sleep() => {
                 renderer.resize(size);
-                if let Err(e) = sender.send(Task::Render) {
+                if let Err(e) = sender.send(Task::Draw) {
                     log::error!("{e}");
                     log::error!("Render task channel has been closed");
                     break;
@@ -172,7 +170,6 @@ struct Inner {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
 
-    camera_buffer: wgpu::Buffer,
     bg: Bg,
     curve: Curve,
 
@@ -237,20 +234,12 @@ impl Inner {
         surface.configure(&device, &config);
         log::info!("Surface config: {config:?}");
 
-        let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Camera Buffer"),
-            size: scene::Camera::SHADER_SIZE.get(),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         let bg = Bg::new(&device, surface_format);
         let curve = {
             let scene = &scene.lock().unwrap();
             Curve::new(
-                &scene.curves,
                 &device,
-                &camera_buffer,
+                &scene.curves,
                 surface_format,
                 window.inner_size().into(),
             )
@@ -268,7 +257,6 @@ impl Inner {
             queue,
             config,
 
-            camera_buffer,
             bg,
             curve,
 
@@ -283,7 +271,7 @@ impl Inner {
         self.surface.configure(&self.device, &self.config);
     }
 
-    fn render(&mut self) {
+    fn draw(&mut self) {
         let Some(output) = self.get_surface_texture() else {
             return;
         };
@@ -298,21 +286,19 @@ impl Inner {
         '_lock_scene: {
             let scene = self.scene.lock().unwrap();
 
-            self.queue
-                .write_buffer(&self.camera_buffer, 0, &scene.camera.as_uniform_bytes());
             self.bg.prepare(
-                &scene.bg,
-                &scene.camera,
                 &self.device,
                 &self.queue,
+                &scene.bg,
+                &scene.camera,
                 dst_size,
             );
             self.curve.prepare(
-                &scene.curves,
                 &self.device,
                 &self.queue,
-                (self.config.width, self.config.height),
-                &self.camera_buffer,
+                &scene.curves,
+                &scene.camera,
+                dst_size,
             );
             '_profile_scope: {
                 #[cfg(feature = "profile")]
@@ -320,13 +306,13 @@ impl Inner {
                 '_compute_pass: {
                     let mut compute_pass = create_compute_pass(&mut encoder);
                     self.curve
-                        .compute(scene.curves.len() as u32, &mut compute_pass, dst_size);
+                        .compute(&mut compute_pass, dst_size, scene.curves.len() as u32);
                 }
                 '_render_pass: {
                     let mut render_pass = create_render_pass(&mut encoder, &view, scene.bg.color);
                     self.bg.render(&mut render_pass);
                     self.curve
-                        .render(scene.curves.len() as u32, &mut render_pass);
+                        .render(&mut render_pass, scene.curves.len() as u32);
                 }
             }
         }

@@ -20,10 +20,10 @@ impl Bg {
 
     pub(super) fn prepare(
         &mut self,
-        bg: &scene::Bg,
-        camera: &scene::Camera,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        bg: &scene::Bg,
+        camera: &scene::Camera,
         dst_size: (u32, u32),
     ) {
         let half_size = glam::vec2(dst_size.0 as f32 / 2., dst_size.1 as f32 / 2.);

@@ -82,7 +82,7 @@ impl winit::application::ApplicationHandler for App {
                 event_loop.exit();
                 renderer.exit()
             }
-            WindowEvent::RedrawRequested => renderer.render(),
+            WindowEvent::RedrawRequested => renderer.draw(),
             WindowEvent::Resized(size) => renderer.resize(size.into()),
             WindowEvent::KeyboardInput {
                 device_id: _,

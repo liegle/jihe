@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use encase::ShaderSize as _;
 
-use crate::renderer::buffer::{AsDynamicStorageBytes, AsUniformBytes};
+use crate::renderer::buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _};
 
 const SHADER: &str = include_str!("line.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
