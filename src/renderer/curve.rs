@@ -150,11 +150,16 @@ impl Curve {
         compute_pass: &mut super::ComputePass,
         dst_size: (u32, u32),
     ) {
+        #[cfg(not(feature = "profile"))]
         for evaluate in &self.evaluates {
-            #[cfg(feature = "profile")]
-            let _ = compute_pass.scope(format!("Curve evalute {}", evaluate.layer));
             evaluate.compute(compute_pass, dst_size);
         }
+        #[cfg(feature = "profile")]
+        for (layer, evaluate) in self.evaluates.iter().enumerate() {
+            let _ = compute_pass.scope(format!("Curve evalute {}", layer));
+            evaluate.compute(compute_pass, dst_size);
+        }
+
         {
             #[cfg(feature = "profile")]
             let _ = compute_pass.scope("Curve trace");

@@ -1,6 +1,6 @@
 // TODO: add logs
 
-use std::{mem, sync::Arc};
+use std::{mem, panic, sync::Arc};
 
 use crate::{renderer::Renderer, scene::Scene};
 
@@ -27,6 +27,7 @@ enum App {
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         if let App::Ready { .. } = self {
+            log::info!("Resumed but app was already inited");
             return;
         }
 
@@ -38,6 +39,7 @@ impl winit::application::ApplicationHandler for App {
                 return;
             }
         };
+        log::info!("Created window");
         let window = Arc::new(window);
         let renderer = match Renderer::new(
             scene.data.clone(),
@@ -51,6 +53,7 @@ impl winit::application::ApplicationHandler for App {
                 return;
             }
         };
+        log::info!("Created renderer");
         *self = App::Ready {
             scene,
             window,
@@ -75,6 +78,7 @@ impl winit::application::ApplicationHandler for App {
         use winit::event::WindowEvent;
         match event {
             WindowEvent::CloseRequested => {
+                log::info!("Exit");
                 event_loop.exit();
                 renderer.exit()
             }
@@ -123,15 +127,10 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let App::Ready {
-            scene: _,
-            window: _,
-            renderer,
-        } = mem::replace(self, App::Uninitialized)
-        {
-            // TODO: how to handle this?
-            if let Err(_) = renderer.join() {
+        if let App::Ready { renderer, .. } = mem::replace(self, App::Uninitialized) {
+            if let Err(e) = renderer.join() {
                 log::error!("Render thread is found panicked when exiting");
+                panic::resume_unwind(e);
             }
         }
     }
