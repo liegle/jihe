@@ -162,9 +162,9 @@ cfg_select! {
 
 struct Inner {
     scene: Arc<Mutex<SceneData>>,
+    window: Arc<winit::window::Window>,
 
     instance: wgpu::Instance,
-    window: Arc<winit::window::Window>,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -250,8 +250,9 @@ impl Inner {
 
         Ok(Self {
             scene,
-            instance,
             window,
+
+            instance,
             surface,
             device,
             queue,

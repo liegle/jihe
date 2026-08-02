@@ -46,12 +46,12 @@ impl Grid {
 
     pub(super) fn prepare(
         &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         distance: f32,
         screen_bounds_ws: Bounds,
         grid_ends_cs: Bounds,
         color: glam::Vec3,
-        queue: &wgpu::Queue,
-        device: &wgpu::Device,
     ) {
         let (w, h) = (screen_bounds_ws.w(), screen_bounds_ws.h());
         let mut vertices = Vec::<glam::Vec2>::new();
@@ -94,6 +94,7 @@ impl Grid {
     }
 }
 
+#[inline]
 fn create_vertex_buffer(device: &wgpu::Device, size: u64) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Grid Vertex Buffer"),
@@ -118,6 +119,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
         }],
     };
 
+#[inline]
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
@@ -133,6 +135,7 @@ fn create_bind_group(
     })
 }
 
+#[inline]
 fn create_render_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,

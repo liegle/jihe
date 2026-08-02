@@ -44,7 +44,7 @@ impl Axis {
         }
     }
 
-    pub(super) fn prepare(&self, axis_pos_cs: glam::Vec2, color: glam::Vec3, queue: &wgpu::Queue) {
+    pub(super) fn prepare(&self, queue: &wgpu::Queue, axis_pos_cs: glam::Vec2, color: glam::Vec3) {
         let vertices = &[
             // y axis
             glam::vec2(axis_pos_cs.x, -1.),
@@ -80,6 +80,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
         }],
     };
 
+#[inline]
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
@@ -95,6 +96,7 @@ fn create_bind_group(
     })
 }
 
+#[inline]
 fn create_render_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,

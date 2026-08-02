@@ -37,7 +37,7 @@ impl Bg {
             grad_height: _,
         }) = bg.axis
         {
-            self.axis.prepare(axis_pos_cs, color, queue);
+            self.axis.prepare(queue, axis_pos_cs, color);
         }
         'grid: {
             let (color, grid_ends_cs) = match (&bg.axis, &bg.grid) {
@@ -69,12 +69,12 @@ impl Bg {
             let half_size_ws = glam::vec2(half_size.x * camera.scale, half_size.y * camera.scale);
             let screen_bounds_ws = Bounds::with_center_and_extend(camera.pos, half_size_ws);
             self.grid.prepare(
+                device,
+                queue,
                 spacing * camera.scale,
                 screen_bounds_ws,
                 grid_ends_cs,
                 color,
-                queue,
-                device,
             );
         }
     }

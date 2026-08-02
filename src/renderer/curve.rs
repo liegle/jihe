@@ -46,7 +46,7 @@ impl Curve {
             .iter()
             .enumerate()
             .map(|(i, c)| {
-                Evaluate::new(&c.expr, i as u32, device, &camera_buffer, &residual_texture)
+                Evaluate::new(device, &camera_buffer, &residual_texture, &c.expr, i as u32)
             })
             .collect();
         let trace = Trace::new(&device, &residual_texture_view, &trace_texture_view);
@@ -117,11 +117,11 @@ impl Curve {
                 }
                 None => {
                     self.evaluates.push(Evaluate::new(
-                        &curve.expr,
-                        layer as u32,
                         device,
                         &self.camera_buffer,
                         &self.residual_texture,
+                        &curve.expr,
+                        layer as u32,
                     ));
                 }
             }
@@ -168,6 +168,7 @@ impl Curve {
     }
 }
 
+#[inline]
 fn create_residual_texture(
     device: &wgpu::Device,
     dst_size: (u32, u32),
@@ -189,6 +190,7 @@ fn create_residual_texture(
     })
 }
 
+#[inline]
 fn create_residual_texture_view(residual_texture: &wgpu::Texture) -> wgpu::TextureView {
     residual_texture.create_view(&wgpu::TextureViewDescriptor {
         label: Some("Residual Texture View"),
@@ -203,6 +205,7 @@ fn create_residual_texture_view(residual_texture: &wgpu::Texture) -> wgpu::Textu
     })
 }
 
+#[inline]
 fn create_trace_texture(
     device: &wgpu::Device,
     dst_size: (u32, u32),
@@ -224,6 +227,7 @@ fn create_trace_texture(
     })
 }
 
+#[inline]
 fn create_trace_texture_view(trace_texture: &wgpu::Texture) -> wgpu::TextureView {
     trace_texture.create_view(&wgpu::TextureViewDescriptor {
         label: Some("Trace Texture View"),
@@ -238,6 +242,7 @@ fn create_trace_texture_view(trace_texture: &wgpu::Texture) -> wgpu::TextureView
     })
 }
 
+#[inline]
 fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Camera Buffer"),
@@ -247,6 +252,7 @@ fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     })
 }
 
+#[inline]
 fn create_curves_buffer(device: &wgpu::Device, len: usize) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Curves Buffer"),

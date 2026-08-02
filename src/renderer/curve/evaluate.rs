@@ -15,11 +15,11 @@ pub(super) struct Evaluate {
 
 impl Evaluate {
     pub(super) fn new(
-        expr: &str,
-        layer: u32,
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
         residual_texture: &wgpu::Texture,
+        expr: &str,
+        layer: u32,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
         let bind_group = create_bind_group(
@@ -96,6 +96,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
         ],
     };
 
+#[inline]
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
@@ -130,6 +131,7 @@ fn create_bind_group(
     })
 }
 
+#[inline]
 fn create_compute_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,

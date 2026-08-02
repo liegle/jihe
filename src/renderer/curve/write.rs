@@ -84,6 +84,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
         ],
     };
 
+#[inline]
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
@@ -106,6 +107,7 @@ fn create_bind_group(
     })
 }
 
+#[inline]
 fn create_render_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
