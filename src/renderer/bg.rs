@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use crate::{
     renderer::bg::{axis::Axis, grid::Grid},
     scene,
@@ -57,16 +59,21 @@ impl Bg {
                 }
             };
 
-            let spacing_range = (bg.spacing as f32 / 2., bg.spacing as f32 * 2.);
+            const ZOOM_UNIT: f32 = 10.;
+            static SQRT_ZOOM_UNIT: LazyLock<f32> = LazyLock::new(|| ZOOM_UNIT.sqrt());
+            let spacing_range = (
+                bg.spacing as f32 / *SQRT_ZOOM_UNIT,
+                bg.spacing as f32 * *SQRT_ZOOM_UNIT,
+            );
             let mut spacing = 1. / camera.scale;
             while spacing < spacing_range.0 {
-                spacing *= 2.;
+                spacing *= ZOOM_UNIT;
             }
             while spacing > spacing_range.1 {
-                spacing /= 2.;
+                spacing /= ZOOM_UNIT;
             }
 
-            let half_size_ws = glam::vec2(half_size.x * camera.scale, half_size.y * camera.scale);
+            let half_size_ws = half_size * camera.scale;
             let screen_bounds_ws = Bounds::with_center_and_extend(camera.pos, half_size_ws);
             self.grid.prepare(
                 device,
