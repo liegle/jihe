@@ -58,7 +58,7 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     // if least_dist2 >= thickness2 {
     //     discard;
     // }
-    // let alpha = curve.color.a * saturate(1.5 * (1. - sqrt(least_dist2 / thickness2)));
+    // let alpha = curve.color.a * saturate(1.5 * (1 - sqrt(least_dist2 / thickness2)));
     // return vec4<f32>(curve.color.rgb * alpha, alpha);
 
     let word = textureLoad(

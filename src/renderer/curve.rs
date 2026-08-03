@@ -150,6 +150,7 @@ impl Curve {
         );
     }
 
+    // TODO: remove layers
     pub(super) fn compute(
         &self,
         compute_pass: &mut super::ComputePass,
@@ -173,6 +174,7 @@ impl Curve {
         }
     }
 
+    // TODO: remove layers
     pub(super) fn render(&self, render_pass: &mut super::RenderPass, layers: u32) {
         #[cfg(feature = "profile")]
         let _ = render_pass.scope("Curve write");
@@ -254,6 +256,7 @@ fn create_trace_texture_view(trace_texture: &wgpu::Texture) -> wgpu::TextureView
     })
 }
 
+// TODO: move into evaluate
 #[inline]
 fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
@@ -264,6 +267,7 @@ fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     })
 }
 
+// TODO: move into write and use size
 #[inline]
 fn create_curves_buffer(device: &wgpu::Device, len: usize) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {

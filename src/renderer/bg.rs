@@ -61,15 +61,13 @@ impl Bg {
 
             const ZOOM_UNIT: f32 = 10.;
             static SQRT_ZOOM_UNIT: LazyLock<f32> = LazyLock::new(|| ZOOM_UNIT.sqrt());
-            let spacing_range = (
-                bg.spacing as f32 / *SQRT_ZOOM_UNIT,
-                bg.spacing as f32 * *SQRT_ZOOM_UNIT,
-            );
+            let spacing_range =
+                bg.spacing as f32 / *SQRT_ZOOM_UNIT..bg.spacing as f32 * *SQRT_ZOOM_UNIT;
             let mut spacing = 1. / camera.scale;
-            while spacing < spacing_range.0 {
+            while spacing < spacing_range.start {
                 spacing *= ZOOM_UNIT;
             }
-            while spacing > spacing_range.1 {
+            while spacing > spacing_range.end {
                 spacing /= ZOOM_UNIT;
             }
 

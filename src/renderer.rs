@@ -7,13 +7,14 @@ use std::{
 #[cfg(feature = "profile")]
 use crate::renderer::profile::Profiler;
 use crate::{
-    renderer::{bg::Bg, curve::Curve, schedule::Scheduler},
+    renderer::{bg::Bg, curve::Curve, point::Point, schedule::Scheduler},
     scene::SceneData,
 };
 
 mod bg;
 mod buffer;
 mod curve;
+mod point;
 #[cfg(feature = "profile")]
 mod profile;
 mod schedule;
@@ -172,6 +173,7 @@ struct Inner {
 
     bg: Bg,
     curve: Curve,
+    point: Point,
 
     #[cfg(feature = "profile")]
     profiler: Profiler,
@@ -235,15 +237,13 @@ impl Inner {
         log::info!("Surface config: {config:?}");
 
         let bg = Bg::new(&device, surface_format);
-        let curve = {
-            let scene = &scene.lock().unwrap();
-            Curve::new(
-                &device,
-                &scene.curves,
-                surface_format,
-                window.inner_size().into(),
-            )
-        };
+        let curve = Curve::new(
+            &device,
+            &scene.lock().unwrap().curves,
+            surface_format,
+            window.inner_size().into(),
+        );
+        let point = Point::new(&device, &scene.lock().unwrap().points, surface_format);
 
         #[cfg(feature = "profile")]
         let profiler = Profiler::new(&device, 180);
@@ -260,6 +260,7 @@ impl Inner {
 
             bg,
             curve,
+            point,
 
             #[cfg(feature = "profile")]
             profiler,
@@ -301,6 +302,13 @@ impl Inner {
                 &scene.camera,
                 dst_size,
             );
+            self.point.prepare(
+                &self.device,
+                &self.queue,
+                &scene.points,
+                &scene.camera,
+                dst_size,
+            );
             '_profile_scope: {
                 #[cfg(feature = "profile")]
                 let mut encoder = self.profiler.scope("Encode", &mut encoder);
@@ -314,6 +322,7 @@ impl Inner {
                     self.bg.render(&mut render_pass);
                     self.curve
                         .render(&mut render_pass, scene.curves.len() as u32);
+                    self.point.render(&mut render_pass);
                 }
             }
         }
