@@ -75,7 +75,16 @@ impl Curve {
         camera: &scene::Camera,
         dst_size: (u32, u32),
     ) {
-        queue.write_buffer(&self.camera_buffer, 0, &camera.as_uniform_bytes());
+        queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            &CameraUniform {
+                scale: camera.scale,
+                pos: camera.pos,
+            }
+            .as_uniform_bytes(),
+        );
+
         let resized = self.dst_size != dst_size;
         if resized {
             self.dst_size = dst_size;
@@ -132,7 +141,10 @@ impl Curve {
             0,
             &curves
                 .iter()
-                .map(|c| c.config)
+                .map(|c| CurveUniform {
+                    // thickness: c.thickness,
+                    color: c.color,
+                })
                 .collect::<Vec<_>>()
                 .as_dynamic_storage_bytes(),
         );
@@ -246,7 +258,7 @@ fn create_trace_texture_view(trace_texture: &wgpu::Texture) -> wgpu::TextureView
 fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Camera Buffer"),
-        size: scene::Camera::SHADER_SIZE.get(),
+        size: CameraUniform::SHADER_SIZE.get(),
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
@@ -256,8 +268,20 @@ fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
 fn create_curves_buffer(device: &wgpu::Device, len: usize) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Curves Buffer"),
-        size: scene::CurveConfig::SHADER_SIZE.get() * len.max(1) as u64,
+        size: CurveUniform::SHADER_SIZE.get() * len.max(1) as u64,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
+}
+
+#[derive(encase::ShaderType)]
+pub struct CameraUniform {
+    scale: f32,
+    pos: glam::Vec2,
+}
+
+#[derive(encase::ShaderType)]
+struct CurveUniform {
+    // thickness: f32,
+    color: glam::Vec4,
 }

@@ -17,14 +17,9 @@ pub struct SceneData {
     pub camera: Camera,
     pub bg: Bg,
     pub curves: Vec<Curve>,
+    pub points: Vec<Point>,
 }
 
-enum DragState {
-    Released { mouse: glam::Vec2 },
-    DraggingFrom { mouse: glam::Vec2, cam: glam::Vec2 },
-}
-
-#[derive(encase::ShaderType)]
 pub struct Camera {
     /// Coord units per pixel
     pub scale: f32,
@@ -48,16 +43,23 @@ pub struct Grid {
 }
 
 pub struct Curve {
-    pub config: CurveConfig,
     // TODO: When parsing, prevent pow(minus, xxx);
     // replace log/log2 with safeLog/safeLog2
     pub expr: String,
+    // TODO: implement thickness in the future
+    // pub thickness: f32,
+    pub color: glam::Vec4,
 }
 
-#[derive(encase::ShaderType, Clone, Copy)]
-pub struct CurveConfig {
-    pub thickness: u32,
+pub struct Point {
+    pub pos: glam::Vec2,
+    pub size: f32,
     pub color: glam::Vec4,
+}
+
+enum DragState {
+    Released { mouse: glam::Vec2 },
+    DraggingFrom { mouse: glam::Vec2, cam: glam::Vec2 },
 }
 
 impl Scene {
@@ -87,27 +89,29 @@ impl Scene {
                 },
                 curves: vec![
                     Curve {
-                        config: CurveConfig {
-                            thickness: 0,
-                            color: glam::vec4(1., 0., 0., 1.),
-                        },
-                        expr: "pow(x, x) + pow(2, y) - 10".to_string(),
+                        expr: "y - 1".to_string(),
+                        color: glam::vec4(0., 0., 1., 1.),
                     },
                     Curve {
-                        config: CurveConfig {
-                            thickness: 0,
-                            color: glam::vec4(0., 0., 1., 1.),
-                        },
-                        expr: "y - 3".to_string(),
+                        expr: "x - 1".to_string(),
+                        color: glam::vec4(0., 0., 1., 1.),
                     },
                     Curve {
-                        config: CurveConfig {
-                            thickness: 0,
-                            color: glam::vec4(0., 1., 0., 1.),
-                        },
+                        expr: "pow(y, 3) + safeLog(x) - 10".to_string(),
+                        color: glam::vec4(1., 0., 0., 1.),
+                    },
+                    Curve {
                         expr: "pow(x, 3) + safeLog(y) - 10".to_string(),
+                        color: glam::vec4(0., 1., 0., 1.),
                     },
                 ],
+                points: vec![
+                    Point {
+                        pos: glam::vec2(3., 1.),
+                        size: 3.,
+                        color: glam::vec4(1., 0., 0., 1.),
+                    }
+                ]
             })),
             drag: DragState::Released {
                 mouse: glam::vec2(0., 0.),

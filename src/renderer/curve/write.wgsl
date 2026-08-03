@@ -1,5 +1,5 @@
 struct Curve {
-    thickness: u32,
+    // thickness: f32,
     color: vec4<f32>,
 }
 
@@ -20,7 +20,10 @@ struct VertexOut {
 // |\ \|
 // 0-1 1
 @vertex
-fn vs(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instance_index: u32) -> VertexOut {
+fn vs(
+    @builtin(vertex_index) vertex_index: u32,
+    @builtin(instance_index) instance_index: u32
+) -> VertexOut {
     return VertexOut(vec4<f32>(
         f32(i32((vertex_index & 1u) << 1) - 1),
         f32(i32(vertex_index & 2u) - 1),
@@ -30,24 +33,40 @@ fn vs(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instanc
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    let thickness = i32(curves[in.instance_index].thickness);
-    let thickness2 = thickness * thickness;
-    let pos = vec2<i32>(in.position.xy);
+    // let curve = curves[in.instance_index];
 
-    var least_dist2 = thickness2 + 1;
-    // TODO: Still looks strange
-    for (var i = -thickness; i <= thickness; i++) {
-        for (var j = -thickness; j <= thickness; j++) {
-            let word = textureLoad(trace_texture,
-                vec3<u32>(vec2<u32>(pos + vec2<i32>(i, j)), in.instance_index / 32)).x;
-            let v = extractBits(word, in.instance_index % 32, 1);
-            let dist2 = i * i + j * j;
-            if dist2 <= thickness2 && dist2 < least_dist2 && v == 1 {
-                least_dist2 = dist2;
-            }
-        }
-    }
-    if least_dist2 > thickness2 {
+    // let thickness2 = curve.thickness * curve.thickness;
+    // let pos = vec2<i32>(in.position.xy);
+
+    // let ithickness = i32(ceil(curve.thickness));
+    // var least_dist2 = thickness2;
+    // // TODO: Still looks strange
+    // for (var i = -ithickness; i <= ithickness; i++) {
+    //     for (var j = -ithickness; j <= ithickness; j++) {
+    //         let word = textureLoad(
+    //             trace_texture,
+    //             vec3<u32>(
+    //                 vec2<u32>(pos + vec2<i32>(i, j)),
+    //                 in.instance_index / 32
+    //             )
+    //         ).x;
+    //         let v = extractBits(word, in.instance_index % 32, 1);
+    //         let dist2 = f32(i * i + j * j);
+    //         least_dist2 = select(least_dist2, min(least_dist2, dist2), v == 1);
+    //     }
+    // }
+    // if least_dist2 >= thickness2 {
+    //     discard;
+    // }
+    // let alpha = curve.color.a * saturate(1.5 * (1. - sqrt(least_dist2 / thickness2)));
+    // return vec4<f32>(curve.color.rgb * alpha, alpha);
+
+    let word = textureLoad(
+        trace_texture,
+        vec3<u32>(vec2<u32>(in.position.xy), in.instance_index / 32)
+    ).x;
+    let v = extractBits(word, in.instance_index % 32, 1);
+    if v == 0 {
         discard;
     }
     return curves[in.instance_index].color;
