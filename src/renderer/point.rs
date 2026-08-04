@@ -16,11 +16,12 @@ const VERTEX_ENTRY: Option<&str> = Some("vs");
 const FRAGMENT_ENTRY: Option<&str> = Some("fs");
 
 pub(super) struct Point {
+    size_buffer: wgpu::Buffer,
+    points_buffer: wgpu::Buffer,
+
     bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
 
-    size_buffer: wgpu::Buffer,
-    points_buffer: wgpu::Buffer,
     instance_count: u32,
 }
 
@@ -41,11 +42,12 @@ impl Point {
         let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
 
         Self {
+            size_buffer,
+            points_buffer,
+
             bind_group,
             render_pipeline,
 
-            size_buffer,
-            points_buffer,
             instance_count: points.len() as u32,
         }
     }
@@ -184,7 +186,7 @@ fn create_render_pipeline(
                     },
                     wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32x4,
-                        offset: glam::Vec2::SHADER_SIZE.get() + /*TODO: ???*/glam::Vec2::SHADER_SIZE.get(),
+                        offset: glam::Vec4::SHADER_SIZE.get(),
                         shader_location: 2,
                     },
                 ],

@@ -1,137 +1,199 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, ops::Range};
 
-use encase::ShaderSize as _;
+use encase::ShaderSize;
 
-use crate::renderer::{
-    bg::Bounds,
-    buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
-};
+use crate::renderer::{bg::Bounds, buffer::AsUniformBytes as _};
 
-const SHADER: &str = include_str!("line.wgsl");
+const SHADER: &str = include_str!("grid.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: Some("Grid Line Shader"),
+    label: Some("Grid Shader"),
     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER)),
 };
-const VERTEX_ENTRY: Option<&str> = Some("vs");
+const VERTEX_ENTRY_HORI: Option<&str> = Some("vs_hori");
+const VERTEX_ENTRY_VERT: Option<&str> = Some("vs_vert");
 const FRAGMENT_ENTRY: Option<&str> = Some("fs");
 
 pub(super) struct Grid {
+    color_buffer: wgpu::Buffer,
+
+    hori: Lines,
+    vert: Lines,
+}
+
+struct Lines {
+    lines_buffer: wgpu::Buffer,
+
     bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    uniform_buffer: wgpu::Buffer,
-    vertex_count: u32,
+
+    count: u32,
 }
 
 impl Grid {
     pub(super) fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
-        let vertex_buffer = create_vertex_buffer(device, glam::Vec2::SHADER_SIZE.get() * 2);
-        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Grid Uniform Buffer"),
+        let color_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Grid Color Buffer"),
             size: glam::Vec3::SHADER_SIZE.get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
-        let bind_group = create_bind_group(device, &bind_group_layout, &uniform_buffer);
-        let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
+        let hori = Lines::new(
+            device,
+            VERTEX_ENTRY_HORI,
+            &bind_group_layout,
+            &color_buffer,
+            dst_format,
+        );
+        let vert = Lines::new(
+            device,
+            VERTEX_ENTRY_VERT,
+            &bind_group_layout,
+            &color_buffer,
+            dst_format,
+        );
         Self {
-            bind_group,
-            render_pipeline,
-            vertex_buffer,
-            uniform_buffer,
-            vertex_count: 2,
+            color_buffer,
+            hori,
+            vert,
         }
     }
 
     pub(super) fn prepare(
         &mut self,
-        device: &wgpu::Device,
         queue: &wgpu::Queue,
         distance: f32,
         screen_bounds_ws: Bounds,
         grid_ends_cs: Bounds,
         color: glam::Vec3,
     ) {
-        let (w, h) = (screen_bounds_ws.w(), screen_bounds_ws.h());
-        let mut vertices = Vec::<glam::Vec2>::new();
-
-        let mut x = (screen_bounds_ws.l / distance).ceil() * distance;
-        while x < screen_bounds_ws.r {
-            let x_cs = 2. * (x - screen_bounds_ws.l) / w - 1.;
-            vertices.extend(&[
-                glam::vec2(x_cs, grid_ends_cs.b),
-                glam::vec2(x_cs, grid_ends_cs.t),
-            ]);
-            x += distance;
-        }
-
-        let mut y = (screen_bounds_ws.b / distance).ceil() * distance;
-        while y < screen_bounds_ws.t {
-            let y_cs = 2. * (y - screen_bounds_ws.b) / h - 1.;
-            vertices.extend(&[
-                glam::vec2(grid_ends_cs.l, y_cs),
-                glam::vec2(grid_ends_cs.r, y_cs),
-            ]);
-            y += distance;
-        }
-
-        self.vertex_count = vertices.len() as u32;
-        let vertex_buffer_size = vertices.len() as u64 * glam::Vec2::SHADER_SIZE.get();
-        if self.vertex_buffer.size() < vertex_buffer_size {
-            self.vertex_buffer.destroy();
-            self.vertex_buffer = create_vertex_buffer(device, vertex_buffer_size);
-        }
-        queue.write_buffer(&self.vertex_buffer, 0, &vertices.as_dynamic_storage_bytes());
-        queue.write_buffer(&self.uniform_buffer, 0, &color.as_uniform_bytes());
+        self.hori.prepare(
+            queue,
+            distance,
+            screen_bounds_ws.b..screen_bounds_ws.t,
+            glam::vec2(grid_ends_cs.l, grid_ends_cs.r),
+        );
+        self.vert.prepare(
+            queue,
+            distance,
+            screen_bounds_ws.l..screen_bounds_ws.r,
+            glam::vec2(grid_ends_cs.b, grid_ends_cs.t),
+        );
+        queue.write_buffer(&self.color_buffer, 0, &color.as_uniform_bytes());
     }
 
     pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass) {
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.draw(0..self.vertex_count, 0..1);
+        self.hori.render(render_pass);
+        self.vert.render(render_pass);
     }
 }
 
-#[inline]
-fn create_vertex_buffer(device: &wgpu::Device, size: u64) -> wgpu::Buffer {
-    device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Grid Vertex Buffer"),
-        size,
-        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    })
+impl Lines {
+    fn new(
+        device: &wgpu::Device,
+        vertex_entry: Option<&str>,
+        bind_group_layout: &wgpu::BindGroupLayout,
+        color_buffer: &wgpu::Buffer,
+        dst_format: wgpu::TextureFormat,
+    ) -> Self {
+        let lines_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Grid Lines Buffer"),
+            size: LinesUniform::SHADER_SIZE.get(),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind_group =
+            create_bind_group(device, &bind_group_layout, &lines_buffer, &color_buffer);
+        let render_pipeline =
+            create_render_pipeline(device, &bind_group_layout, vertex_entry, dst_format);
+        Self {
+            lines_buffer,
+            bind_group,
+            render_pipeline,
+            count: 0,
+        }
+    }
+
+    fn prepare(&mut self, queue: &wgpu::Queue, distance: f32, range: Range<f32>, ends: glam::Vec2) {
+        let w = range.end - range.start;
+        let begin_ws = (range.start / distance).ceil() * distance;
+        self.count = (w / distance).ceil() as u32;
+        let spacing = distance / w * 2.;
+        let begin = (begin_ws - range.start) / w * 2. - 1.;
+
+        queue.write_buffer(
+            &self.lines_buffer,
+            0,
+            &LinesUniform {
+                begin,
+                spacing,
+                ends,
+            }
+            .as_uniform_bytes(),
+        );
+    }
+
+    fn render(&self, render_pass: &mut wgpu::RenderPass) {
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.draw(0..2, 0..self.count);
+    }
+}
+
+#[derive(encase::ShaderType)]
+struct LinesUniform {
+    begin: f32,
+    spacing: f32,
+    ends: glam::Vec2,
 }
 
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
     wgpu::BindGroupLayoutDescriptor {
         label: Some("Grid Bind Group Layout"),
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
             },
-            count: None,
-        }],
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
     };
 
 #[inline]
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    buffer: &wgpu::Buffer,
+    lines_buffer: &wgpu::Buffer,
+    color_buffer: &wgpu::Buffer,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("Grid Bind Group"),
         layout: &bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: buffer.as_entire_binding(),
-        }],
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: lines_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: color_buffer.as_entire_binding(),
+            },
+        ],
     })
 }
 
@@ -139,6 +201,7 @@ fn create_bind_group(
 fn create_render_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
+    vertex_entry: Option<&str>,
     dst_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(SHADER_MODULE_DESCRIPTOR);
@@ -152,7 +215,7 @@ fn create_render_pipeline(
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
-            entry_point: VERTEX_ENTRY,
+            entry_point: vertex_entry,
             buffers: &[wgpu::VertexBufferLayout {
                 array_stride: glam::Vec2::SHADER_SIZE.get(),
                 step_mode: wgpu::VertexStepMode::Vertex,

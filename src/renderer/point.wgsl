@@ -26,7 +26,9 @@ fn vs(in: Point) -> VertexOut {
         f32(i32(in.vertex_index & 2u) - 1),
     );
     out.color = in.color;
-    out.pos = vec4<f32>(in.pos + out.relative * in.size / half_size, 0, 1);
+    let size = ceil(in.size);
+    out.pos = vec4<f32>(in.pos + out.relative * size / half_size, 0, 1);
+    out.relative *= size / in.size;
     return out;
 }
 

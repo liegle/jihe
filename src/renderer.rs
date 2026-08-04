@@ -288,13 +288,8 @@ impl Inner {
         '_lock_scene: {
             let scene = self.scene.lock().unwrap();
 
-            self.bg.prepare(
-                &self.device,
-                &self.queue,
-                &scene.bg,
-                &scene.camera,
-                dst_size,
-            );
+            self.bg
+                .prepare(&self.queue, &scene.bg, &scene.camera, dst_size);
             self.curve.prepare(
                 &self.device,
                 &self.queue,

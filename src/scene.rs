@@ -105,11 +105,23 @@ impl Scene {
                         color: glam::vec4(0., 1., 0., 1.),
                     },
                 ],
-                points: vec![Point {
-                    pos: glam::vec2(3., 1.),
-                    size: 3.,
-                    color: glam::vec4(1., 0., 0., 1.),
-                }],
+                points: vec![
+                    Point {
+                        pos: glam::vec2(1., 1.),
+                        size: 3.,
+                        color: glam::vec4(1., 0., 0., 1.),
+                    },
+                    Point {
+                        pos: glam::vec2(2., 1.),
+                        size: 3.5,
+                        color: glam::vec4(1., 0., 0., 1.),
+                    },
+                    Point {
+                        pos: glam::vec2(3., 1.),
+                        size: 4.,
+                        color: glam::vec4(1., 0., 0., 1.),
+                    },
+                ],
             })),
             drag: DragState::Released {
                 mouse: glam::vec2(0., 0.),

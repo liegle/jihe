@@ -22,16 +22,18 @@ impl Bg {
 
     pub(super) fn prepare(
         &mut self,
-        device: &wgpu::Device,
         queue: &wgpu::Queue,
         bg: &scene::Bg,
         camera: &scene::Camera,
         dst_size: (u32, u32),
     ) {
         let half_size = glam::vec2(dst_size.0 as f32 / 2., dst_size.1 as f32 / 2.);
+
+        const AXIS_MARGIN: f32 = 15.;
+        let axis_area = half_size - AXIS_MARGIN;
         let axis_pos_cs = glam::vec2(
-            (-camera.pos.x / camera.scale / half_size.x).clamp(-0.99, 0.99),
-            (-camera.pos.y / camera.scale / half_size.y).clamp(-0.99, 0.99),
+            (-camera.pos.x / camera.scale).clamp(-axis_area.x, axis_area.x) / half_size.x,
+            (-camera.pos.y / camera.scale).clamp(-axis_area.y, axis_area.y) / half_size.y,
         );
 
         if let Some(scene::Axis {
@@ -74,7 +76,6 @@ impl Bg {
             let half_size_ws = half_size * camera.scale;
             let screen_bounds_ws = Bounds::with_center_and_extend(camera.pos, half_size_ws);
             self.grid.prepare(
-                device,
                 queue,
                 spacing * camera.scale,
                 screen_bounds_ws,
@@ -126,13 +127,5 @@ impl Bounds {
             b: center.y - extend.y,
             t: center.y + extend.y,
         }
-    }
-
-    fn w(&self) -> f32 {
-        self.r - self.l
-    }
-
-    fn h(&self) -> f32 {
-        self.t - self.b
     }
 }

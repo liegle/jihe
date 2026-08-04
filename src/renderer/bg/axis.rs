@@ -4,19 +4,20 @@ use encase::ShaderSize as _;
 
 use crate::renderer::buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _};
 
-const SHADER: &str = include_str!("line.wgsl");
+const SHADER: &str = include_str!("axis.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: Some("Axis Line Shader"),
+    label: Some("Axis Shader"),
     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER)),
 };
 const VERTEX_ENTRY: Option<&str> = Some("vs");
 const FRAGMENT_ENTRY: Option<&str> = Some("fs");
 
 pub(super) struct Axis {
-    bind_group: wgpu::BindGroup,
-    render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
+
+    bind_group: wgpu::BindGroup,
+    render_pipeline: wgpu::RenderPipeline,
 }
 
 impl Axis {
@@ -37,10 +38,11 @@ impl Axis {
         let bind_group = create_bind_group(device, &bind_group_layout, &uniform_buffer);
         let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
         Self {
-            bind_group,
-            render_pipeline,
             vertex_buffer,
             uniform_buffer,
+
+            bind_group,
+            render_pipeline,
         }
     }
 

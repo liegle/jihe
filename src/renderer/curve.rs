@@ -15,14 +15,14 @@ mod trace;
 mod write;
 
 pub(super) struct Curve {
-    evaluates: Vec<Evaluate>,
-    trace: Trace,
-    write: Write,
-
     residual_texture: wgpu::Texture,
     trace_texture: wgpu::Texture,
     camera_buffer: wgpu::Buffer,
     curves_buffer: wgpu::Buffer,
+
+    evaluates: Vec<Evaluate>,
+    trace: Trace,
+    write: Write,
 
     dst_size: (u32, u32),
 }
@@ -56,13 +56,15 @@ impl Curve {
         let write = Write::new(&device, &curves_buffer, &trace_texture_view, dst_format);
 
         Self {
-            evaluates,
-            trace,
-            write,
             residual_texture,
             trace_texture,
             camera_buffer,
             curves_buffer,
+
+            evaluates,
+            trace,
+            write,
+
             dst_size,
         }
     }
