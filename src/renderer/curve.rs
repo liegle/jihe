@@ -35,10 +35,10 @@ impl Curve {
         dst_size: (u32, u32),
     ) -> Self {
         // TODO: Maybe residual can be stored in f16 storage buffers
-        let residual_texture = create_residual_texture(&device, dst_size, curves.len() as u32);
-        let residual_texture_view = create_residual_texture_view(&residual_texture);
-        let trace_texture = create_trace_texture(&device, dst_size, curves.len() as u32);
-        let trace_texture_view = create_trace_texture_view(&trace_texture);
+        let residual_texture = create_residual_texture(&device, dst_size, curves.len());
+        let residual_texture_view = residual_texture.create_view(&RESIDUAL_TEXTURE_VIEW_DESCRIPTOR);
+        let trace_texture = create_trace_texture(&device, dst_size, curves.len());
+        let trace_texture_view = trace_texture.create_view(&TRACE_TEXTURE_VIEW_DESCRIPTOR);
         let camera_buffer = create_camera_buffer(device);
         let curves_buffer = create_curves_buffer(device, curves.len());
 
@@ -85,28 +85,31 @@ impl Curve {
             .as_uniform_bytes(),
         );
 
+        if self.evaluates.len() != curves.len() {
+            self.curves_buffer.destroy();
+            self.curves_buffer = create_curves_buffer(device, curves.len());
+        }
+
         let resized = self.dst_size != dst_size;
         if resized {
             self.dst_size = dst_size;
 
             self.residual_texture.destroy();
             self.residual_texture =
-                create_residual_texture(&device, dst_size, self.evaluates.len() as u32);
-            let residual_texture_view = create_residual_texture_view(&self.residual_texture);
+                create_residual_texture(&device, dst_size, self.evaluates.len());
+            let residual_texture_view = self
+                .residual_texture
+                .create_view(&RESIDUAL_TEXTURE_VIEW_DESCRIPTOR);
             self.trace_texture.destroy();
-            self.trace_texture =
-                create_trace_texture(&device, dst_size, self.evaluates.len() as u32);
-            let trace_texture_view = create_trace_texture_view(&self.trace_texture);
+            self.trace_texture = create_trace_texture(&device, dst_size, self.evaluates.len());
+            let trace_texture_view = self
+                .trace_texture
+                .create_view(&TRACE_TEXTURE_VIEW_DESCRIPTOR);
 
             self.trace
                 .remake_bind_group(&device, &residual_texture_view, &trace_texture_view);
             self.write
                 .remake_bind_group(&device, &self.curves_buffer, &trace_texture_view);
-        }
-
-        if self.evaluates.len() != curves.len() {
-            self.curves_buffer.destroy();
-            self.curves_buffer = create_curves_buffer(device, curves.len());
         }
 
         // TODO: need test in the future when dynamic scene is implemented
@@ -150,13 +153,8 @@ impl Curve {
         );
     }
 
-    // TODO: remove layers
-    pub(super) fn compute(
-        &self,
-        compute_pass: &mut super::ComputePass,
-        dst_size: (u32, u32),
-        layers: u32,
-    ) {
+    pub(super) fn compute(&self, compute_pass: &mut super::ComputePass, dst_size: (u32, u32)) {
+        let layers = self.evaluates.len() as u32;
         #[cfg(not(feature = "profile"))]
         for evaluate in &self.evaluates {
             evaluate.compute(compute_pass, dst_size);
@@ -174,8 +172,8 @@ impl Curve {
         }
     }
 
-    // TODO: remove layers
-    pub(super) fn render(&self, render_pass: &mut super::RenderPass, layers: u32) {
+    pub(super) fn render(&self, render_pass: &mut super::RenderPass) {
+        let layers = self.evaluates.len() as u32;
         #[cfg(feature = "profile")]
         let _ = render_pass.scope("Curve write");
         self.write.render(render_pass, layers);
@@ -186,14 +184,14 @@ impl Curve {
 fn create_residual_texture(
     device: &wgpu::Device,
     dst_size: (u32, u32),
-    layer_count: u32,
+    layers: usize,
 ) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("Residual Texture"),
         size: wgpu::Extent3d {
             width: dst_size.0,
             height: dst_size.1,
-            depth_or_array_layers: layer_count.max(1),
+            depth_or_array_layers: layers.max(1) as u32,
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -204,33 +202,30 @@ fn create_residual_texture(
     })
 }
 
-#[inline]
-fn create_residual_texture_view(residual_texture: &wgpu::Texture) -> wgpu::TextureView {
-    residual_texture.create_view(&wgpu::TextureViewDescriptor {
-        label: Some("Residual Texture View"),
-        format: Some(residual_texture.format()),
-        dimension: Some(wgpu::TextureViewDimension::D2Array),
-        usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
-        aspect: wgpu::TextureAspect::All,
-        base_mip_level: 0,
-        mip_level_count: None,
-        base_array_layer: 0,
-        array_layer_count: None,
-    })
-}
+const RESIDUAL_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDescriptor {
+    label: Some("Residual Texture View"),
+    format: None,
+    dimension: Some(wgpu::TextureViewDimension::D2Array),
+    usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
+    aspect: wgpu::TextureAspect::All,
+    base_mip_level: 0,
+    mip_level_count: None,
+    base_array_layer: 0,
+    array_layer_count: None,
+};
 
 #[inline]
 fn create_trace_texture(
     device: &wgpu::Device,
     dst_size: (u32, u32),
-    layer_count: u32,
+    layers: usize,
 ) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("Trace Texture"),
         size: wgpu::Extent3d {
             width: dst_size.0,
             height: dst_size.1,
-            depth_or_array_layers: layer_count / 32 + 1,
+            depth_or_array_layers: layers as u32 / 32 + 1,
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -241,22 +236,18 @@ fn create_trace_texture(
     })
 }
 
-#[inline]
-fn create_trace_texture_view(trace_texture: &wgpu::Texture) -> wgpu::TextureView {
-    trace_texture.create_view(&wgpu::TextureViewDescriptor {
-        label: Some("Trace Texture View"),
-        format: Some(trace_texture.format()),
-        dimension: Some(wgpu::TextureViewDimension::D3),
-        usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
-        aspect: wgpu::TextureAspect::All,
-        base_mip_level: 0,
-        mip_level_count: None,
-        base_array_layer: 0,
-        array_layer_count: None,
-    })
-}
+const TRACE_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDescriptor {
+    label: Some("Trace Texture View"),
+    format: None,
+    dimension: Some(wgpu::TextureViewDimension::D3),
+    usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
+    aspect: wgpu::TextureAspect::All,
+    base_mip_level: 0,
+    mip_level_count: None,
+    base_array_layer: 0,
+    array_layer_count: None,
+};
 
-// TODO: move into evaluate
 #[inline]
 fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
@@ -267,7 +258,6 @@ fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     })
 }
 
-// TODO: move into write and use size
 #[inline]
 fn create_curves_buffer(device: &wgpu::Device, len: usize) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {

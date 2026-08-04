@@ -314,14 +314,12 @@ impl Inner {
                 let mut encoder = self.profiler.scope("Encode", &mut encoder);
                 '_compute_pass: {
                     let mut compute_pass = create_compute_pass(&mut encoder);
-                    self.curve
-                        .compute(&mut compute_pass, dst_size, scene.curves.len() as u32);
+                    self.curve.compute(&mut compute_pass, dst_size);
                 }
                 '_render_pass: {
                     let mut render_pass = create_render_pass(&mut encoder, &view, scene.bg.color);
                     self.bg.render(&mut render_pass);
-                    self.curve
-                        .render(&mut render_pass, scene.curves.len() as u32);
+                    self.curve.render(&mut render_pass);
                     self.point.render(&mut render_pass);
                 }
             }
