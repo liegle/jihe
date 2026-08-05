@@ -2,10 +2,12 @@
 
 use std::{mem, panic, sync::Arc};
 
-use crate::{renderer::Renderer, scene::Scene};
+use crate::{memory::Memory, render::Renderer};
 
-mod renderer;
-mod scene;
+mod config;
+mod memory;
+mod render;
+mod schedule;
 
 fn main() {
     env_logger::init();
@@ -18,7 +20,7 @@ fn main() {
 enum App {
     Uninitialized,
     Ready {
-        scene: Scene,
+        memory: Memory,
         window: Arc<winit::window::Window>,
         renderer: Renderer,
     },
@@ -31,7 +33,7 @@ impl winit::application::ApplicationHandler for App {
             return;
         }
 
-        let scene = Scene::new();
+        let memory = Memory::new();
         let window = match event_loop.create_window(Default::default()) {
             Ok(w) => w,
             Err(e) => {
@@ -42,10 +44,10 @@ impl winit::application::ApplicationHandler for App {
         log::info!("Created window");
         let window = Arc::new(window);
         let renderer = match Renderer::new(
-            scene.data.clone(),
+            memory.scene.clone(),
             window.clone(),
-            scene.config.render_per_sec,
-            scene.config.resize_per_sec,
+            memory.config.render_per_sec,
+            memory.config.resize_per_sec,
         ) {
             Ok(r) => r,
             Err(e) => {
@@ -55,7 +57,7 @@ impl winit::application::ApplicationHandler for App {
         };
         log::info!("Created renderer");
         *self = App::Ready {
-            scene,
+            memory,
             window,
             renderer,
         };
@@ -68,7 +70,7 @@ impl winit::application::ApplicationHandler for App {
         event: winit::event::WindowEvent,
     ) {
         let App::Ready {
-            scene,
+            memory,
             window,
             renderer,
         } = self
@@ -89,7 +91,7 @@ impl winit::application::ApplicationHandler for App {
                 event,
                 is_synthetic: _,
             } => {
-                if scene.handle_keyboard_input(&event) {
+                if memory.handle_keyboard_input(&event) {
                     window.request_redraw();
                 }
             }
@@ -97,7 +99,7 @@ impl winit::application::ApplicationHandler for App {
                 device_id: _,
                 position,
             } => {
-                if scene.handle_cursor_moved(&position) {
+                if memory.handle_cursor_moved(&position) {
                     window.request_redraw();
                 }
             }
@@ -107,7 +109,7 @@ impl winit::application::ApplicationHandler for App {
                 button,
             } => {
                 use winit::window::{Cursor, CursorIcon};
-                if scene.handle_mouse_input(&state, &button) {
+                if memory.handle_mouse_input(&state, &button) {
                     window.set_cursor(Cursor::Icon(CursorIcon::Grabbing));
                 } else {
                     window.set_cursor(Cursor::Icon(CursorIcon::Default));
@@ -118,7 +120,7 @@ impl winit::application::ApplicationHandler for App {
                 delta,
                 phase,
             } => {
-                if scene.handle_mouse_wheel(&delta, &phase) {
+                if memory.handle_mouse_wheel(&delta, &phase) {
                     window.request_redraw();
                 }
             }

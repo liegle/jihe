@@ -1,13 +1,12 @@
-[package]
-name = "jihe"
+[workspace]
+resolver = "3"
+members = [ "jihe-*" ]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[features]
-default = []
-profile = ["dep:wgpu-profiler"]
-
-[dependencies]
+[workspace.dependencies]
 encase = "0.12"
 env_logger = "0.11"
 glam = { version = "0.33", features = ["encase"]}
@@ -15,5 +14,5 @@ log = "0.4"
 thiserror = "2.0"
 tokio = { version = "1.52", features = ["macros", "rt", "sync", "time"] }
 wgpu = "29.0"
-wgpu-profiler = { version = "0.27", optional = true }
+wgpu-profiler = "0.27"
 winit = "0.30"

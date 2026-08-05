@@ -1,0 +1,21 @@
+[package]
+name = "jihe-render"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+profile = ["dep:wgpu-profiler"]
+
+[dependencies]
+jihe-shared = { path = "../jihe-shared" }
+
+#external
+encase.workspace = true
+glam.workspace = true
+log.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+wgpu.workspace = true
+wgpu-profiler = { workspace = true, optional = true }
+winit.workspace = true

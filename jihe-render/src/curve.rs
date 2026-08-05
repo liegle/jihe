@@ -3,11 +3,8 @@ use std::mem;
 use encase::ShaderSize as _;
 
 use crate::{
-    renderer::{
-        buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
-        curve::{evaluate::Evaluate, trace::Trace, write::Write},
-    },
-    scene,
+    buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
+    curve::{evaluate::Evaluate, trace::Trace, write::Write},
 };
 
 mod evaluate;
@@ -30,7 +27,7 @@ pub(super) struct Curve {
 impl Curve {
     pub(super) fn new(
         device: &wgpu::Device,
-        curves: &Vec<scene::Curve>,
+        curves: &Vec<jihe_shared::Curve>,
         dst_format: wgpu::TextureFormat,
         dst_size: (u32, u32),
     ) -> Self {
@@ -73,8 +70,8 @@ impl Curve {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        curves: &Vec<scene::Curve>,
-        camera: &scene::Camera,
+        curves: &Vec<jihe_shared::Curve>,
+        camera: &jihe_shared::Camera,
         dst_size: (u32, u32),
     ) {
         queue.write_buffer(

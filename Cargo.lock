@@ -805,18 +805,46 @@ dependencies = [
 ]
 
 [[package]]
-name = "jihe"
+name = "jihe-app"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "glam",
+ "jihe-parse",
+ "jihe-render",
+ "jihe-shared",
+ "log",
+ "tokio",
+ "winit",
+]
+
+[[package]]
+name = "jihe-parse"
+version = "0.1.0"
+dependencies = [
+ "jihe-shared",
+]
+
+[[package]]
+name = "jihe-render"
 version = "0.1.0"
 dependencies = [
  "encase",
- "env_logger",
  "glam",
+ "jihe-shared",
  "log",
  "thiserror 2.0.18",
  "tokio",
  "wgpu",
  "wgpu-profiler",
  "winit",
+]
+
+[[package]]
+name = "jihe-shared"
+version = "0.1.0"
+dependencies = [
+ "glam",
 ]
 
 [[package]]

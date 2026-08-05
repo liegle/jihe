@@ -1,9 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::{
-    renderer::bg::{axis::Axis, grid::Grid},
-    scene,
-};
+use crate::bg::{axis::Axis, grid::Grid};
 
 mod axis;
 mod grid;
@@ -23,8 +20,8 @@ impl Bg {
     pub(super) fn prepare(
         &mut self,
         queue: &wgpu::Queue,
-        bg: &scene::Bg,
-        camera: &scene::Camera,
+        bg: &jihe_shared::Bg,
+        camera: &jihe_shared::Camera,
         dst_size: (u32, u32),
     ) {
         let half_size = glam::vec2(dst_size.0 as f32 / 2., dst_size.1 as f32 / 2.);
@@ -36,7 +33,7 @@ impl Bg {
             (-camera.pos.y / camera.scale).clamp(-axis_area.y, axis_area.y) / half_size.y,
         );
 
-        if let Some(scene::Axis {
+        if let Some(jihe_shared::Axis {
             color,
             grad_height: _,
         }) = bg.axis
@@ -45,8 +42,8 @@ impl Bg {
         }
         'grid: {
             let (color, grid_ends_cs) = match (&bg.axis, &bg.grid) {
-                (_, Some(scene::Grid { color })) => (*color, Bounds::new(-1., 1., -1., 1.)),
-                (Some(scene::Axis { color, grad_height }), None) => (
+                (_, Some(jihe_shared::Grid { color })) => (*color, Bounds::new(-1., 1., -1., 1.)),
+                (Some(jihe_shared::Axis { color, grad_height }), None) => (
                     *color,
                     Bounds::with_pos_and_size(
                         axis_pos_cs,
