@@ -49,9 +49,9 @@ impl winit::application::ApplicationHandler for App {
             memory.config.render_per_sec,
             memory.config.resize_per_sec,
         ) {
-            Ok(r) => r,
-            Err(e) => {
-                log::error!("Can't create renderer because:\n{e}");
+            Some(r) => r,
+            None => {
+                log::error!("Can't create renderer");
                 return;
             }
         };

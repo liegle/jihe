@@ -23,15 +23,28 @@ impl Render {
         window: Arc<winit::window::Window>,
         render_per_sec: u64,
         resize_per_sec: u64,
-    ) -> Result<Self, jihe_render::CreateRendererError> {
+    ) -> Option<Self> {
         let size = window.inner_size().into();
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let join_handle = {
             let sender = sender.clone();
-            let rt = tokio::runtime::Builder::new_current_thread()
+            let rt = match tokio::runtime::Builder::new_current_thread()
                 .enable_time()
-                .build()?;
-            let renderer = rt.block_on(jihe_render::Render::new(scene, window, size))?;
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(e) => {
+                    log::error!("Can't create tokio runtime because:\n{e}");
+                    return None;
+                }
+            };
+            let renderer = match rt.block_on(jihe_render::Render::new(scene, window, size)) {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("Can't create render because:\n{e}");
+                    return None;
+                }
+            };
             log::info!("Created inner renderer");
             thread::spawn(move || {
                 rt.block_on(run(
@@ -43,7 +56,7 @@ impl Render {
                 ))
             })
         };
-        Ok(Self {
+        Some(Self {
             join_handle,
             sender,
             size,

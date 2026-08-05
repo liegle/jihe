@@ -1,5 +1,5 @@
 use std::{
-    io, iter,
+    iter,
     sync::{Arc, Mutex},
 };
 
@@ -299,8 +299,6 @@ fn create_render_pass<'a>(
 
 #[derive(thiserror::Error, Debug)]
 pub enum CreateRendererError {
-    #[error("Failed to create tokio runtime because:\n{0}")]
-    CreateTokioRuntime(#[from] io::Error),
     #[error("Failed to create surface because:\n{0}")]
     CreateSurface(#[from] wgpu::CreateSurfaceError),
     #[error("Failed to request adapter because:\n{0}")]
