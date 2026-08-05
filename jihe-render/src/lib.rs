@@ -25,9 +25,12 @@ cfg_select! {
     }
 }
 
-pub struct Render {
+pub struct Render<W>
+where
+    Arc<W>: Into<wgpu::SurfaceTarget<'static>>,
+{
     scene: Arc<Mutex<jihe_shared::Scene>>,
-    window: Arc<winit::window::Window>,
+    window: Arc<W>,
 
     instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
@@ -43,10 +46,14 @@ pub struct Render {
     profiler: Profiler,
 }
 
-impl Render {
+impl<W> Render<W>
+where
+    Arc<W>: Into<wgpu::SurfaceTarget<'static>>,
+{
     pub async fn new(
         scene: Arc<Mutex<jihe_shared::Scene>>,
-        window: Arc<winit::window::Window>,
+        window: Arc<W>,
+        size: (u32, u32),
     ) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
@@ -90,8 +97,8 @@ impl Render {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: window.inner_size().width,
-            height: window.inner_size().height,
+            width: size.0,
+            height: size.1,
             present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: Vec::new(),
@@ -101,12 +108,7 @@ impl Render {
         log::info!("Surface config: {config:?}");
 
         let bg = Bg::new(&device, surface_format);
-        let curve = Curve::new(
-            &device,
-            &scene.lock().unwrap().curves,
-            surface_format,
-            window.inner_size().into(),
-        );
+        let curve = Curve::new(&device, &scene.lock().unwrap().curves, surface_format, size);
         let point = Point::new(&device, &scene.lock().unwrap().points, surface_format);
 
         #[cfg(feature = "profile")]

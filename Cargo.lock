@@ -834,10 +834,8 @@ dependencies = [
  "jihe-shared",
  "log",
  "thiserror 2.0.18",
- "tokio",
  "wgpu",
  "wgpu-profiler",
- "winit",
 ]
 
 [[package]]

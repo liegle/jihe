@@ -2,7 +2,7 @@
 
 use std::{mem, panic, sync::Arc};
 
-use crate::{memory::Memory, render::Renderer};
+use crate::{memory::Memory, render::Render};
 
 mod config;
 mod memory;
@@ -22,7 +22,7 @@ enum App {
     Ready {
         memory: Memory,
         window: Arc<winit::window::Window>,
-        renderer: Renderer,
+        renderer: Render,
     },
 }
 
@@ -43,7 +43,7 @@ impl winit::application::ApplicationHandler for App {
         };
         log::info!("Created window");
         let window = Arc::new(window);
-        let renderer = match Renderer::new(
+        let renderer = match Render::new(
             memory.scene.clone(),
             window.clone(),
             memory.config.render_per_sec,

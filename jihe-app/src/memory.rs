@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use crate::config::Config;
 
 pub(super) struct Memory {
-    pub config: Config,
-    pub scene: Arc<Mutex<jihe_shared::Scene>>,
+    pub(super) config: Config,
+    pub(super) scene: Arc<Mutex<jihe_shared::Scene>>,
     drag: DragState,
 }
 

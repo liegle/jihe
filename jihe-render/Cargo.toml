@@ -15,7 +15,5 @@ encase.workspace = true
 glam.workspace = true
 log.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
 wgpu.workspace = true
 wgpu-profiler = { workspace = true, optional = true }
-winit.workspace = true

@@ -268,7 +268,7 @@ fn create_curves_buffer(device: &wgpu::Device, len: usize) -> wgpu::Buffer {
 }
 
 #[derive(encase::ShaderType)]
-pub struct CameraUniform {
+struct CameraUniform {
     scale: f32,
     pos: glam::Vec2,
 }

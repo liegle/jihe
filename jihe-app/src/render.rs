@@ -11,14 +11,14 @@ enum Task {
     Resize((u32, u32)),
 }
 
-pub struct Renderer {
+pub(super) struct Render {
     join_handle: JoinHandle<()>,
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
     size: (u32, u32),
 }
 
-impl Renderer {
-    pub fn new(
+impl Render {
+    pub(super) fn new(
         scene: Arc<Mutex<jihe_shared::Scene>>,
         window: Arc<winit::window::Window>,
         render_per_sec: u64,
@@ -31,7 +31,7 @@ impl Renderer {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_time()
                 .build()?;
-            let renderer = rt.block_on(jihe_render::Render::new(scene, window))?;
+            let renderer = rt.block_on(jihe_render::Render::new(scene, window, size))?;
             log::info!("Created inner renderer");
             thread::spawn(move || {
                 rt.block_on(run(
@@ -50,19 +50,19 @@ impl Renderer {
         })
     }
 
-    pub fn join(self) -> thread::Result<()> {
+    pub(super) fn join(self) -> thread::Result<()> {
         self.join_handle.join()
     }
 
-    pub fn exit(&self) {
+    pub(super) fn exit(&self) {
         self.send(Task::Exit);
     }
 
-    pub fn draw(&self) {
+    pub(super) fn draw(&self) {
         self.send(Task::Draw);
     }
 
-    pub fn resize(&mut self, size: (u32, u32)) {
+    pub(super) fn resize(&mut self, size: (u32, u32)) {
         if size.0 > 0 && size.1 > 0 && size != self.size {
             self.size = size;
             self.send(Task::Resize(size));
@@ -77,7 +77,7 @@ impl Renderer {
 }
 
 async fn run(
-    mut renderer: jihe_render::Render,
+    mut renderer: jihe_render::Render<winit::window::Window>,
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
     render_per_sec: u64,
