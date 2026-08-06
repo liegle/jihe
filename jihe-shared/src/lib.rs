@@ -1,14 +1,7 @@
-pub struct Scene {
-    pub camera: Camera,
+pub struct Content {
     pub bg: Bg,
     pub curves: Vec<Curve>,
     pub points: Vec<Point>,
-}
-
-pub struct Camera {
-    /// Coord units per pixel
-    pub scale: f32,
-    pub pos: glam::Vec2,
 }
 
 pub struct Bg {
@@ -42,13 +35,9 @@ pub struct Point {
     pub color: glam::Vec4,
 }
 
-impl Scene {
-    pub fn new() -> Self {
+impl Content {
+    pub fn example() -> Self {
         Self {
-            camera: Camera {
-                scale: 0.01,
-                pos: glam::Vec2::ZERO,
-            },
             bg: Bg {
                 color: glam::vec3(0.8, 0.8, 0.8),
                 axis: Some(Axis {

@@ -2,7 +2,10 @@ use std::borrow::Cow;
 
 use encase::ShaderSize;
 
-use crate::buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _};
+use crate::{
+    Camera,
+    buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
+};
 
 const SHADER: &str = include_str!("point.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
@@ -54,7 +57,7 @@ impl Point {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         points: &Vec<jihe_shared::Point>,
-        camera: &jihe_shared::Camera,
+        camera: &Camera,
         dst_size: (u32, u32),
     ) {
         let half_size = glam::vec2(dst_size.0 as f32 / 2., dst_size.1 as f32 / 2.);

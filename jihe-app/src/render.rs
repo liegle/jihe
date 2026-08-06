@@ -19,7 +19,7 @@ pub(super) struct Render {
 
 impl Render {
     pub(super) fn new(
-        scene: Arc<Mutex<jihe_shared::Scene>>,
+        scene: Arc<Mutex<jihe_render::Scene>>,
         window: Arc<winit::window::Window>,
         render_per_sec: u64,
         resize_per_sec: u64,

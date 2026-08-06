@@ -5,8 +5,8 @@ pub(super) struct Config {
     pub(super) zoom_factor: f32,
 }
 
-impl Config {
-    pub(super) fn new() -> Self {
+impl Default for Config {
+    fn default() -> Self {
         Self {
             render_per_sec: 60,
             resize_per_sec: 60,

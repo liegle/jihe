@@ -3,6 +3,7 @@ use std::mem;
 use encase::ShaderSize as _;
 
 use crate::{
+    Camera,
     buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
     curve::{evaluate::Evaluate, trace::Trace, write::Write},
 };
@@ -71,7 +72,7 @@ impl Curve {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         curves: &Vec<jihe_shared::Curve>,
-        camera: &jihe_shared::Camera,
+        camera: &Camera,
         dst_size: (u32, u32),
     ) {
         queue.write_buffer(

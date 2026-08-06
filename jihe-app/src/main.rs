@@ -2,7 +2,7 @@
 
 use std::{mem, panic, sync::Arc};
 
-use crate::{memory::Memory, render::Render};
+use crate::{config::Config, memory::Memory, render::Render};
 
 mod config;
 mod memory;
@@ -33,7 +33,11 @@ impl winit::application::ApplicationHandler for App {
             return;
         }
 
-        let memory = Memory::new();
+        let config = Config::default();
+        let content = jihe_shared::Content::example();
+        let scene = jihe_render::Scene::new(content);
+        let memory = Memory::new(config, scene.clone());
+
         let window = match event_loop.create_window(Default::default()) {
             Ok(w) => w,
             Err(e) => {
@@ -41,10 +45,12 @@ impl winit::application::ApplicationHandler for App {
                 return;
             }
         };
+        window.set_title("jihe");
         log::info!("Created window");
         let window = Arc::new(window);
+
         let renderer = match Render::new(
-            memory.scene.clone(),
+            scene,
             window.clone(),
             memory.config.render_per_sec,
             memory.config.resize_per_sec,
@@ -56,6 +62,7 @@ impl winit::application::ApplicationHandler for App {
             }
         };
         log::info!("Created renderer");
+
         *self = App::Ready {
             memory,
             window,

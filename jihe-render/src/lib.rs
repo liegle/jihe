@@ -7,10 +7,13 @@ use std::{
 use crate::profile::Profiler;
 use crate::{bg::Bg, curve::Curve, point::Point};
 
+pub use scene::{Camera, Scene};
+
 mod bg;
 mod buffer;
 mod curve;
 mod point;
+mod scene;
 
 cfg_select! {
     feature = "profile" => {
@@ -29,7 +32,7 @@ pub struct Render<W>
 where
     Arc<W>: Into<wgpu::SurfaceTarget<'static>>,
 {
-    scene: Arc<Mutex<jihe_shared::Scene>>,
+    scene: Arc<Mutex<Scene>>,
     window: Arc<W>,
 
     instance: wgpu::Instance,
@@ -51,12 +54,11 @@ where
     Arc<W>: Into<wgpu::SurfaceTarget<'static>>,
 {
     pub async fn new(
-        scene: Arc<Mutex<jihe_shared::Scene>>,
+        scene: Arc<Mutex<Scene>>,
         window: Arc<W>,
         size: (u32, u32),
     ) -> Result<Self, CreateRendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-
         let surface = instance.create_surface(window.clone())?;
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -108,8 +110,17 @@ where
         log::info!("Surface config: {config:?}");
 
         let bg = Bg::new(&device, surface_format);
-        let curve = Curve::new(&device, &scene.lock().unwrap().curves, surface_format, size);
-        let point = Point::new(&device, &scene.lock().unwrap().points, surface_format);
+        let curve = Curve::new(
+            &device,
+            &scene.lock().unwrap().content.curves,
+            surface_format,
+            size,
+        );
+        let point = Point::new(
+            &device,
+            &scene.lock().unwrap().content.points,
+            surface_format,
+        );
 
         #[cfg(feature = "profile")]
         let profiler = Profiler::new(&device, 180);
@@ -155,18 +166,18 @@ where
             let scene = self.scene.lock().unwrap();
 
             self.bg
-                .prepare(&self.queue, &scene.bg, &scene.camera, dst_size);
+                .prepare(&self.queue, &scene.content.bg, &scene.camera, dst_size);
             self.curve.prepare(
                 &self.device,
                 &self.queue,
-                &scene.curves,
+                &scene.content.curves,
                 &scene.camera,
                 dst_size,
             );
             self.point.prepare(
                 &self.device,
                 &self.queue,
-                &scene.points,
+                &scene.content.points,
                 &scene.camera,
                 dst_size,
             );
@@ -178,7 +189,8 @@ where
                     self.curve.compute(&mut compute_pass, dst_size);
                 }
                 '_render_pass: {
-                    let mut render_pass = create_render_pass(&mut encoder, &view, scene.bg.color);
+                    let mut render_pass =
+                        create_render_pass(&mut encoder, &view, scene.content.bg.color);
                     self.bg.render(&mut render_pass);
                     self.curve.render(&mut render_pass);
                     self.point.render(&mut render_pass);
