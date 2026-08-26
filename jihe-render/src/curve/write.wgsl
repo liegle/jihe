@@ -1,5 +1,5 @@
 struct Curve {
-    // thickness: f32,
+    thickness: f32,
     color: vec4<f32>,
 }
 
@@ -10,6 +10,10 @@ var<storage, read> curves: array<Curve>;
 @group(0)
 @binding(1)
 var trace_texture: texture_storage_3d<r32uint, read>;
+
+@group(0)
+@binding(2)
+var distance_texture: texture_storage_2d_array<r32float, read>;
 
 struct VertexOut {
     @builtin(position) position: vec4<f32>,
@@ -33,41 +37,29 @@ fn vs(
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    // let curve = curves[in.instance_index];
-
-    // let thickness2 = curve.thickness * curve.thickness;
-    // let pos = vec2<i32>(in.position.xy);
-
-    // let ithickness = i32(ceil(curve.thickness));
-    // var least_dist2 = thickness2;
-    // // TODO: Still looks strange
-    // for (var i = -ithickness; i <= ithickness; i++) {
-    //     for (var j = -ithickness; j <= ithickness; j++) {
-    //         let word = textureLoad(
-    //             trace_texture,
-    //             vec3<u32>(
-    //                 vec2<u32>(pos + vec2<i32>(i, j)),
-    //                 in.instance_index / 32
-    //             )
-    //         ).x;
-    //         let v = extractBits(word, in.instance_index % 32, 1);
-    //         let dist2 = f32(i * i + j * j);
-    //         least_dist2 = select(least_dist2, min(least_dist2, dist2), v == 1);
-    //     }
-    // }
-    // if least_dist2 >= thickness2 {
-    //     discard;
-    // }
-    // let alpha = curve.color.a * saturate(1.5 * (1 - sqrt(least_dist2 / thickness2)));
-    // return vec4<f32>(curve.color.rgb * alpha, alpha);
-
-    let word = textureLoad(
-        trace_texture,
-        vec3<u32>(vec2<u32>(in.position.xy), in.instance_index / 32)
-    ).x;
-    let v = extractBits(word, in.instance_index % 32, 1);
-    if v == 0 {
+    let curve = curves[in.instance_index];
+    let pos = vec2<i32>(in.position.xy);
+    let ithickness = i32(ceil(curve.thickness));
+    var is_around = false;
+    for (var i = -ithickness; i <= ithickness; i++) {
+        for (var j = -ithickness; j <= ithickness; j++) {
+            let word = textureLoad(
+                trace_texture,
+                vec3<u32>(
+                    vec2<u32>(pos + vec2<i32>(i, j)),
+                    in.instance_index / 32
+                )
+            ).x;
+            let v = extractBits(word, in.instance_index % 32, 1);
+            is_around |= v == 1;
+        }
+    }
+    if !is_around {
         discard;
     }
-    return curves[in.instance_index].color;
+    let thickness2 = curve.thickness * curve.thickness;
+    let dist = textureLoad(distance_texture, vec2<u32>(pos), in.instance_index).x;
+    let dist2 = dist * dist;
+    let alpha = curve.color.a * saturate(1.5 * (1 - sqrt(dist2 / thickness2)));
+    return vec4<f32>(curve.color.rgb * alpha, alpha);
 }

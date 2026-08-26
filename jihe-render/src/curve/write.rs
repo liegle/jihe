@@ -19,6 +19,7 @@ impl Write {
         device: &wgpu::Device,
         curves_buffer: &wgpu::Buffer,
         trace_texture_view: &wgpu::TextureView,
+        distance_texture: &wgpu::Texture,
         dst_format: wgpu::TextureFormat,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
@@ -27,6 +28,7 @@ impl Write {
             &bind_group_layout,
             curves_buffer,
             trace_texture_view,
+            distance_texture,
         );
         let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
         Self {
@@ -41,12 +43,14 @@ impl Write {
         device: &wgpu::Device,
         curves_buffer: &wgpu::Buffer,
         trace_texture_view: &wgpu::TextureView,
+        distance_texture: &wgpu::Texture,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
             curves_buffer,
             trace_texture_view,
+            distance_texture,
         );
     }
 
@@ -81,6 +85,16 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::ReadOnly,
+                    format: wgpu::TextureFormat::R32Float,
+                    view_dimension: wgpu::TextureViewDimension::D2Array,
+                },
+                count: None,
+            },
         ],
     };
 
@@ -90,7 +104,19 @@ fn create_bind_group(
     bind_group_layout: &wgpu::BindGroupLayout,
     curves_buffer: &wgpu::Buffer,
     trace_texture_view: &wgpu::TextureView,
+    distance_texture: &wgpu::Texture,
 ) -> wgpu::BindGroup {
+    let distance_texture_view = distance_texture.create_view(&wgpu::TextureViewDescriptor {
+        label: Some(&format!("Write Texture View")),
+        format: Some(distance_texture.format()),
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
+        aspect: wgpu::TextureAspect::All,
+        base_mip_level: 0,
+        mip_level_count: None,
+        base_array_layer: 0,
+        array_layer_count: None,
+    });
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("Write Bind Group"),
         layout: bind_group_layout,
@@ -102,6 +128,10 @@ fn create_bind_group(
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::TextureView(trace_texture_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&distance_texture_view),
             },
         ],
     })

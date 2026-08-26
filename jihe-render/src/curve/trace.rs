@@ -17,14 +17,14 @@ pub(super) struct Trace {
 impl Trace {
     pub(super) fn new(
         device: &wgpu::Device,
-        residual_texture_view: &wgpu::TextureView,
+        distance_texture_view: &wgpu::TextureView,
         trace_texture_view: &wgpu::TextureView,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
         let bind_group = create_bind_group(
             device,
             &bind_group_layout,
-            residual_texture_view,
+            distance_texture_view,
             trace_texture_view,
         );
         let compute_pipeline = create_compute_pipeline(&device, &bind_group_layout);
@@ -38,13 +38,13 @@ impl Trace {
     pub(super) fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
-        residual_texture_view: &wgpu::TextureView,
+        distance_texture_view: &wgpu::TextureView,
         trace_texture_view: &wgpu::TextureView,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
-            residual_texture_view,
+            distance_texture_view,
             trace_texture_view,
         );
     }
@@ -96,7 +96,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    residual_texture_view: &wgpu::TextureView,
+    distance_texture_view: &wgpu::TextureView,
     trace_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -105,7 +105,7 @@ fn create_bind_group(
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::TextureView(residual_texture_view),
+                resource: wgpu::BindingResource::TextureView(distance_texture_view),
             },
             wgpu::BindGroupEntry {
                 binding: 1,

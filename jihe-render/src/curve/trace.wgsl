@@ -1,6 +1,6 @@
 @group(0)
 @binding(0)
-var residual_texture: texture_storage_2d_array<r32float, read>;
+var distance_texture: texture_storage_2d_array<r32float, read>;
 
 @group(0)
 @binding(1)
@@ -9,9 +9,9 @@ var trace_texture: texture_storage_3d<r32uint, read_write>;
 @compute
 @workgroup_size(16, 16, 1)
 fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
-    let u = textureLoad(residual_texture, vec2<u32>(id.x, id.y + 1), id.z).x;
-    let r = textureLoad(residual_texture, vec2<u32>(id.x + 1, id.y), id.z).x;
-    let here = textureLoad(residual_texture, id.xy, id.z).x;
+    let u = textureLoad(distance_texture, vec2<u32>(id.x, id.y + 1), id.z).x;
+    let r = textureLoad(distance_texture, vec2<u32>(id.x + 1, id.y), id.z).x;
+    let here = textureLoad(distance_texture, id.xy, id.z).x;
     let v = select(0u, 1u,
         (u < 0. && here >= 0) || (u > 0. && here <= 0.) ||
         (r < 0. && here >= 0) || (r > 0. && here <= 0.)

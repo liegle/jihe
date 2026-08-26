@@ -23,9 +23,10 @@ pub struct Grid {
 pub struct Curve {
     // TODO: When parsing, prevent pow(minus, xxx);
     // replace log/log2 with safeLog/safeLog2
-    pub expr: String,
-    // TODO: implement thickness in the future
-    // pub thickness: f32,
+    pub f: String,
+    pub dfx: String,
+    pub dfy: String,
+    pub thickness: f32,
     pub color: glam::Vec4,
 }
 
@@ -51,19 +52,31 @@ impl Content {
             },
             curves: vec![
                 Curve {
-                    expr: "y - 1".to_string(),
+                    f: "y - 1".to_string(),
+                    dfx: "0".to_string(),
+                    dfy: "1".to_string(),
+                    thickness: 3.,
                     color: glam::vec4(0., 0., 1., 1.),
                 },
                 Curve {
-                    expr: "x - 1".to_string(),
+                    f: "x - 1".to_string(),
+                    dfx: "1".to_string(),
+                    dfy: "0".to_string(),
+                    thickness: 3.,
                     color: glam::vec4(0., 0., 1., 1.),
                 },
                 Curve {
-                    expr: "pow(y, 3) + safeLog(x) - 10".to_string(),
+                    f: "pow(y, 3) + safeLog(x) - 10".to_string(),
+                    dfx: "1 / x".to_string(),
+                    dfy: "3 * pow(y, 2)".to_string(),
+                    thickness: 3.,
                     color: glam::vec4(1., 0., 0., 1.),
                 },
                 Curve {
-                    expr: "pow(x, 3) + safeLog(y) - 10".to_string(),
+                    f: "pow(x, 3) + safeLog(y) - 10".to_string(),
+                    dfx: "3 * pow(x, 2)".to_string(),
+                    dfy: "1 / y".to_string(),
+                    thickness: 3.,
                     color: glam::vec4(0., 1., 0., 1.),
                 },
             ],
