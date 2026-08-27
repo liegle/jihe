@@ -1,9 +1,7 @@
 use std::borrow::Cow;
 
 const SHADER_BASE: &str = include_str!("evaluate.wgsl");
-const F_START: &str = "\nfn f(x: f32, y: f32) -> f32 { return ";
-const DFX_START: &str = "\nfn dfx(x: f32) -> f32 { return ";
-const DFY_START: &str = "\nfn dfy(y: f32) -> f32 { return ";
+const FN_START: &str = "\nfn f(x: f32, y: f32) -> f32 { return ";
 const FN_END: &str = "; }";
 const COMPUTE_ENTRY: Option<&str> = Some("cs");
 const COMPUTE_WORKGROUP_SIZE: (u32, u32, u32) = (16, 16, 1);
@@ -12,17 +10,15 @@ pub(super) struct Evaluate {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     compute_pipeline: wgpu::ComputePipeline,
-    f: String,
+    expr: String,
 }
 
 impl Evaluate {
     pub(super) fn new(
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
-        distance_texture: &wgpu::Texture,
-        f: &str,
-        dfx: &str,
-        dfy: &str,
+        residual_texture: &wgpu::Texture,
+        expr: &str,
         layer: u32,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
@@ -30,34 +26,34 @@ impl Evaluate {
             device,
             &bind_group_layout,
             camera_buffer,
-            distance_texture,
+            residual_texture,
             layer,
         );
-        let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, f, dfx, dfy, layer);
+        let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, expr, layer);
         Self {
             bind_group_layout,
             bind_group,
             compute_pipeline,
-            f: f.to_string(),
+            expr: expr.to_string(),
         }
     }
 
-    pub(super) fn f(&self) -> &str {
-        &self.f
+    pub(super) fn expr(&self) -> &str {
+        &self.expr
     }
 
     pub(super) fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
-        distance_texture: &wgpu::Texture,
+        residual_texture: &wgpu::Texture,
         layer: u32,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
             camera_buffer,
-            distance_texture,
+            residual_texture,
             layer,
         )
     }
@@ -105,12 +101,12 @@ fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
     camera_buffer: &wgpu::Buffer,
-    distance_texture: &wgpu::Texture,
+    residual_texture: &wgpu::Texture,
     layer: u32,
 ) -> wgpu::BindGroup {
-    let distance_texture_view = distance_texture.create_view(&wgpu::TextureViewDescriptor {
+    let residual_texture_view = residual_texture.create_view(&wgpu::TextureViewDescriptor {
         label: Some(&format!("Evaluate {layer} Texture View")),
-        format: Some(distance_texture.format()),
+        format: Some(residual_texture.format()),
         dimension: Some(wgpu::TextureViewDimension::D2),
         usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
         aspect: wgpu::TextureAspect::All,
@@ -129,7 +125,7 @@ fn create_bind_group(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(&distance_texture_view),
+                resource: wgpu::BindingResource::TextureView(&residual_texture_view),
             },
         ],
     })
@@ -139,23 +135,10 @@ fn create_bind_group(
 fn create_compute_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    f: &str,
-    dfx: &str,
-    dfy: &str,
+    expr: &str,
     layer: u32,
 ) -> wgpu::ComputePipeline {
-    let source = String::from_iter([
-        SHADER_BASE,
-        F_START,
-        f,
-        FN_END,
-        DFX_START,
-        dfx,
-        FN_END,
-        DFY_START,
-        dfy,
-        FN_END,
-    ]);
+    let source = String::from_iter([SHADER_BASE, FN_START, expr, FN_END]);
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(&format!("Evaluate {layer} Shader")),
         source: wgpu::ShaderSource::Wgsl(Cow::Owned(source)),

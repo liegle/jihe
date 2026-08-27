@@ -13,7 +13,7 @@ mod trace;
 mod write;
 
 pub(super) struct Curve {
-    distance_texture: wgpu::Texture,
+    residual_texture: wgpu::Texture,
     trace_texture: wgpu::Texture,
     camera_buffer: wgpu::Buffer,
     curves_buffer: wgpu::Buffer,
@@ -32,9 +32,9 @@ impl Curve {
         dst_format: wgpu::TextureFormat,
         dst_size: (u32, u32),
     ) -> Self {
-        // TODO: Maybe distance can be stored in f16 storage buffers
-        let distance_texture = create_distance_texture(&device, dst_size, curves.len());
-        let distance_texture_view = distance_texture.create_view(&DISTANCE_TEXTURE_VIEW_DESCRIPTOR);
+        // TODO: Maybe residual can be stored in f16 storage buffers
+        let residual_texture = create_residual_texture(&device, dst_size, curves.len());
+        let residual_texture_view = residual_texture.create_view(&RESIDUAL_TEXTURE_VIEW_DESCRIPTOR);
         let trace_texture = create_trace_texture(&device, dst_size, curves.len());
         let trace_texture_view = trace_texture.create_view(&TRACE_TEXTURE_VIEW_DESCRIPTOR);
         let camera_buffer = create_camera_buffer(device);
@@ -44,31 +44,17 @@ impl Curve {
             .iter()
             .enumerate()
             .map(|(i, c)| {
-                Evaluate::new(
-                    device,
-                    &camera_buffer,
-                    &distance_texture,
-                    &c.f,
-                    &c.dfx,
-                    &c.dfy,
-                    i as u32,
-                )
+                Evaluate::new(device, &camera_buffer, &residual_texture, &c.expr, i as u32)
             })
             .collect();
-        let trace = Trace::new(&device, &distance_texture_view, &trace_texture_view);
+        let trace = Trace::new(&device, &residual_texture_view, &trace_texture_view);
         // TODO: Current write can only write to dst out of order
         // To do it in order, maybe we should fold dst and color tex to another tex,
         // and then write it back to dst
-        let write = Write::new(
-            &device,
-            &curves_buffer,
-            &trace_texture_view,
-            &distance_texture,
-            dst_format,
-        );
+        let write = Write::new(&device, &curves_buffer, &trace_texture_view, dst_format);
 
         Self {
-            distance_texture,
+            residual_texture,
             trace_texture,
             camera_buffer,
             curves_buffer,
@@ -108,12 +94,12 @@ impl Curve {
         if resized {
             self.dst_size = dst_size;
 
-            self.distance_texture.destroy();
-            self.distance_texture =
-                create_distance_texture(&device, dst_size, self.evaluates.len());
-            let distance_texture_view = self
-                .distance_texture
-                .create_view(&DISTANCE_TEXTURE_VIEW_DESCRIPTOR);
+            self.residual_texture.destroy();
+            self.residual_texture =
+                create_residual_texture(&device, dst_size, self.evaluates.len());
+            let residual_texture_view = self
+                .residual_texture
+                .create_view(&RESIDUAL_TEXTURE_VIEW_DESCRIPTOR);
             self.trace_texture.destroy();
             self.trace_texture = create_trace_texture(&device, dst_size, self.evaluates.len());
             let trace_texture_view = self
@@ -121,26 +107,22 @@ impl Curve {
                 .create_view(&TRACE_TEXTURE_VIEW_DESCRIPTOR);
 
             self.trace
-                .remake_bind_group(&device, &distance_texture_view, &trace_texture_view);
-            self.write.remake_bind_group(
-                &device,
-                &self.curves_buffer,
-                &trace_texture_view,
-                &self.distance_texture,
-            );
+                .remake_bind_group(&device, &residual_texture_view, &trace_texture_view);
+            self.write
+                .remake_bind_group(&device, &self.curves_buffer, &trace_texture_view);
         }
 
         // TODO: need test in the future when dynamic scene is implemented
         let mut previous = mem::replace(&mut self.evaluates, Vec::with_capacity(curves.len()));
         for (layer, curve) in curves.iter().enumerate() {
-            match previous.iter().position(|e| e.f() == curve.f) {
+            match previous.iter().position(|e| e.expr() == curve.expr) {
                 Some(index) => {
                     let evaluate = self.evaluates.push_mut(previous.remove(index));
                     if index != layer || resized {
                         evaluate.remake_bind_group(
                             device,
                             &self.camera_buffer,
-                            &self.distance_texture,
+                            &self.residual_texture,
                             layer as u32,
                         );
                     }
@@ -149,10 +131,8 @@ impl Curve {
                     self.evaluates.push(Evaluate::new(
                         device,
                         &self.camera_buffer,
-                        &self.distance_texture,
-                        &curve.f,
-                        &curve.dfx,
-                        &curve.dfy,
+                        &self.residual_texture,
+                        &curve.expr,
                         layer as u32,
                     ));
                 }
@@ -165,7 +145,7 @@ impl Curve {
             &curves
                 .iter()
                 .map(|c| CurveUniform {
-                    thickness: c.thickness,
+                    // thickness: c.thickness,
                     color: c.color,
                 })
                 .collect::<Vec<_>>()
@@ -201,13 +181,13 @@ impl Curve {
 }
 
 #[inline]
-fn create_distance_texture(
+fn create_residual_texture(
     device: &wgpu::Device,
     dst_size: (u32, u32),
     layers: usize,
 ) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("Distance Texture"),
+        label: Some("Residual Texture"),
         size: wgpu::Extent3d {
             width: dst_size.0,
             height: dst_size.1,
@@ -222,8 +202,8 @@ fn create_distance_texture(
     })
 }
 
-const DISTANCE_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDescriptor {
-    label: Some("Distance Texture View"),
+const RESIDUAL_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDescriptor {
+    label: Some("Residual Texture View"),
     format: None,
     dimension: Some(wgpu::TextureViewDimension::D2Array),
     usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
@@ -296,6 +276,6 @@ struct CameraUniform {
 
 #[derive(encase::ShaderType)]
 struct CurveUniform {
-    thickness: f32,
+    // thickness: f32,
     color: glam::Vec4,
 }
