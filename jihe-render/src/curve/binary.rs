@@ -1,23 +1,23 @@
 use std::borrow::Cow;
 
-const SHADER_BASE: &str = include_str!("evaluate.wgsl");
+const SHADER_BASE: &str = include_str!("binary.wgsl");
 const FN_START: &str = "\nfn f(x: f32, y: f32) -> f32 { return ";
 const FN_END: &str = "; }";
 const COMPUTE_ENTRY: Option<&str> = Some("cs");
 const COMPUTE_WORKGROUP_SIZE: (u32, u32, u32) = (16, 16, 1);
 
-pub(super) struct Evaluate {
+pub(super) struct Binary {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     compute_pipeline: wgpu::ComputePipeline,
     expr: String,
 }
 
-impl Evaluate {
+impl Binary {
     pub(super) fn new(
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
-        residual_texture: &wgpu::Texture,
+        intersection_texture: &wgpu::Texture,
         expr: &str,
         layer: u32,
     ) -> Self {
@@ -26,7 +26,7 @@ impl Evaluate {
             device,
             &bind_group_layout,
             camera_buffer,
-            residual_texture,
+            intersection_texture,
             layer,
         );
         let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, expr, layer);
@@ -46,14 +46,14 @@ impl Evaluate {
         &mut self,
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
-        residual_texture: &wgpu::Texture,
+        intersection_texture: &wgpu::Texture,
         layer: u32,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
             camera_buffer,
-            residual_texture,
+            intersection_texture,
             layer,
         )
     }
@@ -62,8 +62,8 @@ impl Evaluate {
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
         compute_pass.dispatch_workgroups(
-            dst_size.0.div_ceil(COMPUTE_WORKGROUP_SIZE.0),
-            dst_size.1.div_ceil(COMPUTE_WORKGROUP_SIZE.1),
+            (dst_size.0 + 1).div_ceil(COMPUTE_WORKGROUP_SIZE.0),
+            (dst_size.1 + 1).div_ceil(COMPUTE_WORKGROUP_SIZE.1),
             1,
         );
     }
@@ -71,7 +71,7 @@ impl Evaluate {
 
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
     wgpu::BindGroupLayoutDescriptor {
-        label: Some("Evaluate Bind Group Layout"),
+        label: Some("Binary Bind Group Layout"),
         entries: &[
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
@@ -88,7 +88,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
                     access: wgpu::StorageTextureAccess::WriteOnly,
-                    format: wgpu::TextureFormat::R32Float,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
                     view_dimension: wgpu::TextureViewDimension::D2,
                 },
                 count: None,
@@ -101,12 +101,12 @@ fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
     camera_buffer: &wgpu::Buffer,
-    residual_texture: &wgpu::Texture,
+    intersection_texture: &wgpu::Texture,
     layer: u32,
 ) -> wgpu::BindGroup {
-    let residual_texture_view = residual_texture.create_view(&wgpu::TextureViewDescriptor {
-        label: Some(&format!("Evaluate {layer} Texture View")),
-        format: Some(residual_texture.format()),
+    let intersection_texture_view = intersection_texture.create_view(&wgpu::TextureViewDescriptor {
+        label: Some(&format!("Binary {layer} Texture View")),
+        format: Some(intersection_texture.format()),
         dimension: Some(wgpu::TextureViewDimension::D2),
         usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
         aspect: wgpu::TextureAspect::All,
@@ -116,7 +116,7 @@ fn create_bind_group(
         array_layer_count: Some(1),
     });
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some(&format!("Evaluate {layer} Bind Group")),
+        label: Some(&format!("Binary {layer} Bind Group")),
         layout: bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
@@ -125,7 +125,7 @@ fn create_bind_group(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(&residual_texture_view),
+                resource: wgpu::BindingResource::TextureView(&intersection_texture_view),
             },
         ],
     })
@@ -140,16 +140,16 @@ fn create_compute_pipeline(
 ) -> wgpu::ComputePipeline {
     let source = String::from_iter([SHADER_BASE, FN_START, expr, FN_END]);
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(&format!("Evaluate {layer} Shader")),
+        label: Some(&format!("Binary {layer} Shader")),
         source: wgpu::ShaderSource::Wgsl(Cow::Owned(source)),
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some(&format!("Evaluate {layer} Pipeline Layout")),
+        label: Some(&format!("Binary {layer} Pipeline Layout")),
         bind_group_layouts: &[Some(bind_group_layout)],
         immediate_size: 0,
     });
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some(&format!("Evaluate {layer} Compute Pipeline")),
+        label: Some(&format!("Binary {layer} Compute Pipeline")),
         layout: Some(&pipeline_layout),
         module: &shader,
         entry_point: COMPUTE_ENTRY,

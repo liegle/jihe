@@ -1,5 +1,5 @@
 struct Curve {
-    // thickness: f32,
+    thickness: f32,
     color: vec4<f32>,
 }
 
@@ -9,7 +9,7 @@ var<storage, read> curves: array<Curve>;
 
 @group(0)
 @binding(1)
-var trace_texture: texture_storage_3d<r32uint, read>;
+var segment_texture: texture_storage_3d<rgba8unorm, read>;
 
 struct VertexOut {
     @builtin(position) position: vec4<f32>,
@@ -33,41 +33,54 @@ fn vs(
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    // let curve = curves[in.instance_index];
+    let curve = curves[in.instance_index];
 
-    // let thickness2 = curve.thickness * curve.thickness;
-    // let pos = vec2<i32>(in.position.xy);
+    let thickness2 = curve.thickness * curve.thickness;
+    let pos = vec2<i32>(in.position.xy);
 
-    // let ithickness = i32(ceil(curve.thickness));
-    // var least_dist2 = thickness2;
-    // // TODO: Still looks strange
-    // for (var i = -ithickness; i <= ithickness; i++) {
-    //     for (var j = -ithickness; j <= ithickness; j++) {
-    //         let word = textureLoad(
-    //             trace_texture,
-    //             vec3<u32>(
-    //                 vec2<u32>(pos + vec2<i32>(i, j)),
-    //                 in.instance_index / 32
-    //             )
-    //         ).x;
-    //         let v = extractBits(word, in.instance_index % 32, 1);
-    //         let dist2 = f32(i * i + j * j);
-    //         least_dist2 = select(least_dist2, min(least_dist2, dist2), v == 1);
-    //     }
-    // }
-    // if least_dist2 >= thickness2 {
-    //     discard;
-    // }
-    // let alpha = curve.color.a * saturate(1.5 * (1 - sqrt(least_dist2 / thickness2)));
-    // return vec4<f32>(curve.color.rgb * alpha, alpha);
-
-    let word = textureLoad(
-        trace_texture,
-        vec3<u32>(vec2<u32>(in.position.xy), in.instance_index / 32)
-    ).x;
-    let v = extractBits(word, in.instance_index % 32, 1);
-    if v == 0 {
+    let ithickness = i32(ceil(curve.thickness));
+    var least_dist2 = thickness2;
+    for (var i = -ithickness; i <= ithickness; i++) {
+        for (var j = -ithickness; j <= ithickness; j++) {
+            let center = vec2<u32>(pos + vec2<i32>(i, j));
+            let pq = textureLoad(
+                segment_texture,
+                vec3<u32>(center, in.instance_index)
+            );
+            least_dist2 = min(
+                least_dist2,
+                dist2(vec2<f32>(pos), vec2<f32>(center) - vec2<f32>(0.5, 0.5), pq)
+            );
+        }
+    }
+    if least_dist2 >= thickness2 {
         discard;
     }
-    return curves[in.instance_index].color;
+    let alpha = curve.color.a * saturate(1.5 * (1 - sqrt(least_dist2 / thickness2)));
+    return vec4<f32>(curve.color.rgb * alpha, alpha);
+}
+
+fn dist2(here: vec2<f32>, corner: vec2<f32>, pq: vec4<f32>) -> f32 {
+    let p = corner + pq.xy;
+    let q = corner + pq.zw;
+    let p_q = p - q;
+    let p_a = here - p;
+    let q_a = here - q;
+
+    let p_q_2 = dot(p_q, p_q);
+    let a_p_q = dot(here - p, -p_q);
+    let a_q_p = dot(here - q, p_q);
+
+    let crozz = p_q.x * p_a.y - p_q.y * p_a.x;
+    let height2 = crozz * crozz / p_q_2;
+
+    return select(
+        select(
+            height2,
+            dot(q_a, q_a),
+            a_q_p < 0,
+        ),
+        dot(p_a, p_a),
+        a_p_q < 0,
+    );
 }

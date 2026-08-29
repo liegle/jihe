@@ -1,31 +1,31 @@
 use std::borrow::Cow;
 
-const SHADER: &str = include_str!("trace.wgsl");
+const SHADER: &str = include_str!("connect.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: Some("Trace Shader"),
+    label: Some("Connect Shader"),
     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER)),
 };
 const COMPUTE_ENTRY: Option<&str> = Some("cs");
 const COMPUTE_WORKGROUP_SIZE: (u32, u32, u32) = (16, 16, 1);
 
-pub(super) struct Trace {
+pub(super) struct Connect {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     compute_pipeline: wgpu::ComputePipeline,
 }
 
-impl Trace {
+impl Connect {
     pub(super) fn new(
         device: &wgpu::Device,
-        residual_texture_view: &wgpu::TextureView,
-        trace_texture_view: &wgpu::TextureView,
+        intersection_texture_view: &wgpu::TextureView,
+        segment_texture_view: &wgpu::TextureView,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
         let bind_group = create_bind_group(
             device,
             &bind_group_layout,
-            residual_texture_view,
-            trace_texture_view,
+            intersection_texture_view,
+            segment_texture_view,
         );
         let compute_pipeline = create_compute_pipeline(&device, &bind_group_layout);
         Self {
@@ -38,14 +38,14 @@ impl Trace {
     pub(super) fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
-        residual_texture_view: &wgpu::TextureView,
-        trace_texture_view: &wgpu::TextureView,
+        intersection_texture_view: &wgpu::TextureView,
+        segment_texture_view: &wgpu::TextureView,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
-            residual_texture_view,
-            trace_texture_view,
+            intersection_texture_view,
+            segment_texture_view,
         );
     }
 
@@ -67,14 +67,14 @@ impl Trace {
 
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
     wgpu::BindGroupLayoutDescriptor {
-        label: Some("Trace Bind Group Layout"),
+        label: Some("Connect Bind Group Layout"),
         entries: &[
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
                     access: wgpu::StorageTextureAccess::ReadOnly,
-                    format: wgpu::TextureFormat::R32Float,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
                     view_dimension: wgpu::TextureViewDimension::D2Array,
                 },
                 count: None,
@@ -83,8 +83,8 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 binding: 1,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
-                    access: wgpu::StorageTextureAccess::ReadWrite,
-                    format: wgpu::TextureFormat::R32Uint,
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
                     view_dimension: wgpu::TextureViewDimension::D3,
                 },
                 count: None,
@@ -96,20 +96,20 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    residual_texture_view: &wgpu::TextureView,
-    trace_texture_view: &wgpu::TextureView,
+    intersection_texture_view: &wgpu::TextureView,
+    segment_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Trace Bind Group"),
+        label: Some("Connect Bind Group"),
         layout: bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::TextureView(residual_texture_view),
+                resource: wgpu::BindingResource::TextureView(intersection_texture_view),
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(trace_texture_view),
+                resource: wgpu::BindingResource::TextureView(segment_texture_view),
             },
         ],
     })
@@ -122,12 +122,12 @@ fn create_compute_pipeline(
 ) -> wgpu::ComputePipeline {
     let shader = device.create_shader_module(SHADER_MODULE_DESCRIPTOR);
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Trace Pipeline Layout"),
+        label: Some("Connect Pipeline Layout"),
         bind_group_layouts: &[Some(bind_group_layout)],
         immediate_size: 0,
     });
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("Trace Compute Pipeline"),
+        label: Some("Connect Compute Pipeline"),
         layout: Some(&pipeline_layout),
         module: &shader,
         entry_point: COMPUTE_ENTRY,
