@@ -65,14 +65,14 @@ impl Point {
         let points = points
             .iter()
             .map(|p| PointInstance {
-                pos: (p.pos - camera.pos) / camera.scale / half_size,
+                pos: (p.pos - camera.pos) / camera.scale,
                 size: p.size,
                 color: p.color,
             })
             .filter(|p| {
-                let overflow = p.size / half_size;
-                ((-1. - overflow.x)..(1. + overflow.x)).contains(&p.pos.x)
-                    && ((-1. - overflow.y)..(1. + overflow.y)).contains(&p.pos.y)
+                let overflow_x = (-half_size.x - p.size)..(half_size.x + p.size);
+                let overflow_y = (-half_size.y - p.size)..(half_size.y + p.size);
+                overflow_x.contains(&p.pos.x) && overflow_y.contains(&p.pos.y)
             })
             .collect::<Vec<_>>();
         self.instance_count = points.len() as u32;

@@ -32,8 +32,8 @@ impl Bg {
         const AXIS_MARGIN: f32 = 15.;
         let axis_area = half_size - AXIS_MARGIN;
         let axis_pos_cs = glam::vec2(
-            (-camera.pos.x / camera.scale).clamp(-axis_area.x, axis_area.x) / half_size.x,
-            (-camera.pos.y / camera.scale).clamp(-axis_area.y, axis_area.y) / half_size.y,
+            (-camera.pos.x / camera.scale + 0.5).clamp(-axis_area.x, axis_area.x) / half_size.x,
+            (-camera.pos.y / camera.scale - 0.5).clamp(-axis_area.y, axis_area.y) / half_size.y,
         );
 
         if let Some(jihe_shared::Axis {
@@ -81,6 +81,7 @@ impl Bg {
                 screen_bounds_ws,
                 grid_ends_cs,
                 color,
+                0.5 / half_size,
             );
         }
     }

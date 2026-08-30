@@ -66,18 +66,21 @@ impl Grid {
         screen_bounds_ws: Bounds,
         grid_ends_cs: Bounds,
         color: glam::Vec3,
+        delta: glam::Vec2,
     ) {
         self.hori.prepare(
             queue,
             distance,
             screen_bounds_ws.b..screen_bounds_ws.t,
             glam::vec2(grid_ends_cs.l, grid_ends_cs.r),
+            -delta.y,
         );
         self.vert.prepare(
             queue,
             distance,
             screen_bounds_ws.l..screen_bounds_ws.r,
             glam::vec2(grid_ends_cs.b, grid_ends_cs.t),
+            delta.x,
         );
         queue.write_buffer(&self.color_buffer, 0, &color.as_uniform_bytes());
     }
@@ -114,12 +117,19 @@ impl Lines {
         }
     }
 
-    fn prepare(&mut self, queue: &wgpu::Queue, distance: f32, range: Range<f32>, ends: glam::Vec2) {
+    fn prepare(
+        &mut self,
+        queue: &wgpu::Queue,
+        distance: f32,
+        range: Range<f32>,
+        ends: glam::Vec2,
+        delta: f32,
+    ) {
         let w = range.end - range.start;
         let begin_ws = (range.start / distance).ceil() * distance;
         self.count = (w / distance).ceil() as u32;
         let spacing = distance / w * 2.;
-        let begin = (begin_ws - range.start) / w * 2. - 1.;
+        let begin = (begin_ws - range.start) / w * 2. - 1. + delta;
 
         queue.write_buffer(
             &self.lines_buffer,
