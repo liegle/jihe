@@ -42,14 +42,14 @@ fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     var least_dist2 = thickness2;
     for (var i = -ithickness; i <= ithickness; i++) {
         for (var j = -ithickness; j <= ithickness; j++) {
-            let center = vec2<u32>(pos + vec2<i32>(i, j));
+            let corner = vec2<u32>(pos + vec2<i32>(i, j));
             let pq = textureLoad(
                 segment_texture,
-                vec3<u32>(center, in.instance_index)
+                vec3<u32>(corner, in.instance_index)
             );
             least_dist2 = min(
                 least_dist2,
-                dist2(vec2<f32>(pos), vec2<f32>(center) - vec2<f32>(0.5, 0.5), pq)
+                dist2(vec2<f32>(pos), vec2<f32>(corner), pq)
             );
         }
     }

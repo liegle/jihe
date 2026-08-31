@@ -65,7 +65,7 @@ impl Point {
         let points = points
             .iter()
             .map(|p| PointInstance {
-                pos: (p.pos - camera.pos) / camera.scale,
+                pos: (p.pos - camera.pos) / camera.scale + glam::vec2(0.5, -0.5),
                 size: p.size,
                 color: p.color,
             })

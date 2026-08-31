@@ -49,26 +49,26 @@ impl Content {
                 spacing: 100,
             },
             curves: vec![
-                // Curve {
-                //     expr: "y - 1".to_string(),
-                //     thickness: 1.5,
-                //     color: glam::vec4(0., 0., 1., 1.),
-                // },
-                // Curve {
-                //     expr: "x - 1".to_string(),
-                //     thickness: 1.5,
-                //     color: glam::vec4(0., 0., 1., 1.),
-                // },
-                // Curve {
-                //     expr: "pow(y, 3) + safeLog(x) - 10".to_string(),
-                //     thickness: 1.5,
-                //     color: glam::vec4(1., 0., 0., 1.),
-                // },
-                // Curve {
-                //     expr: "pow(x, 3) + safeLog(y) - 10".to_string(),
-                //     thickness: 1.5,
-                //     color: glam::vec4(0., 1., 0., 1.),
-                // },
+                Curve {
+                    expr: "y - 1".to_string(),
+                    thickness: 1.5,
+                    color: glam::vec4(0., 0., 1., 1.),
+                },
+                Curve {
+                    expr: "x - 1".to_string(),
+                    thickness: 1.5,
+                    color: glam::vec4(0., 0., 1., 1.),
+                },
+                Curve {
+                    expr: "pow(y, 3) + safeLog(x) - 10".to_string(),
+                    thickness: 1.5,
+                    color: glam::vec4(1., 0., 0., 1.),
+                },
+                Curve {
+                    expr: "pow(x, 3) + safeLog(y) - 10".to_string(),
+                    thickness: 1.5,
+                    color: glam::vec4(0., 1., 0., 1.),
+                },
             ],
             points: vec![
                 Point {
