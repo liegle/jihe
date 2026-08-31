@@ -17,17 +17,11 @@ pub(super) struct Write {
 impl Write {
     pub(super) fn new(
         device: &wgpu::Device,
-        curves_buffer: &wgpu::Buffer,
-        segment_texture_view: &wgpu::TextureView,
+        curve_texture_view: &wgpu::TextureView,
         dst_format: wgpu::TextureFormat,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
-        let bind_group = create_bind_group(
-            device,
-            &bind_group_layout,
-            curves_buffer,
-            segment_texture_view,
-        );
+        let bind_group = create_bind_group(device, &bind_group_layout, curve_texture_view);
         let render_pipeline = create_render_pipeline(device, &bind_group_layout, dst_format);
         Self {
             bind_group_layout,
@@ -39,71 +33,46 @@ impl Write {
     pub(super) fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
-        curves_buffer: &wgpu::Buffer,
-        segment_texture_view: &wgpu::TextureView,
+        curve_texture_view: &wgpu::TextureView,
     ) {
-        self.bind_group = create_bind_group(
-            device,
-            &self.bind_group_layout,
-            curves_buffer,
-            segment_texture_view,
-        );
+        self.bind_group = create_bind_group(device, &self.bind_group_layout, curve_texture_view);
     }
 
-    pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass, layer_count: u32) {
+    pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass, layers: u32) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, Some(&self.bind_group), &[]);
-        render_pass.draw(0..4, 0..layer_count);
+        render_pass.draw(0..4, 0..layers);
     }
 }
 
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
     wgpu::BindGroupLayoutDescriptor {
         label: Some("Write Bind Group Layout"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::StorageTexture {
+                access: wgpu::StorageTextureAccess::ReadOnly,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                view_dimension: wgpu::TextureViewDimension::D2Array,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::StorageTexture {
-                    access: wgpu::StorageTextureAccess::ReadOnly,
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    view_dimension: wgpu::TextureViewDimension::D3,
-                },
-                count: None,
-            },
-        ],
+            count: None,
+        }],
     };
 
 #[inline]
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    curves_buffer: &wgpu::Buffer,
-    segment_texture_view: &wgpu::TextureView,
+    curve_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("Write Bind Group"),
         layout: bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: curves_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(segment_texture_view),
-            },
-        ],
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(curve_texture_view),
+        }],
     })
 }
 

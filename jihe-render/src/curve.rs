@@ -5,26 +5,30 @@ use encase::ShaderSize as _;
 use crate::{
     Camera,
     buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
-    curve::{binary::Binary, connect::Connect, write::Write},
+    curve::{binary::Binary, connect::Connect, measure::Measure, write::Write},
 };
 
 mod binary;
 mod connect;
+mod measure;
 mod write;
 
 pub(super) struct Curve {
     // Curve intersection with left and top line segment of each pixel
     // (normalized on the border, x for top or z=1 if no intersection,
     // y for left or w=1 if no intersection)
-    intersection_texture: wgpu::Texture,
+    intersection_texture_view: wgpu::TextureView,
     // Line segments in each pixel connected from intersections
     // (line ends in normalized pixel inner space)
-    segment_texture: wgpu::Texture,
+    segment_texture_view: wgpu::TextureView,
+    curve_texture_view: wgpu::TextureView,
+
     camera_buffer: wgpu::Buffer,
     curves_buffer: wgpu::Buffer,
 
     binaries: Vec<Binary>,
     connect: Connect,
+    measure: Measure,
     write: Write,
 
     dst_size: (u32, u32),
@@ -37,29 +41,49 @@ impl Curve {
         dst_format: wgpu::TextureFormat,
         dst_size: (u32, u32),
     ) -> Self {
-        let intersection_texture = create_intersection_texture(&device, dst_size, curves.len());
-        let intersection_texture_view = intersection_texture.create_view(&INTERSECTION_TEXTURE_VIEW_DESCRIPTOR);
-        let segment_texture = create_segment_texture(&device, dst_size, curves.len());
+        let intersection_texture = create_intersection_texture(device, dst_size);
+        let intersection_texture_view =
+            intersection_texture.create_view(&INTERSECTION_TEXTURE_VIEW_DESCRIPTOR);
+        let segment_texture = create_segment_texture(device, dst_size);
         let segment_texture_view = segment_texture.create_view(&SEGMENT_TEXTURE_VIEW_DESCRIPTOR);
+        let curve_texture = create_curve_texture(device, dst_size, curves.len());
+        let curve_texture_view = curve_texture.create_view(&CURVE_TEXTURE_VIEW_DESCRIPTOR);
         let camera_buffer = create_camera_buffer(device);
         let curves_buffer = create_curves_buffer(device, curves.len());
 
         let binaries = curves
             .iter()
             .enumerate()
-            .map(|(i, c)| Binary::new(device, &camera_buffer, &intersection_texture, &c.expr, i as u32))
+            .map(|(i, c)| {
+                Binary::new(
+                    device,
+                    &camera_buffer,
+                    &intersection_texture_view,
+                    &c.expr,
+                    i as u32,
+                )
+            })
             .collect();
-        let connect = Connect::new(&device, &intersection_texture_view, &segment_texture_view);
-        let write = Write::new(&device, &curves_buffer, &segment_texture_view, dst_format);
+        let connect = Connect::new(device, &intersection_texture_view, &segment_texture_view);
+        let measure = Measure::new(
+            device,
+            &curves_buffer,
+            &segment_texture_view,
+            &curve_texture_view,
+        );
+        let write = Write::new(device, &curve_texture_view, dst_format);
 
         Self {
-            intersection_texture,
-            segment_texture,
+            intersection_texture_view,
+            segment_texture_view,
+            curve_texture_view,
+
             camera_buffer,
             curves_buffer,
 
             binaries,
             connect,
+            measure,
             write,
 
             dst_size,
@@ -93,21 +117,33 @@ impl Curve {
         if resized {
             self.dst_size = dst_size;
 
-            self.intersection_texture.destroy();
-            self.intersection_texture = create_intersection_texture(&device, dst_size, self.binaries.len());
-            let intersection_texture_view = self
-                .intersection_texture
-                .create_view(&INTERSECTION_TEXTURE_VIEW_DESCRIPTOR);
-            self.segment_texture.destroy();
-            self.segment_texture = create_segment_texture(&device, dst_size, self.binaries.len());
-            let segment_texture_view = self
-                .segment_texture
-                .create_view(&SEGMENT_TEXTURE_VIEW_DESCRIPTOR);
+            self.intersection_texture_view.texture().destroy();
+            let intersection_texture = create_intersection_texture(&device, dst_size);
+            self.intersection_texture_view =
+                intersection_texture.create_view(&INTERSECTION_TEXTURE_VIEW_DESCRIPTOR);
 
-            self.connect
-                .remake_bind_group(&device, &intersection_texture_view, &segment_texture_view);
+            self.segment_texture_view.texture().destroy();
+            let segment_texture = create_segment_texture(&device, dst_size);
+            self.segment_texture_view =
+                segment_texture.create_view(&SEGMENT_TEXTURE_VIEW_DESCRIPTOR);
+
+            self.curve_texture_view.texture().destroy();
+            let curve_texture = create_curve_texture(&device, dst_size, curves.len());
+            self.curve_texture_view = curve_texture.create_view(&CURVE_TEXTURE_VIEW_DESCRIPTOR);
+
+            self.connect.remake_bind_group(
+                device,
+                &self.intersection_texture_view,
+                &self.segment_texture_view,
+            );
+            self.measure.remake_bind_group(
+                device,
+                &self.curves_buffer,
+                &self.segment_texture_view,
+                &self.curve_texture_view,
+            );
             self.write
-                .remake_bind_group(&device, &self.curves_buffer, &segment_texture_view);
+                .remake_bind_group(device, &self.curve_texture_view);
         }
 
         // TODO: need test in the future when dynamic scene is implemented
@@ -120,7 +156,7 @@ impl Curve {
                         binary.remake_bind_group(
                             device,
                             &self.camera_buffer,
-                            &self.intersection_texture,
+                            &self.intersection_texture_view,
                             layer as u32,
                         );
                     }
@@ -129,7 +165,7 @@ impl Curve {
                     self.binaries.push(Binary::new(
                         device,
                         &self.camera_buffer,
-                        &self.intersection_texture,
+                        &self.intersection_texture_view,
                         &curve.expr,
                         layer as u32,
                     ));
@@ -152,21 +188,22 @@ impl Curve {
     }
 
     pub(super) fn compute(&self, compute_pass: &mut super::ComputePass, dst_size: (u32, u32)) {
-        let layers = self.binaries.len() as u32;
-        #[cfg(not(feature = "profile"))]
-        for binary in &self.binaries {
-            binary.compute(compute_pass, dst_size);
-        }
-        #[cfg(feature = "profile")]
         for (layer, binary) in self.binaries.iter().enumerate() {
-            let _ = compute_pass.scope(format!("Curve binary {}", layer));
-            binary.compute(compute_pass, dst_size);
-        }
-
-        {
-            #[cfg(feature = "profile")]
-            let _ = compute_pass.scope("Curve segment");
-            self.connect.compute(compute_pass, dst_size, layers);
+            '_binary: {
+                #[cfg(feature = "profile")]
+                let _ = compute_pass.scope(format!("Curve binary {}", layer));
+                binary.compute(compute_pass, dst_size);
+            }
+            '_connect: {
+                #[cfg(feature = "profile")]
+                let _ = compute_pass.scope(format!("Curve connect {}", layer));
+                self.connect.compute(compute_pass, dst_size);
+            }
+            '_measure: {
+                #[cfg(feature = "profile")]
+                let _ = compute_pass.scope(format!("Curve measure {}", layer));
+                self.measure.compute(compute_pass, dst_size, layer as u32);
+            }
         }
     }
 
@@ -179,16 +216,77 @@ impl Curve {
 }
 
 #[inline]
-fn create_intersection_texture(
-    device: &wgpu::Device,
-    dst_size: (u32, u32),
-    layers: usize,
-) -> wgpu::Texture {
+fn create_intersection_texture(device: &wgpu::Device, dst_size: (u32, u32)) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("Intersection Texture"),
         size: wgpu::Extent3d {
             width: dst_size.0 + 1,
             height: dst_size.1 + 1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::STORAGE_BINDING,
+        view_formats: &[],
+    })
+}
+
+const INTERSECTION_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor =
+    wgpu::TextureViewDescriptor {
+        label: Some("Intersection Texture View"),
+        format: None,
+        dimension: Some(wgpu::TextureViewDimension::D2),
+        usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
+        aspect: wgpu::TextureAspect::All,
+        base_mip_level: 0,
+        mip_level_count: None,
+        base_array_layer: 0,
+        array_layer_count: None,
+    };
+
+#[inline]
+fn create_segment_texture(device: &wgpu::Device, dst_size: (u32, u32)) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Segment Texture"),
+        size: wgpu::Extent3d {
+            width: dst_size.0,
+            height: dst_size.1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::STORAGE_BINDING,
+        view_formats: &[],
+    })
+}
+
+const SEGMENT_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDescriptor {
+    label: Some("Segment Texture View"),
+    format: None,
+    dimension: Some(wgpu::TextureViewDimension::D2),
+    usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
+    aspect: wgpu::TextureAspect::All,
+    base_mip_level: 0,
+    mip_level_count: None,
+    base_array_layer: 0,
+    array_layer_count: None,
+};
+
+#[inline]
+fn create_curve_texture(
+    device: &wgpu::Device,
+    dst_size: (u32, u32),
+    layers: usize,
+) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Curve Texture"),
+        size: wgpu::Extent3d {
+            width: dst_size.0,
+            height: dst_size.1,
             depth_or_array_layers: layers.max(1) as u32,
         },
         mip_level_count: 1,
@@ -200,44 +298,10 @@ fn create_intersection_texture(
     })
 }
 
-const INTERSECTION_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDescriptor {
-    label: Some("Intersection Texture View"),
+const CURVE_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDescriptor {
+    label: Some("Curve Texture View"),
     format: None,
     dimension: Some(wgpu::TextureViewDimension::D2Array),
-    usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
-    aspect: wgpu::TextureAspect::All,
-    base_mip_level: 0,
-    mip_level_count: None,
-    base_array_layer: 0,
-    array_layer_count: None,
-};
-
-#[inline]
-fn create_segment_texture(
-    device: &wgpu::Device,
-    dst_size: (u32, u32),
-    layers: usize,
-) -> wgpu::Texture {
-    device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("Segment Texture"),
-        size: wgpu::Extent3d {
-            width: dst_size.0,
-            height: dst_size.1,
-            depth_or_array_layers: layers.max(1) as u32,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D3,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::STORAGE_BINDING,
-        view_formats: &[],
-    })
-}
-
-const SEGMENT_TEXTURE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDescriptor {
-    label: Some("Segment Texture View"),
-    format: None,
-    dimension: Some(wgpu::TextureViewDimension::D3),
     usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
     aspect: wgpu::TextureAspect::All,
     base_mip_level: 0,
