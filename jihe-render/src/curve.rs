@@ -2,8 +2,8 @@ use encase::ShaderSize as _;
 
 use crate::{
     Camera,
-    buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
     curve::{binary::Binary, connect::Connect, write::Write},
+    utils::{AsDynamicStorageBytes as _, AsUniformBytes as _},
 };
 
 mod binary;

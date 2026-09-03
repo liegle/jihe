@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use encase::ShaderSize as _;
 
-use crate::buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _};
+use crate::utils::{AsDynamicStorageBytes as _, AsUniformBytes as _};
 
 const SHADER: &str = include_str!("axis.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {

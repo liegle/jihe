@@ -2,7 +2,7 @@ use std::{borrow::Cow, ops::Range};
 
 use encase::ShaderSize;
 
-use crate::{bg::Bounds, buffer::AsUniformBytes as _};
+use crate::{bg::Bounds, utils::AsUniformBytes as _};
 
 const SHADER: &str = include_str!("grid.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {

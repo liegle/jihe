@@ -4,7 +4,7 @@ use encase::ShaderSize;
 
 use crate::{
     Camera,
-    buffer::{AsDynamicStorageBytes as _, AsUniformBytes as _},
+    utils::{AsDynamicStorageBytes as _, AsUniformBytes as _},
 };
 
 const SHADER: &str = include_str!("point.wgsl");

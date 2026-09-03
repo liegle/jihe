@@ -3,17 +3,18 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[cfg(feature = "profile")]
-use crate::profile::Profiler;
 use crate::{bg::Bg, curve::Curve, point::Point};
+
+#[cfg(feature = "profile")]
+use crate::utils::log_profiler_recursive;
 
 pub use scene::{Camera, Scene};
 
 mod bg;
-mod buffer;
 mod curve;
 mod point;
 mod scene;
+mod utils;
 
 cfg_select! {
     feature = "profile" => {
@@ -46,7 +47,7 @@ where
     point: Point,
 
     #[cfg(feature = "profile")]
-    profiler: Profiler,
+    profiler: wgpu_profiler::GpuProfiler,
 }
 
 impl<W> Render<W>
@@ -127,7 +128,7 @@ where
         );
 
         #[cfg(feature = "profile")]
-        let profiler = Profiler::new(&device, 180);
+        let profiler = wgpu_profiler::GpuProfiler::new(&device, Default::default()).unwrap();
 
         Ok(Self {
             scene,
@@ -207,7 +208,16 @@ where
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
         #[cfg(feature = "profile")]
-        self.profiler.end_frame(&self.queue);
+        {
+            self.profiler.end_frame().unwrap();
+            if let Some(results) = self
+                .profiler
+                .process_finished_frame(self.queue.get_timestamp_period())
+            {
+                log::info!("Gpu profile:");
+                log_profiler_recursive(&results, 0);
+            }
+        }
     }
 
     #[inline]
