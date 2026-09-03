@@ -1,5 +1,3 @@
-use std::mem;
-
 use encase::ShaderSize as _;
 
 use crate::{
@@ -24,11 +22,12 @@ pub(super) struct Curve {
     camera_buffer: wgpu::Buffer,
     curves_buffer: wgpu::Buffer,
 
-    binaries: Vec<Binary>,
+    binary: Binary,
     connect: Connect,
     write: Write,
 
     dst_size: (u32, u32),
+    layers: usize,
 }
 
 impl Curve {
@@ -46,33 +45,23 @@ impl Curve {
         let camera_buffer = create_camera_buffer(device);
         let curves_buffer = create_curves_buffer(device, curves.len());
 
-        let binaries = curves
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                Binary::new(
-                    device,
-                    &camera_buffer,
-                    &intersection_texture_view,
-                    &c.expr,
-                    i as u32,
-                )
-            })
-            .collect();
+        let binary = Binary::new(device, &camera_buffer, &intersection_texture_view, curves);
         let connect = Connect::new(&device, &intersection_texture_view, &segment_texture_view);
         let write = Write::new(&device, &curves_buffer, &segment_texture_view, dst_format);
 
         Self {
             intersection_texture_view,
             segment_texture_view,
+
             camera_buffer,
             curves_buffer,
 
-            binaries,
+            binary,
             connect,
             write,
 
             dst_size,
+            layers: curves.len(),
         }
     }
 
@@ -87,7 +76,8 @@ impl Curve {
         //\\ Check
         let dst_resized = self.dst_size != dst_size;
         self.dst_size = dst_size;
-        let len_changed = self.binaries.len() != curves.len();
+        let len_changed = self.layers != curves.len();
+        self.layers = curves.len();
 
         //\\ Remake texture
         if dst_resized {
@@ -99,7 +89,7 @@ impl Curve {
 
         if dst_resized || len_changed {
             self.segment_texture_view.texture().destroy();
-            let segment_texture = create_segment_texture(&device, dst_size, self.binaries.len());
+            let segment_texture = create_segment_texture(&device, dst_size, curves.len());
             self.segment_texture_view =
                 segment_texture.create_view(&SEGMENT_TEXTURE_VIEW_DESCRIPTOR);
         }
@@ -112,30 +102,13 @@ impl Curve {
 
         //\\ Remake bind group
         // TODO: need test in the future when dynamic scene is implemented
-        let mut previous = mem::replace(&mut self.binaries, Vec::with_capacity(curves.len()));
-        for (layer, curve) in curves.iter().enumerate() {
-            match previous.iter().position(|e| e.expr() == curve.expr) {
-                Some(index) => {
-                    let binary = self.binaries.push_mut(previous.remove(index));
-                    if index != layer || dst_resized {
-                        binary.remake_bind_group(
-                            device,
-                            &self.camera_buffer,
-                            &self.intersection_texture_view,
-                            layer as u32,
-                        );
-                    }
-                }
-                None => {
-                    self.binaries.push(Binary::new(
-                        device,
-                        &self.camera_buffer,
-                        &self.intersection_texture_view,
-                        &curve.expr,
-                        layer as u32,
-                    ));
-                }
-            }
+        self.binary.prepare(device, curves);
+        if dst_resized {
+            self.binary.remake_bind_group(
+                device,
+                &self.camera_buffer,
+                &self.intersection_texture_view,
+            );
         }
 
         if dst_resized || len_changed {
@@ -173,11 +146,11 @@ impl Curve {
     }
 
     pub(super) fn compute(&self, compute_pass: &mut super::ComputePass, dst_size: (u32, u32)) {
-        for (layer, binary) in self.binaries.iter().enumerate() {
+        for layer in 0..self.layers {
             '_binary: {
                 #[cfg(feature = "profile")]
                 let _ = compute_pass.scope(format!("Curve binary {}", layer));
-                binary.compute(compute_pass, dst_size);
+                self.binary.compute(compute_pass, dst_size, layer);
             }
             '_connect: {
                 #[cfg(feature = "profile")]
@@ -188,10 +161,9 @@ impl Curve {
     }
 
     pub(super) fn render(&self, render_pass: &mut super::RenderPass) {
-        let layers = self.binaries.len() as u32;
         #[cfg(feature = "profile")]
         let _ = render_pass.scope("Curve write");
-        self.write.render(render_pass, layers);
+        self.write.render(render_pass, self.layers as u32);
     }
 }
 

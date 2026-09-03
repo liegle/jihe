@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, mem};
 
 const SHADER_BASE: &str = include_str!("binary.wgsl");
 const FN_START: &str = "\nfn f(x: f32, y: f32) -> f32 { return ";
@@ -9,8 +9,7 @@ const COMPUTE_WORKGROUP_SIZE: (u32, u32, u32) = (16, 16, 1);
 pub(super) struct Binary {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
-    compute_pipeline: wgpu::ComputePipeline,
-    expr: String,
+    compute_pipelines: Vec<(String, wgpu::ComputePipeline)>,
 }
 
 impl Binary {
@@ -18,8 +17,7 @@ impl Binary {
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
         intersection_texture_view: &wgpu::TextureView,
-        expr: &str,
-        layer: u32,
+        curves: &Vec<jihe_shared::Curve>,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
         let bind_group = create_bind_group(
@@ -27,19 +25,46 @@ impl Binary {
             &bind_group_layout,
             camera_buffer,
             intersection_texture_view,
-            layer,
         );
-        let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, expr, layer);
+        let compute_pipelines = curves
+            .iter()
+            .enumerate()
+            .map(|(layer, curve)| {
+                let expr = curve.expr.to_owned();
+                let compute_pipeline =
+                    create_compute_pipeline(device, &bind_group_layout, &expr, layer as u32);
+                (expr, compute_pipeline)
+            })
+            .collect();
         Self {
             bind_group_layout,
             bind_group,
-            compute_pipeline,
-            expr: expr.to_string(),
+            compute_pipelines,
         }
     }
 
-    pub(super) fn expr(&self) -> &str {
-        &self.expr
+    pub(super) fn prepare(&mut self, device: &wgpu::Device, curves: &Vec<jihe_shared::Curve>) {
+        let mut previous = mem::replace(
+            &mut self.compute_pipelines,
+            Vec::with_capacity(curves.len()),
+        );
+        for (layer, curve) in curves.iter().enumerate() {
+            match previous.iter().position(|tup| tup.0 == curve.expr) {
+                Some(index) => {
+                    self.compute_pipelines.push(previous.remove(index));
+                }
+                None => {
+                    let expr = curve.expr.to_owned();
+                    let compute_pipeline = create_compute_pipeline(
+                        device,
+                        &self.bind_group_layout,
+                        &expr,
+                        layer as u32,
+                    );
+                    self.compute_pipelines.push((expr, compute_pipeline));
+                }
+            }
+        }
     }
 
     pub(super) fn remake_bind_group(
@@ -47,19 +72,22 @@ impl Binary {
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
         intersection_texture_view: &wgpu::TextureView,
-        layer: u32,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
             camera_buffer,
             intersection_texture_view,
-            layer,
         )
     }
 
-    pub(super) fn compute(&self, compute_pass: &mut wgpu::ComputePass, dst_size: (u32, u32)) {
-        compute_pass.set_pipeline(&self.compute_pipeline);
+    pub(super) fn compute(
+        &self,
+        compute_pass: &mut wgpu::ComputePass,
+        dst_size: (u32, u32),
+        layer: usize,
+    ) {
+        compute_pass.set_pipeline(&self.compute_pipelines[layer].1);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
         compute_pass.dispatch_workgroups(
             (dst_size.0 + 1).div_ceil(COMPUTE_WORKGROUP_SIZE.0),
@@ -102,10 +130,9 @@ fn create_bind_group(
     bind_group_layout: &wgpu::BindGroupLayout,
     camera_buffer: &wgpu::Buffer,
     intersection_texture_view: &wgpu::TextureView,
-    layer: u32,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some(&format!("Binary {layer} Bind Group")),
+        label: Some(&format!("Binary Bind Group")),
         layout: bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
