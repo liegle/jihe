@@ -53,14 +53,15 @@ impl Connect {
         &self,
         compute_pass: &mut wgpu::ComputePass,
         dst_size: (u32, u32),
-        layer_count: u32,
+        layer: u32,
     ) {
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
+        compute_pass.set_immediates(0, &layer.to_ne_bytes());
         compute_pass.dispatch_workgroups(
             dst_size.0.div_ceil(COMPUTE_WORKGROUP_SIZE.0),
             dst_size.1.div_ceil(COMPUTE_WORKGROUP_SIZE.1),
-            layer_count,
+            1,
         );
     }
 }
@@ -75,7 +76,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 ty: wgpu::BindingType::StorageTexture {
                     access: wgpu::StorageTextureAccess::ReadOnly,
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    view_dimension: wgpu::TextureViewDimension::D2Array,
+                    view_dimension: wgpu::TextureViewDimension::D2,
                 },
                 count: None,
             },
@@ -124,7 +125,7 @@ fn create_compute_pipeline(
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Connect Pipeline Layout"),
         bind_group_layouts: &[Some(bind_group_layout)],
-        immediate_size: 0,
+        immediate_size: 4,
     });
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("Connect Compute Pipeline"),
