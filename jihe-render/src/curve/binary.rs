@@ -9,7 +9,12 @@ const COMPUTE_WORKGROUP_SIZE: (u32, u32, u32) = (16, 16, 1);
 pub(super) struct Binary {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
-    compute_pipelines: Vec<(String, wgpu::ComputePipeline)>,
+    compute_pipelines: Vec<Pipeline>,
+}
+
+struct Pipeline {
+    expr: String,
+    compute_pipeline: wgpu::ComputePipeline,
 }
 
 impl Binary {
@@ -17,7 +22,7 @@ impl Binary {
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
         intersection_texture_view: &wgpu::TextureView,
-        curves: &Vec<jihe_shared::Curve>,
+        curves: &[jihe_shared::Curve],
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
         let bind_group = create_bind_group(
@@ -29,11 +34,14 @@ impl Binary {
         let compute_pipelines = curves
             .iter()
             .enumerate()
-            .map(|(layer, curve)| {
+            .map(|(index, curve)| {
                 let expr = curve.expr.to_owned();
                 let compute_pipeline =
-                    create_compute_pipeline(device, &bind_group_layout, &expr, layer as u32);
-                (expr, compute_pipeline)
+                    create_compute_pipeline(device, &bind_group_layout, &expr, index);
+                Pipeline {
+                    expr,
+                    compute_pipeline,
+                }
             })
             .collect();
         Self {
@@ -43,25 +51,24 @@ impl Binary {
         }
     }
 
-    pub(super) fn prepare(&mut self, device: &wgpu::Device, curves: &Vec<jihe_shared::Curve>) {
+    pub(super) fn prepare(&mut self, device: &wgpu::Device, curves: &[jihe_shared::Curve]) {
         let mut previous = mem::replace(
             &mut self.compute_pipelines,
             Vec::with_capacity(curves.len()),
         );
-        for (layer, curve) in curves.iter().enumerate() {
-            match previous.iter().position(|tup| tup.0 == curve.expr) {
+        for (index, curve) in curves.iter().enumerate() {
+            match previous.iter().position(|p| p.expr == curve.expr) {
                 Some(index) => {
                     self.compute_pipelines.push(previous.remove(index));
                 }
                 None => {
                     let expr = curve.expr.to_owned();
-                    let compute_pipeline = create_compute_pipeline(
-                        device,
-                        &self.bind_group_layout,
-                        &expr,
-                        layer as u32,
-                    );
-                    self.compute_pipelines.push((expr, compute_pipeline));
+                    let compute_pipeline =
+                        create_compute_pipeline(device, &self.bind_group_layout, &expr, index);
+                    self.compute_pipelines.push(Pipeline {
+                        expr,
+                        compute_pipeline,
+                    });
                 }
             }
         }
@@ -85,9 +92,9 @@ impl Binary {
         &self,
         compute_pass: &mut wgpu::ComputePass,
         dst_size: (u32, u32),
-        layer: usize,
+        index: usize,
     ) {
-        compute_pass.set_pipeline(&self.compute_pipelines[layer].1);
+        compute_pass.set_pipeline(&self.compute_pipelines[index].compute_pipeline);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
         compute_pass.dispatch_workgroups(
             (dst_size.0 + 1).div_ceil(COMPUTE_WORKGROUP_SIZE.0),
@@ -141,7 +148,7 @@ fn create_bind_group(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(&intersection_texture_view),
+                resource: wgpu::BindingResource::TextureView(intersection_texture_view),
             },
         ],
     })
@@ -152,20 +159,20 @@ fn create_compute_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
     expr: &str,
-    layer: u32,
+    index: usize,
 ) -> wgpu::ComputePipeline {
     let source = String::from_iter([SHADER_BASE, FN_START, expr, FN_END]);
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(&format!("Binary {layer} Shader")),
+        label: Some(&format!("Binary {index} Shader")),
         source: wgpu::ShaderSource::Wgsl(Cow::Owned(source)),
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some(&format!("Binary {layer} Pipeline Layout")),
+        label: Some(&format!("Binary {index} Pipeline Layout")),
         bind_group_layouts: &[Some(bind_group_layout)],
         immediate_size: 0,
     });
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some(&format!("Binary {layer} Compute Pipeline")),
+        label: Some(&format!("Binary {index} Compute Pipeline")),
         layout: Some(&pipeline_layout),
         module: &shader,
         entry_point: COMPUTE_ENTRY,

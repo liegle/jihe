@@ -28,7 +28,7 @@ pub(super) struct Point {
 impl Point {
     pub(super) fn new(
         device: &wgpu::Device,
-        points: &Vec<jihe_shared::Point>,
+        points: &[jihe_shared::Point],
         dst_format: wgpu::TextureFormat,
     ) -> Self {
         let size_buffer = create_size_buffer(device);
@@ -56,7 +56,7 @@ impl Point {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        points: &Vec<jihe_shared::Point>,
+        points: &[jihe_shared::Point],
         camera: &Camera,
         dst_size: (u32, u32),
     ) {

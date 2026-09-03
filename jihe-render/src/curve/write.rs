@@ -50,10 +50,10 @@ impl Write {
         );
     }
 
-    pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass, layer_count: u32) {
+    pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass, len: usize) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, Some(&self.bind_group), &[]);
-        render_pass.draw(0..4, 0..layer_count);
+        render_pass.draw(0..4, 0..(len as u32));
     }
 }
 
