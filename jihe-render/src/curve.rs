@@ -14,8 +14,8 @@ mod write;
 
 pub(super) struct Curve {
     // Curve intersection with left and top line segment of each pixel
-    // (normalized on the border, x for top or z=1 if no intersection,
-    // y for left or w=1 if no intersection)
+    // (normalized on the border, x for top or y=1 if no intersection,
+    // z for left or w=1 if no intersection)
     intersection_texture_view: wgpu::TextureView,
     // Line segments in each pixel connected from intersections
     // (line ends in normalized pixel inner space)

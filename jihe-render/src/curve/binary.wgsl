@@ -20,14 +20,14 @@ var intersection_texture: texture_storage_2d<rgba8unorm, write>;
 fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     let half_size = (textureDimensions(intersection_texture) - vec2<u32>(1, 1)) / 2;
     let lrtb = vec4<f32>(
-        (f32(id.x) - f32(half_size.x)) * camera.scale + camera.pos.x,
-        (f32(id.x) + 1 - f32(half_size.x)) * camera.scale + camera.pos.x,
-        -(f32(id.y) - f32(half_size.y)) * camera.scale + camera.pos.y,
-        -(f32(id.y) + 1 - f32(half_size.y)) * camera.scale + camera.pos.y,
-    );
+        (f32(id.x) - f32(half_size.x)),
+        (f32(id.x) + 1 - f32(half_size.x)),
+        -(f32(id.y) - f32(half_size.y)),
+        -(f32(id.y) + 1 - f32(half_size.y)),
+    ) * camera.scale + camera.pos.xxyy;
     let t = binary(vec2<f32>(lrtb.x, lrtb.z), vec2<f32>(lrtb.y, lrtb.z));
     let l = binary(vec2<f32>(lrtb.x, lrtb.z), vec2<f32>(lrtb.x, lrtb.w));
-    textureStore(intersection_texture, id.xy, vec4<f32>(t.x, l.x, t.y, l.y));
+    textureStore(intersection_texture, id.xy, vec4<f32>(t.x, t.y, l.x, l.y));
 }
 
 fn binary(pa: vec2<f32>, pb: vec2<f32>) -> vec2<f32> {
