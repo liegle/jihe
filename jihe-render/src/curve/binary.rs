@@ -17,7 +17,7 @@ impl Binary {
     pub(super) fn new(
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
-        intersection_texture_view: &wgpu::TextureView,
+        intersection_texture: &wgpu::Texture,
         expr: &str,
         layer: u32,
     ) -> Self {
@@ -26,7 +26,7 @@ impl Binary {
             device,
             &bind_group_layout,
             camera_buffer,
-            intersection_texture_view,
+            intersection_texture,
             layer,
         );
         let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, expr, layer);
@@ -46,14 +46,14 @@ impl Binary {
         &mut self,
         device: &wgpu::Device,
         camera_buffer: &wgpu::Buffer,
-        intersection_texture_view: &wgpu::TextureView,
+        intersection_texture: &wgpu::Texture,
         layer: u32,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
             camera_buffer,
-            intersection_texture_view,
+            intersection_texture,
             layer,
         )
     }
@@ -101,9 +101,20 @@ fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
     camera_buffer: &wgpu::Buffer,
-    intersection_texture_view: &wgpu::TextureView,
+    intersection_texture: &wgpu::Texture,
     layer: u32,
 ) -> wgpu::BindGroup {
+    let intersection_texture_view = intersection_texture.create_view(&wgpu::TextureViewDescriptor {
+        label: Some(&format!("Binary {layer} Texture View")),
+        format: Some(intersection_texture.format()),
+        dimension: Some(wgpu::TextureViewDimension::D2),
+        usage: Some(wgpu::TextureUsages::STORAGE_BINDING),
+        aspect: wgpu::TextureAspect::All,
+        base_mip_level: 0,
+        mip_level_count: None,
+        base_array_layer: layer,
+        array_layer_count: Some(1),
+    });
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some(&format!("Binary {layer} Bind Group")),
         layout: bind_group_layout,

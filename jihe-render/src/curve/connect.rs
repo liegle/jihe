@@ -53,13 +53,14 @@ impl Connect {
         &self,
         compute_pass: &mut wgpu::ComputePass,
         dst_size: (u32, u32),
+        layer_count: u32,
     ) {
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
         compute_pass.dispatch_workgroups(
             dst_size.0.div_ceil(COMPUTE_WORKGROUP_SIZE.0),
             dst_size.1.div_ceil(COMPUTE_WORKGROUP_SIZE.1),
-            1,
+            layer_count,
         );
     }
 }
@@ -74,7 +75,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 ty: wgpu::BindingType::StorageTexture {
                     access: wgpu::StorageTextureAccess::ReadOnly,
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    view_dimension: wgpu::TextureViewDimension::D2,
+                    view_dimension: wgpu::TextureViewDimension::D2Array,
                 },
                 count: None,
             },
@@ -84,7 +85,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 ty: wgpu::BindingType::StorageTexture {
                     access: wgpu::StorageTextureAccess::WriteOnly,
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    view_dimension: wgpu::TextureViewDimension::D2,
+                    view_dimension: wgpu::TextureViewDimension::D3,
                 },
                 count: None,
             },

@@ -75,16 +75,12 @@ where
              _ => {
                  wgpu::Features::empty()
              }
-        } | wgpu::Features::IMMEDIATES;
-        let required_limits = wgpu::Limits {
-            max_immediate_size: 4,
-            ..Default::default()
         };
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Device"),
                 required_features,
-                required_limits,
+                required_limits: Default::default(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,
