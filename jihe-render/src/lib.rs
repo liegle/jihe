@@ -190,7 +190,7 @@ where
                 let mut encoder = self.profiler.scope("Encode", &mut encoder);
                 '_compute_pass: {
                     let mut compute_pass = create_compute_pass(&mut encoder);
-                    self.curve.compute(&mut compute_pass, dst_size);
+                    self.curve.compute(&mut compute_pass);
                 }
                 '_render_pass: {
                     let mut render_pass =

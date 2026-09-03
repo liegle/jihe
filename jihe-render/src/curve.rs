@@ -92,7 +92,7 @@ impl Curve {
 
         if dst_resized || len_changed {
             self.segment_texture_view.texture().destroy();
-            let segment_texture = create_segment_texture(device, dst_size, curves.len());
+            let segment_texture = create_segment_texture(device, dst_size, self.len);
             self.segment_texture_view =
                 segment_texture.create_view(&SEGMENT_TEXTURE_VIEW_DESCRIPTOR);
         }
@@ -100,11 +100,10 @@ impl Curve {
         //\\ Remake buffer
         if len_changed {
             self.curves_buffer.destroy();
-            self.curves_buffer = create_curves_buffer(device, curves.len());
+            self.curves_buffer = create_curves_buffer(device, self.len);
         }
 
         //\\ Remake bind group
-        // TODO: need test in the future when dynamic scene is implemented
         self.binary.prepare(device, curves);
         if dst_resized {
             self.binary.remake_bind_group(
@@ -148,17 +147,17 @@ impl Curve {
         );
     }
 
-    pub(super) fn compute(&self, compute_pass: &mut super::ComputePass, dst_size: (u32, u32)) {
+    pub(super) fn compute(&self, compute_pass: &mut super::ComputePass) {
         for index in 0..self.len {
             '_binary: {
                 #[cfg(feature = "profile")]
                 let _ = compute_pass.scope(format!("Curve binary {}", index));
-                self.binary.compute(compute_pass, dst_size, index);
+                self.binary.compute(compute_pass, self.dst_size, index);
             }
             '_connect: {
                 #[cfg(feature = "profile")]
                 let _ = compute_pass.scope(format!("Curve connect {}", index));
-                self.connect.compute(compute_pass, dst_size, index);
+                self.connect.compute(compute_pass, self.dst_size, index);
             }
         }
     }

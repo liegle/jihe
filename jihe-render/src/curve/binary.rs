@@ -33,11 +33,9 @@ impl Binary {
         );
         let compute_pipelines = curves
             .iter()
-            .enumerate()
-            .map(|(index, curve)| {
+            .map(|curve| {
                 let expr = curve.expr.to_owned();
-                let compute_pipeline =
-                    create_compute_pipeline(device, &bind_group_layout, &expr, index);
+                let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, &expr);
                 Pipeline {
                     expr,
                     compute_pipeline,
@@ -52,25 +50,25 @@ impl Binary {
     }
 
     pub(super) fn prepare(&mut self, device: &wgpu::Device, curves: &[jihe_shared::Curve]) {
+        // TODO: need test in the future when dynamic scene is implemented
         let mut previous = mem::replace(
             &mut self.compute_pipelines,
             Vec::with_capacity(curves.len()),
         );
-        for (index, curve) in curves.iter().enumerate() {
-            match previous.iter().position(|p| p.expr == curve.expr) {
-                Some(index) => {
-                    self.compute_pipelines.push(previous.remove(index));
-                }
-                None => {
-                    let expr = curve.expr.to_owned();
-                    let compute_pipeline =
-                        create_compute_pipeline(device, &self.bind_group_layout, &expr, index);
-                    self.compute_pipelines.push(Pipeline {
-                        expr,
-                        compute_pipeline,
-                    });
-                }
-            }
+        for curve in curves.iter() {
+            self.compute_pipelines
+                .push(match previous.iter().position(|p| p.expr == curve.expr) {
+                    Some(index) => previous.remove(index),
+                    None => {
+                        let expr = curve.expr.to_owned();
+                        let compute_pipeline =
+                            create_compute_pipeline(device, &self.bind_group_layout, &expr);
+                        Pipeline {
+                            expr,
+                            compute_pipeline,
+                        }
+                    }
+                });
         }
     }
 
@@ -159,20 +157,19 @@ fn create_compute_pipeline(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
     expr: &str,
-    index: usize,
 ) -> wgpu::ComputePipeline {
     let source = String::from_iter([SHADER_BASE, FN_START, expr, FN_END]);
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(&format!("Binary {index} Shader")),
+        label: Some(&format!("Binary \"{expr}\" Shader")),
         source: wgpu::ShaderSource::Wgsl(Cow::Owned(source)),
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some(&format!("Binary {index} Pipeline Layout")),
+        label: Some(&format!("Binary \"{expr}\" Pipeline Layout")),
         bind_group_layouts: &[Some(bind_group_layout)],
         immediate_size: 0,
     });
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some(&format!("Binary {index} Compute Pipeline")),
+        label: Some(&format!("Binary \"{expr}\" Compute Pipeline")),
         layout: Some(&pipeline_layout),
         module: &shader,
         entry_point: COMPUTE_ENTRY,
