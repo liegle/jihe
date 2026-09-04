@@ -28,8 +28,8 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     );
 
     var pq = vec4<f32>(0, 0, 0, 0);
-    for (var i = 0u; i < 3; i += 1) {
-        for (var j = i + 1; j < 4; j += 1) {
+    for (var i = 0u; i < 3; i++) {
+        for (var j = i + 1; j < 4; j++) {
             pq = select(
                 pq,
                 vec4<f32>(points[i].xy, points[j].xy),

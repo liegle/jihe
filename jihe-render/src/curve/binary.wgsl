@@ -42,7 +42,7 @@ fn binary(pa: vec2<f32>, pb: vec2<f32>) -> vec2<f32> {
     var pt: vec2<f32>;
     var ft: f32;
 
-    for (var i = 0u; i < BINARY_ITERATION; i += 1) {
+    for (var i = 0u; i < BINARY_ITERATION; i++) {
         t = (range.x + range.y) / 2;
         pt = mix(pa, pb, t);
         ft = sign(f(pt.x, pt.y));

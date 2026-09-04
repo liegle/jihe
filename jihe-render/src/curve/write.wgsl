@@ -68,8 +68,8 @@ fn dist2(here: vec2<f32>, corner: vec2<f32>, pq: vec4<f32>) -> f32 {
     let q_a = here - q;
 
     let p_q_2 = dot(p_q, p_q);
-    let a_p_q = dot(here - p, -p_q);
-    let a_q_p = dot(here - q, p_q);
+    let a_p_q = dot(p_a, -p_q);
+    let a_q_p = dot(q_a, p_q);
 
     let crozz = p_q.x * p_a.y - p_q.y * p_a.x;
     let height2 = crozz * crozz / p_q_2;

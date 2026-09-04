@@ -86,7 +86,7 @@ impl Point {
 
     pub(super) fn render(&self, render_pass: &mut super::RenderPass) {
         #[cfg(feature = "profile")]
-        let _ = render_pass.scope("Point render");
+        let _ = render_pass.scope("Point");
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_vertex_buffer(0, self.points_buffer.slice(..));
         render_pass.set_bind_group(0, &self.bind_group, &[]);

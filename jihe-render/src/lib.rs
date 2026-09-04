@@ -68,19 +68,30 @@ where
                 force_fallback_adapter: false,
             })
             .await?;
+        log::info!("Adapter info: {:?}", &adapter.get_info());
 
         let required_features = cfg_select! {
              feature = "profile" => {
-                 adapter.features() & wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES
+                 wgpu::Features::IMMEDIATES | wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES
              }
              _ => {
-                 wgpu::Features::empty()
+                 wgpu::Features::IMMEDIATES
              }
-        } | wgpu::Features::IMMEDIATES;
+        };
+        log::info!("Required features: {required_features:?}");
+        if !adapter.features().contains(required_features) {
+            return Err(CreateRendererError::RequiedFeatureOrLimitNotMet);
+        }
+
         let required_limits = wgpu::Limits {
             max_immediate_size: 4,
             ..Default::default()
         };
+        log::info!("Required limits: {required_limits:?}");
+        if !required_limits.check_limits(&adapter.limits()) {
+            return Err(CreateRendererError::RequiedFeatureOrLimitNotMet);
+        }
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Device"),
@@ -153,6 +164,7 @@ where
         self.config.width = size.0;
         self.config.height = size.1;
         self.surface.configure(&self.device, &self.config);
+        log::debug!("Resize: {size:?}");
     }
 
     pub fn draw(&mut self) {
@@ -329,6 +341,8 @@ pub enum CreateRendererError {
     CreateSurface(#[from] wgpu::CreateSurfaceError),
     #[error("Failed to request adapter because:\n{0}")]
     RequestAdapter(#[from] wgpu::RequestAdapterError),
+    #[error("Required feature or limit not met")]
+    RequiedFeatureOrLimitNotMet,
     #[error("Failed to request device because:\n{0}")]
     RequestDevice(#[from] wgpu::RequestDeviceError),
 }
