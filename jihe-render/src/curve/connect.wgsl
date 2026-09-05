@@ -58,8 +58,8 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     }
 
     let span = u32(ceil(curves[layer.value].thickness));
-    for (var i = id.x - span; i < id.x + span; i++) {
-        for (var j = id.y - span; j < id.y + span; j++) {
+    for (var i = id.x - span; i <= id.x + span; i++) {
+        for (var j = id.y - span; j <= id.y + span; j++) {
             textureStore(mark_texture, vec2<u32>(i, j), vec4<u32>(1, 0, 0, 0));
         }
     }

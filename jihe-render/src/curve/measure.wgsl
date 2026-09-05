@@ -35,7 +35,7 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     }
 
     let curve = curves[layer.value];
-    let here = vec2<f32>(id.xy);
+    let here = vec2<f32>(id.xy) + vec2<f32>(0.5, 0.5);
     let thickness2 = curve.thickness * curve.thickness;
     let span = u32(ceil(curve.thickness));
     var least_dist2 = thickness2;
