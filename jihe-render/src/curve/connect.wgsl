@@ -2,13 +2,26 @@ struct Layer {
     value: u32,
 }
 
+struct Curve {
+    thickness: f32,
+    color: vec4<f32>,
+}
+
 @group(0)
 @binding(0)
 var intersection_texture: texture_storage_2d<rgba8unorm, read>;
 
 @group(0)
 @binding(1)
-var segment_texture: texture_storage_3d<rgba8unorm, write>;
+var segment_texture: texture_storage_2d<rgba8unorm, write>;
+
+@group(0)
+@binding(2)
+var mark_texture: texture_storage_2d<r32uint, write>;
+
+@group(0)
+@binding(3)
+var<storage, read> curves: array<Curve>;
 
 var<immediate> layer: Layer;
 
@@ -27,7 +40,7 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
         vec3<f32>(vec2<f32>(f32(b.x), 1), b.y),
     );
 
-    var pq = vec4<f32>(0, 0, 0, 0);
+    var pq = vec4<f32>(0.5, 0.5, 0.5, 0.5);
     for (var i = 0u; i < 3; i++) {
         for (var j = i + 1; j < 4; j++) {
             pq = select(
@@ -37,5 +50,17 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
             );
         }
     }
-    textureStore(segment_texture, vec3<u32>(id.xy, layer.value), pq);
+    textureStore(segment_texture, id.xy, pq);
+
+    if all(pq == vec4<f32>(0.5, 0.5, 0.5, 0.5)) {
+        textureStore(mark_texture, id.xy, vec4<u32>(0, 0, 0, 0));
+        return;
+    }
+
+    let span = u32(ceil(curves[layer.value].thickness));
+    for (var i = id.x - span; i < id.x + span; i++) {
+        for (var j = id.y - span; j < id.y + span; j++) {
+            textureStore(mark_texture, vec2<u32>(i, j), vec4<u32>(1, 0, 0, 0));
+        }
+    }
 }

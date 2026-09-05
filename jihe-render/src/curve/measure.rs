@@ -1,34 +1,35 @@
+
 use std::borrow::Cow;
 
-const SHADER: &str = include_str!("connect.wgsl");
+const SHADER: &str = include_str!("measure.wgsl");
 const SHADER_MODULE_DESCRIPTOR: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: Some("Connect Shader"),
+    label: Some("Measure Shader"),
     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER)),
 };
 const COMPUTE_ENTRY: Option<&str> = Some("cs");
 const COMPUTE_WORKGROUP_SIZE: (u32, u32, u32) = (16, 16, 1);
 
-pub(super) struct Connect {
+pub(super) struct Measure {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     compute_pipeline: wgpu::ComputePipeline,
 }
 
-impl Connect {
+impl Measure {
     pub(super) fn new(
         device: &wgpu::Device,
-        intersection_texture_view: &wgpu::TextureView,
         segment_texture_view: &wgpu::TextureView,
         mark_texture_view: &wgpu::TextureView,
+        curve_texture_view: &wgpu::TextureView,
         curves_buffer: &wgpu::Buffer,
     ) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
         let bind_group = create_bind_group(
             device,
             &bind_group_layout,
-            intersection_texture_view,
             segment_texture_view,
             mark_texture_view,
+            curve_texture_view,
             curves_buffer,
         );
         let compute_pipeline = create_compute_pipeline(device, &bind_group_layout);
@@ -42,17 +43,17 @@ impl Connect {
     pub(super) fn remake_bind_group(
         &mut self,
         device: &wgpu::Device,
-        intersection_texture_view: &wgpu::TextureView,
         segment_texture_view: &wgpu::TextureView,
         mark_texture_view: &wgpu::TextureView,
+        curve_texture_view: &wgpu::TextureView,
         curves_buffer: &wgpu::Buffer,
     ) {
         self.bind_group = create_bind_group(
             device,
             &self.bind_group_layout,
-            intersection_texture_view,
             segment_texture_view,
             mark_texture_view,
+            curve_texture_view,
             curves_buffer,
         );
     }
@@ -76,7 +77,7 @@ impl Connect {
 
 const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
     wgpu::BindGroupLayoutDescriptor {
-        label: Some("Connect Bind Group Layout"),
+        label: Some("Measure Bind Group Layout"),
         entries: &[
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
@@ -92,8 +93,8 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 binding: 1,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
-                    access: wgpu::StorageTextureAccess::WriteOnly,
-                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    access: wgpu::StorageTextureAccess::ReadOnly,
+                    format: wgpu::TextureFormat::R32Uint,
                     view_dimension: wgpu::TextureViewDimension::D2,
                 },
                 count: None,
@@ -103,8 +104,8 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
                     access: wgpu::StorageTextureAccess::WriteOnly,
-                    format: wgpu::TextureFormat::R32Uint,
-                    view_dimension: wgpu::TextureViewDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    view_dimension: wgpu::TextureViewDimension::D3,
                 },
                 count: None,
             },
@@ -125,26 +126,26 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
 fn create_bind_group(
     device: &wgpu::Device,
     bind_group_layout: &wgpu::BindGroupLayout,
-    intersection_texture_view: &wgpu::TextureView,
     segment_texture_view: &wgpu::TextureView,
     mark_texture_view: &wgpu::TextureView,
+    curve_texture_view: &wgpu::TextureView,
     curves_buffer: &wgpu::Buffer,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Connect Bind Group"),
+        label: Some("Measure Bind Group"),
         layout: bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::TextureView(intersection_texture_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
                 resource: wgpu::BindingResource::TextureView(segment_texture_view),
             },
             wgpu::BindGroupEntry {
-                binding: 2,
+                binding: 1,
                 resource: wgpu::BindingResource::TextureView(mark_texture_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(curve_texture_view),
             },
             wgpu::BindGroupEntry {
                 binding: 3,
@@ -161,12 +162,12 @@ fn create_compute_pipeline(
 ) -> wgpu::ComputePipeline {
     let shader = device.create_shader_module(SHADER_MODULE_DESCRIPTOR);
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Connect Pipeline Layout"),
+        label: Some("Measure Pipeline Layout"),
         bind_group_layouts: &[Some(bind_group_layout)],
         immediate_size: 4,
     });
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("Connect Compute Pipeline"),
+        label: Some("Measure Compute Pipeline"),
         layout: Some(&pipeline_layout),
         module: &shader,
         entry_point: COMPUTE_ENTRY,
