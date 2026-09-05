@@ -53,7 +53,6 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(segment_texture, id.xy, pq);
 
     if all(pq == vec4<f32>(0.5, 0.5, 0.5, 0.5)) {
-        textureStore(mark_texture, id.xy, vec4<u32>(0, 0, 0, 0));
         return;
     }
 

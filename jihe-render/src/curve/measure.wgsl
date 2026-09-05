@@ -13,7 +13,7 @@ var segment_texture: texture_storage_2d<rgba8unorm, read>;
 
 @group(0)
 @binding(1)
-var mark_texture: texture_storage_2d<r32uint, read>;
+var mark_texture: texture_storage_2d<r32uint, read_write>;
 
 @group(0)
 @binding(2)
@@ -29,6 +29,7 @@ var<immediate> layer: Layer;
 @workgroup_size(16, 16, 1)
 fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
     let marked = textureLoad(mark_texture, id.xy).x;
+    textureStore(mark_texture, id.xy, vec4<u32>(0, 0, 0, 0));
     if marked != 1 {
         textureStore(curve_texture, vec3<u32>(id.xy, layer.value), vec4<f32>(0, 0, 0, 0));
         return;

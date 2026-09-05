@@ -93,7 +93,7 @@ const BIND_GROUP_LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor =
                 binding: 1,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
-                    access: wgpu::StorageTextureAccess::ReadOnly,
+                    access: wgpu::StorageTextureAccess::ReadWrite,
                     format: wgpu::TextureFormat::R32Uint,
                     view_dimension: wgpu::TextureViewDimension::D2,
                 },
