@@ -36,6 +36,6 @@ fn vs(in: Point) -> VertexOut {
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
-    let alpha = in.color.a * saturate(3 * (1 - distance(in.pos, in.position.xy) / in.size));
+    let alpha = in.color.a * saturate(in.size - distance(in.pos, in.position.xy));
     return vec4<f32>(in.color.rgb * alpha, alpha);
 }

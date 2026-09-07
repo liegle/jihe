@@ -54,7 +54,7 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
         textureStore(curve_texture, vec3<u32>(id.xy, layer.value), vec4<f32>(0, 0, 0, 0));
         return;
     }
-    let alpha = curve.color.a * saturate(1.5 * (1 - sqrt(least_dist2 / thickness2)));
+    let alpha = curve.color.a * saturate(curve.thickness - sqrt(least_dist2));
     textureStore(curve_texture, vec3<u32>(id.xy, layer.value), vec4<f32>(curve.color.rgb * alpha, alpha));
 }
 
