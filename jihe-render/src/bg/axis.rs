@@ -59,7 +59,9 @@ impl Axis {
         queue.write_buffer(&self.uniform_buffer, 0, &color.as_uniform_bytes());
     }
 
-    pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass) {
+    pub(super) fn render(&self, render_pass: &mut crate::RenderPass) {
+        #[cfg(feature = "profile")]
+        let mut render_pass = render_pass.scope("Axis");
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_bind_group(0, &self.bind_group, &[]);

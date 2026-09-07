@@ -38,7 +38,9 @@ impl Write {
         self.bind_group = create_bind_group(device, &self.bind_group_layout, curve_texture_view);
     }
 
-    pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass, len: usize) {
+    pub(super) fn render(&self, render_pass: &mut crate::RenderPass, len: usize) {
+        #[cfg(feature = "profile")]
+        let mut render_pass = render_pass.scope("Curve write");
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, Some(&self.bind_group), &[]);
         render_pass.draw(0..4, 0..(len as u32));

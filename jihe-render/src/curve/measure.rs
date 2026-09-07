@@ -1,4 +1,3 @@
-
 use std::borrow::Cow;
 
 const SHADER: &str = include_str!("measure.wgsl");
@@ -60,10 +59,12 @@ impl Measure {
 
     pub(super) fn compute(
         &self,
-        compute_pass: &mut wgpu::ComputePass,
+        compute_pass: &mut crate::ComputePass,
         dst_size: (u32, u32),
         index: usize,
     ) {
+        #[cfg(feature = "profile")]
+        let mut compute_pass = compute_pass.scope(format!("Curve measure {}", index));
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
         compute_pass.set_immediates(0, &(index as u32).to_ne_bytes());

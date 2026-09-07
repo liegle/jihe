@@ -87,16 +87,8 @@ impl Bg {
     }
 
     pub(super) fn render(&self, render_pass: &mut super::RenderPass) {
-        {
-            #[cfg(feature = "profile")]
-            let _ = render_pass.scope("Axis");
-            self.axis.render(render_pass);
-        }
-        {
-            #[cfg(feature = "profile")]
-            let _ = render_pass.scope("Grid");
-            self.grid.render(render_pass);
-        }
+        self.axis.render(render_pass);
+        self.grid.render(render_pass);
     }
 }
 

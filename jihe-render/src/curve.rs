@@ -179,27 +179,13 @@ impl Curve {
 
     pub(super) fn compute(&self, compute_pass: &mut super::ComputePass) {
         for index in 0..self.len {
-            '_binary: {
-                #[cfg(feature = "profile")]
-                let _ = compute_pass.scope(format!("Curve binary {}", index));
-                self.binary.compute(compute_pass, self.dst_size, index);
-            }
-            '_connect: {
-                #[cfg(feature = "profile")]
-                let _ = compute_pass.scope(format!("Curve connect {}", index));
-                self.connect.compute(compute_pass, self.dst_size, index);
-            }
-            '_measure: {
-                #[cfg(feature = "profile")]
-                let _ = compute_pass.scope(format!("Curve measure {}", index));
-                self.measure.compute(compute_pass, self.dst_size, index);
-            }
+            self.binary.compute(compute_pass, self.dst_size, index);
+            self.connect.compute(compute_pass, self.dst_size, index);
+            self.measure.compute(compute_pass, self.dst_size, index);
         }
     }
 
     pub(super) fn render(&self, render_pass: &mut super::RenderPass) {
-        #[cfg(feature = "profile")]
-        let _ = render_pass.scope("Curve write");
         self.write.render(render_pass, self.len);
     }
 }

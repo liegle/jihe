@@ -85,7 +85,7 @@ impl Grid {
         queue.write_buffer(&self.color_buffer, 0, &color.as_uniform_bytes());
     }
 
-    pub(super) fn render(&self, render_pass: &mut wgpu::RenderPass) {
+    pub(super) fn render(&self, render_pass: &mut crate::RenderPass) {
         self.hori.render(render_pass);
         self.vert.render(render_pass);
     }
@@ -143,7 +143,9 @@ impl Lines {
         );
     }
 
-    fn render(&self, render_pass: &mut wgpu::RenderPass) {
+    fn render(&self, render_pass: &mut crate::RenderPass) {
+        #[cfg(feature = "profile")]
+        let mut render_pass = render_pass.scope("Grid");
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..2, 0..self.count);
