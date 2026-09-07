@@ -5,9 +5,6 @@ use std::{
 
 use crate::{bg::Bg, curve::Curve, point::Point};
 
-#[cfg(feature = "profile")]
-use crate::utils::log_profiler_recursive;
-
 pub use scene::{Camera, Scene};
 
 mod bg;
@@ -345,4 +342,27 @@ pub enum CreateRendererError {
     RequiedFeatureOrLimitNotMet,
     #[error("Failed to request device because:\n{0}")]
     RequestDevice(#[from] wgpu::RequestDeviceError),
+}
+
+#[cfg(feature = "profile")]
+fn log_profiler_recursive(
+    results: &[wgpu_profiler::GpuTimerQueryResult],
+    indent: usize,
+) {
+    for scope in results {
+        log::info!(
+            "{:>width$} {:.4}ms - {}",
+            "*",
+            match &scope.time {
+                Some(time) => (time.end - time.start) * 1000.,
+                None => f64::NAN,
+            },
+            scope.label,
+            width = (indent + 1) * 4,
+        );
+
+        if !scope.nested_queries.is_empty() {
+            log_profiler_recursive(&scope.nested_queries, indent + 1);
+        }
+    }
 }
