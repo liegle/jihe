@@ -1,18 +1,19 @@
 [workspace]
-resolver = "3"
-members = [ "jihe-*" ]
+resolver      = "3"
+members       = [ "jihe-*" ]
 
 [workspace.package]
-version = "0.1.0"
-edition = "2024"
+version       = "0.1.0"
+edition       = "2024"
 
 [workspace.dependencies]
-encase = "0.12"
-env_logger = "0.11"
-glam = { version = "0.33", features = ["encase"]}
-log = "0.4"
-thiserror = "2.0"
-tokio = { version = "1.52", features = ["macros", "rt", "sync", "time"] }
-wgpu = "29.0"
-wgpu-profiler = "0.27"
-winit = "0.30"
+chrono        = { version = "0.4", }
+encase        = { version = "0.12", }
+env_logger    = { version = "0.11", }
+glam          = { version = "0.33", features = ["encase"], }
+log           = { version = "0.4", }
+thiserror     = { version = "2.0", }
+tokio         = { version = "1.52", features = ["macros", "rt", "sync", "time"], }
+wgpu          = { version = "29.0", }
+wgpu-profiler = { version = "0.27", }
+winit         = { version = "0.30", }

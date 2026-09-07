@@ -1,16 +1,14 @@
-// TODO: add logs
+use std::{io::Write, mem, panic, sync::Arc};
 
-use std::{mem, panic, sync::Arc};
-
-use crate::{config::Config, memory::Memory, render::Render};
+use crate::{config::Config, state::State, render::Render};
 
 mod config;
-mod memory;
+mod state;
 mod render;
 mod schedule;
 
 fn main() {
-    env_logger::init();
+    env_logger::builder().format(log_format).init();
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
     let mut app = App::Uninitialized;
@@ -20,9 +18,9 @@ fn main() {
 enum App {
     Uninitialized,
     Ready {
-        memory: Memory,
+        state: State,
         window: Arc<winit::window::Window>,
-        renderer: Render,
+        render: Render,
     },
 }
 
@@ -36,7 +34,7 @@ impl winit::application::ApplicationHandler for App {
         let config = Config::default();
         let content = jihe_shared::Content::example();
         let scene = jihe_render::Scene::new(content);
-        let memory = Memory::new(config, scene.clone());
+        let state = State::new(config, scene.clone());
 
         let window = match event_loop.create_window(Default::default()) {
             Ok(w) => w,
@@ -49,24 +47,24 @@ impl winit::application::ApplicationHandler for App {
         log::info!("Created window");
         let window = Arc::new(window);
 
-        let renderer = match Render::new(
+        let render = match Render::new(
             scene,
             window.clone(),
-            memory.config.render_per_sec,
-            memory.config.resize_per_sec,
+            state.config.render_per_sec,
+            state.config.resize_per_sec,
         ) {
             Some(r) => r,
             None => {
-                log::error!("Can't create renderer");
+                log::error!("Can't create render");
                 return;
             }
         };
-        log::info!("Created renderer");
+        log::info!("Created render");
 
         *self = App::Ready {
-            memory,
+            state,
             window,
-            renderer,
+            render,
         };
     }
 
@@ -77,9 +75,9 @@ impl winit::application::ApplicationHandler for App {
         event: winit::event::WindowEvent,
     ) {
         let App::Ready {
-            memory,
+            state,
             window,
-            renderer,
+            render,
         } = self
         else {
             return;
@@ -89,16 +87,16 @@ impl winit::application::ApplicationHandler for App {
             WindowEvent::CloseRequested => {
                 log::info!("Exit");
                 event_loop.exit();
-                renderer.exit()
+                render.exit()
             }
-            WindowEvent::RedrawRequested => renderer.draw(),
-            WindowEvent::Resized(size) => renderer.resize(size.into()),
+            WindowEvent::RedrawRequested => render.draw(),
+            WindowEvent::Resized(size) => render.resize(size.into()),
             WindowEvent::KeyboardInput {
                 device_id: _,
                 event,
                 is_synthetic: _,
             } => {
-                if memory.handle_keyboard_input(&event) {
+                if state.handle_keyboard_input(&event) {
                     window.request_redraw();
                 }
             }
@@ -106,17 +104,17 @@ impl winit::application::ApplicationHandler for App {
                 device_id: _,
                 position,
             } => {
-                if memory.handle_cursor_moved(&position) {
+                if state.handle_cursor_moved(&position) {
                     window.request_redraw();
                 }
             }
             WindowEvent::MouseInput {
                 device_id: _,
-                state,
+                state: elem_state,
                 button,
             } => {
                 use winit::window::{Cursor, CursorIcon};
-                if memory.handle_mouse_input(&state, &button) {
+                if state.handle_mouse_input(&elem_state, &button) {
                     window.set_cursor(Cursor::Icon(CursorIcon::Grabbing));
                 } else {
                     window.set_cursor(Cursor::Icon(CursorIcon::Default));
@@ -127,7 +125,7 @@ impl winit::application::ApplicationHandler for App {
                 delta,
                 phase,
             } => {
-                if memory.handle_mouse_wheel(&delta, &phase) {
+                if state.handle_mouse_wheel(&delta, &phase) {
                     window.request_redraw();
                 }
             }
@@ -136,11 +134,47 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let App::Ready { renderer, .. } = mem::replace(self, App::Uninitialized) {
-            if let Err(e) = renderer.join() {
+        if let App::Ready { render, .. } = mem::replace(self, App::Uninitialized) {
+            if let Err(e) = render.join() {
                 log::error!("Render thread is found panicked when exiting");
                 panic::resume_unwind(e);
             }
         }
     }
+}
+
+fn log_format(
+    buf: &mut env_logger::fmt::Formatter,
+    record: &log::Record<'_>,
+) -> Result<(), std::io::Error> {
+    use env_logger::fmt::style::{AnsiColor, Color, Style};
+
+    const STYLE: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightBlack)));
+
+    const TRACE_STYLE: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Cyan)));
+    const DEBUG_STYLE: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Blue)));
+    const INFO_STYLE: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Green)));
+    const WARN_STYLE: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Yellow)));
+    const ERROR_STYLE: Style = Style::new()
+        .fg_color(Some(Color::Ansi(AnsiColor::Red)))
+        .bold();
+
+    let time = chrono::Local::now().format("%F %T%.3f");
+    let level = record.level();
+    let path = record.module_path_static().unwrap_or("???");
+    let line = record.line().unwrap_or(u32::MAX);
+    let args = record.args();
+
+    let style = match level {
+        log::Level::Trace => TRACE_STYLE,
+        log::Level::Debug => DEBUG_STYLE,
+        log::Level::Info => INFO_STYLE,
+        log::Level::Warn => WARN_STYLE,
+        log::Level::Error => ERROR_STYLE,
+    };
+
+    writeln!(
+        buf,
+        "[{STYLE}{time}{STYLE:#} {style}{level}{style:#} {STYLE}{path}#{line}{STYLE:#}] {args}",
+    )
 }

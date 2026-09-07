@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::config::Config;
 
-pub(super) struct Memory {
+pub(super) struct State {
     pub(super) config: Config,
     pub(super) scene: Arc<Mutex<jihe_render::Scene>>,
     drag: DragState,
@@ -13,7 +13,7 @@ enum DragState {
     DraggingFrom { mouse: glam::Vec2, cam: glam::Vec2 },
 }
 
-impl Memory {
+impl State {
     pub(super) fn new(config: Config, scene: Arc<Mutex<jihe_render::Scene>>) -> Self {
         Self {
             config,
@@ -25,7 +25,7 @@ impl Memory {
     }
 
     pub(super) fn handle_keyboard_input(&mut self, event: &winit::event::KeyEvent) -> bool {
-        fn scene_move(this: &mut Memory, delta: glam::Vec2) {
+        fn scene_move(this: &mut State, delta: glam::Vec2) {
             let camera = &mut this.scene.lock().unwrap().camera;
             camera.pos += delta * this.config.move_speed * camera.scale;
             log::info!("Current pos: {}", camera.pos);

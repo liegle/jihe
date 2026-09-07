@@ -38,17 +38,17 @@ impl Render {
                     return None;
                 }
             };
-            let renderer = match rt.block_on(jihe_render::Render::new(scene, window, size)) {
+            let render = match rt.block_on(jihe_render::Render::new(scene, window, size)) {
                 Ok(r) => r,
                 Err(e) => {
                     log::error!("Can't create render because:\n{e}");
                     return None;
                 }
             };
-            log::info!("Created inner renderer");
+            log::info!("Created inner render");
             thread::spawn(move || {
                 rt.block_on(run(
-                    renderer,
+                    render,
                     sender,
                     receiver,
                     render_per_sec,
@@ -90,7 +90,7 @@ impl Render {
 }
 
 async fn run(
-    mut renderer: jihe_render::Render<winit::window::Window>,
+    mut render: jihe_render::Render<winit::window::Window>,
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
     render_per_sec: u64,
@@ -116,12 +116,12 @@ async fn run(
                     }
                     Some(Task::Draw) => {
                         if let Some(_) = render_scheduler.push_task(()) {
-                            renderer.draw();
+                            render.draw();
                         }
                     }
                     Some(Task::Resize(size)) => {
                         if let Some(size) = resize_scheduler.push_task(size) {
-                            renderer.resize(size);
+                            render.resize(size);
                             if let Err(e) = sender.send(Task::Draw) {
                                 log::error!("{e}");
                                 log::error!("Render task channel has been closed");
@@ -132,10 +132,10 @@ async fn run(
                 }
             }
             Some(_) = render_scheduler.sleep() => {
-                renderer.draw();
+                render.draw();
             },
             Some(size) = resize_scheduler.sleep() => {
-                renderer.resize(size);
+                render.resize(size);
                 if let Err(e) = sender.send(Task::Draw) {
                     log::error!("{e}");
                     log::error!("Render task channel has been closed");
