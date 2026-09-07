@@ -35,16 +35,19 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
 
-    let curve = curves[layer.value];
+    let dims = vec2<i32>(textureDimensions(segment_texture));
+    let pos = vec2<i32>(id.xy);
     let here = vec2<f32>(id.xy) + vec2<f32>(0.5, 0.5);
+    let curve = curves[layer.value];
     let thickness2 = curve.thickness * curve.thickness;
-    let span = u32(ceil(curve.thickness));
+    let span = i32(ceil(curve.thickness));
     var least_dist2 = thickness2;
-    for (var i = id.x - span; i <= id.x + span; i++) {
-        for (var j = id.y - span; j <= id.y + span; j++) {
-            let corner = vec2<u32>(i, j);
-            let pq = textureLoad(segment_texture, corner);
-            least_dist2 = min(least_dist2, dist2(here, vec2<f32>(corner), pq));
+    for (var i = pos.x - span; i <= pos.x + span; i++) {
+        if i < 0 || i >= dims.x { continue; }
+        for (var j = pos.y - span; j <= pos.y + span; j++) {
+            if j < 0 || j >= dims.y { continue; }
+            let pq = textureLoad(segment_texture, vec2<u32>(u32(i), u32(j)));
+            least_dist2 = min(least_dist2, dist2(here, vec2<f32>(f32(i), f32(j)), pq));
         }
     }
     if least_dist2 >= thickness2 {
@@ -56,6 +59,8 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 fn dist2(here: vec2<f32>, corner: vec2<f32>, pq: vec4<f32>) -> f32 {
+    if all(pq == vec4<f32>(0.5, 0.5, 0.5, 0.5)) { return 255.; }
+
     let p = corner + pq.xy;
     let q = corner + pq.zw;
     let p_q = p - q;

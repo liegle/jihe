@@ -69,10 +69,14 @@ fn cs(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
 
-    let span = u32(ceil(curves[layer.value].thickness));
-    for (var i = id.x - span; i <= id.x + span; i++) {
-        for (var j = id.y - span; j <= id.y + span; j++) {
-            textureStore(mark_texture, vec2<u32>(i, j), vec4<u32>(1, 0, 0, 0));
+    let dims = vec2<i32>(textureDimensions(segment_texture));
+    let pos = vec2<i32>(id.xy);
+    let span = i32(ceil(curves[layer.value].thickness));
+    for (var i = pos.x - span; i <= pos.x + span; i++) {
+        if i < 0 || i >= dims.x { continue; }
+        for (var j = pos.y - span; j <= pos.y + span; j++) {
+            if j < 0 || j >= dims.y { continue; }
+            textureStore(mark_texture, vec2<u32>(u32(i), u32(j)), vec4<u32>(1, 0, 0, 0));
         }
     }
 }
