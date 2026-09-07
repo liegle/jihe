@@ -63,24 +63,26 @@ fn dist2(here: vec2<f32>, corner: vec2<f32>, pq: vec4<f32>) -> f32 {
 
     let p = corner + pq.xy;
     let q = corner + pq.zw;
-    let p_q = p - q;
+    let p_q = q - p;
     let p_a = here - p;
     let q_a = here - q;
 
     let p_q_2 = dot(p_q, p_q);
-    let a_p_q = dot(p_a, -p_q);
-    let a_q_p = dot(q_a, p_q);
+    let p_a_2 = dot(p_a, p_a);
+    let q_a_2 = dot(q_a, q_a);
+    let a_p_q = dot(p_a, p_q);
+    let a_q_p = dot(q_a, -p_q);
 
-    let crozz = p_q.x * p_a.y - p_q.y * p_a.x;
-    let height2 = crozz * crozz / p_q_2;
+    let crozz = p_a.x * q_a.y - p_a.y * q_a.x;
+    let h_2 = crozz * crozz / p_q_2;
 
     return select(
         select(
-            height2,
-            dot(q_a, q_a),
+            h_2,
+            q_a_2,
             a_q_p < 0,
         ),
-        dot(p_a, p_a),
+        p_a_2,
         a_p_q < 0,
     );
 }
