@@ -13,5 +13,6 @@ chrono      = { workspace = true, }
 env_logger  = { workspace = true, }
 glam        = { workspace = true, }
 log         = { workspace = true, }
+notify      = { workspace = true, }
 tokio       = { workspace = true, }
 winit       = { workspace = true, }

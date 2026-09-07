@@ -35,6 +35,19 @@ pub struct Point {
 }
 
 impl Content {
+    pub fn new() -> Self {
+        Self {
+            bg: Bg {
+                color: glam::vec3(0.8, 0.8, 0.8),
+                axis: None,
+                grid: None,
+                spacing: 100,
+            },
+            curves: vec![],
+            points: vec![],
+        }
+    }
+
     pub fn example() -> Self {
         Self {
             bg: Bg {

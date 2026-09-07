@@ -81,10 +81,15 @@ impl Point {
             self.points_buffer.destroy();
             self.points_buffer = create_points_buffer(device, points_buffer_size);
         }
-        queue.write_buffer(&self.points_buffer, 0, &points.as_dynamic_storage_bytes());
+        if self.instance_count != 0 {
+            queue.write_buffer(&self.points_buffer, 0, &points.as_dynamic_storage_bytes());
+        }
     }
 
     pub(super) fn render(&self, render_pass: &mut super::RenderPass) {
+        if self.instance_count == 0 {
+            return;
+        }
         #[cfg(feature = "profile")]
         let mut render_pass = render_pass.scope("Point");
         render_pass.set_pipeline(&self.render_pipeline);

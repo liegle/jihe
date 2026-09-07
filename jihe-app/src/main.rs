@@ -1,38 +1,55 @@
-use std::{io::Write, mem, panic, sync::Arc};
+use std::{env, fs, io::Write, mem, panic, sync::Arc};
 
-use crate::{config::Config, state::State, render::Render};
+use crate::{config::Config, parse::Parse, render::Render, state::State};
 
 mod config;
-mod state;
+mod parse;
 mod render;
 mod schedule;
+mod state;
 
 fn main() {
     env_logger::builder().format(log_format).init();
+
+    let args = env::args();
+    if args.len() != 2 {
+        log::error!("Usage: jihe <path>");
+        return;
+    }
+    let path = args.last().unwrap();
+    if !fs::exists(&path).is_ok_and(|b| b) {
+        log::error!("File at {} not found", &path);
+        return;
+    }
+
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
-    let mut app = App::Uninitialized;
+    let mut app = App::Uninitialized { path };
     event_loop.run_app(&mut app).unwrap();
 }
 
 enum App {
-    Uninitialized,
+    Uninitialized {
+        path: String,
+    },
     Ready {
         state: State,
         window: Arc<winit::window::Window>,
+        parse: Parse,
         render: Render,
     },
+    Dead,
 }
 
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let App::Ready { .. } = self {
+        let App::Uninitialized { path } = self else {
             log::info!("Resumed but app was already inited");
             return;
-        }
+        };
 
         let config = Config::default();
-        let content = jihe_shared::Content::example();
+        let content = jihe_shared::Content::new();
         let scene = jihe_render::Scene::new(content);
         let state = State::new(config, scene.clone());
 
@@ -46,6 +63,13 @@ impl winit::application::ApplicationHandler for App {
         window.set_title("jihe");
         log::info!("Created window");
         let window = Arc::new(window);
+
+        let parse = Parse::new(path.clone(), scene.clone(), {
+            let window = window.clone();
+            move || {
+                window.request_redraw();
+            }
+        });
 
         let render = match Render::new(
             scene,
@@ -64,6 +88,7 @@ impl winit::application::ApplicationHandler for App {
         *self = App::Ready {
             state,
             window,
+            parse,
             render,
         };
     }
@@ -77,6 +102,7 @@ impl winit::application::ApplicationHandler for App {
         let App::Ready {
             state,
             window,
+            parse,
             render,
         } = self
         else {
@@ -86,8 +112,9 @@ impl winit::application::ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => {
                 log::info!("Exit");
+                render.exit();
+                parse.exit();
                 event_loop.exit();
-                render.exit()
             }
             WindowEvent::RedrawRequested => render.draw(),
             WindowEvent::Resized(size) => render.resize(size.into()),
@@ -134,9 +161,13 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let App::Ready { render, .. } = mem::replace(self, App::Uninitialized) {
+        if let App::Ready { parse, render, .. } = mem::replace(self, App::Dead) {
             if let Err(e) = render.join() {
                 log::error!("Render thread is found panicked when exiting");
+                panic::resume_unwind(e);
+            }
+            if let Err(e) = parse.join() {
+                log::error!("Parse thread is found panicked when exiting");
                 panic::resume_unwind(e);
             }
         }
