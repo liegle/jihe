@@ -38,14 +38,11 @@ fn binary(pa: vec2<f32>, pb: vec2<f32>) -> vec2<f32> {
     if fa == fb { return vec2<f32>(0, 1); }
 
     var range = vec4<f32>(0, 1, fa, fb);
-    var t: f32;
-    var pt: vec2<f32>;
-    var ft: f32;
 
     for (var i = 0u; i < BINARY_ITERATION; i++) {
-        t = (range.x + range.y) / 2;
-        pt = mix(pa, pb, t);
-        ft = sign(f(pt.x, pt.y));
+        let t = (range.x + range.y) / 2;
+        let pt = mix(pa, pb, t);
+        let ft = sign(f(pt.x, pt.y));
         if ft == 0 { return vec2<f32>(t, 0); }
         range = select(
             vec4<f32>(range.x, t, range.z, ft),
