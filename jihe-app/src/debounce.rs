@@ -19,7 +19,7 @@ enum State<T> {
 impl<T: Copy> Debounce<T> {
     pub(super) fn new(frequency: u64) -> Self {
         Self {
-            interval: tokio::time::Duration::from_micros(1000_000 / frequency),
+            interval: tokio::time::Duration::from_micros(1_000_000 / frequency),
             state: State::Idle,
         }
     }

@@ -82,7 +82,7 @@ impl Render {
     }
 
     fn send(&self, task: Task) {
-        if let Err(_) = self.sender.send(task) {
+        if self.sender.send(task).is_err() {
             log::error!("Render task receiver has been closed");
         }
     }

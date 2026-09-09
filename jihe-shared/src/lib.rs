@@ -34,6 +34,12 @@ pub struct Point {
     pub color: glam::Vec4,
 }
 
+impl Default for Content {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Content {
     pub fn new() -> Self {
         Self {

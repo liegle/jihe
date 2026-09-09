@@ -65,7 +65,7 @@ where
                 force_fallback_adapter: false,
             })
             .await?;
-        log::info!("Adapter info: {:?}", &adapter.get_info());
+        log::info!("Adapter info: {:?}", adapter.get_info());
 
         let required_features = cfg_select! {
              feature = "profile" => {
@@ -304,7 +304,7 @@ fn create_render_pass<'a>(
     let render_pass_descriptor = wgpu::RenderPassDescriptor {
         label: Some("Render Pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: view,
+            view,
             depth_slice: None,
             resolve_target: None,
             ops: wgpu::Operations {

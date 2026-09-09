@@ -92,7 +92,7 @@ fn create_bind_group(
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("Axis Bind Group"),
-        layout: &bind_group_layout,
+        layout: bind_group_layout,
         entries: &[wgpu::BindGroupEntry {
             binding: 0,
             resource: buffer.as_entire_binding(),

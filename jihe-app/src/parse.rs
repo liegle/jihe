@@ -73,7 +73,7 @@ impl Parse {
     }
 
     pub(super) fn exit(&self) {
-        if let Err(_) = self.sender.send(Task::Exit) {
+        if self.sender.send(Task::Exit).is_err() {
             log::error!("Parse task receiver has been closed");
         }
     }
@@ -90,24 +90,22 @@ impl notify::EventHandler for Filter {
 
         log::error!("{event:?}"); // TEMP
         match event {
-            Ok(event) => match event {
-                Event {
+            Ok(event) => {
+                if let Event {
                     kind: EventKind::Modify(ModifyKind::Data(_)),
                     paths,
                     ..
-                } => {
+                } = event
+                {
                     let file_name = self.path.file_name();
                     if paths.iter().any(|path| path.file_name() == file_name)
                         && matches!(fs::exists(&self.path), Ok(true) | Err(_))
+                        && self.sender.send(Task::Parse).is_err()
                     {
-
-                        if self.sender.send(Task::Parse).is_err() {
-                            log::error!("Parse task receiver has been closed");
-                        }
+                        log::error!("Parse task receiver has been closed");
                     }
                 }
-                _ => {}
-            },
+            }
             Err(e) => {
                 log::error!("Fail to handle notify event because:{e}");
             }

@@ -139,7 +139,7 @@ fn create_bind_group(
     intersection_texture_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some(&format!("Binary Bind Group")),
+        label: Some("Binary Bind Group"),
         layout: bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {

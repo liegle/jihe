@@ -3,9 +3,9 @@ use std::{env, fs, io::Write, mem, panic, path::PathBuf, str::FromStr, sync::Arc
 use crate::{config::Config, parse::Parse, render::Render, state::State};
 
 mod config;
+mod debounce;
 mod parse;
 mod render;
-mod debounce;
 mod state;
 
 fn main() {
@@ -14,14 +14,12 @@ fn main() {
         .format(log_format)
         .init();
 
-    let args = env::args();
-    if args.len() != 2 {
+    let Some(path) = env::args().nth(1) else {
         println!("Usage: jihe <path>");
         return;
-    }
-    let path = args.last().unwrap();
+    };
     if !fs::exists(&path).is_ok_and(|b| b) {
-        println!("File at {} not found", &path);
+        println!("File at {} not found", path);
         return;
     }
 
@@ -66,7 +64,7 @@ impl winit::application::ApplicationHandler for App {
         window.set_title("jihe");
         let window = Arc::new(window);
 
-        let parse = match Parse::new(PathBuf::from_str(&path).unwrap(), scene.clone(), {
+        let parse = match Parse::new(PathBuf::from_str(path).unwrap(), scene.clone(), {
             let window = window.clone();
             move || {
                 window.request_redraw();
@@ -129,18 +127,14 @@ impl winit::application::ApplicationHandler for App {
                 device_id: _,
                 event,
                 is_synthetic: _,
-            } => {
-                if state.handle_keyboard_input(&event) {
-                    window.request_redraw();
-                }
+            } if state.handle_keyboard_input(&event) => {
+                window.request_redraw();
             }
             WindowEvent::CursorMoved {
                 device_id: _,
                 position,
-            } => {
-                if state.handle_cursor_moved(&position) {
-                    window.request_redraw();
-                }
+            } if state.handle_cursor_moved(&position) => {
+                window.request_redraw();
             }
             WindowEvent::MouseInput {
                 device_id: _,
@@ -158,10 +152,8 @@ impl winit::application::ApplicationHandler for App {
                 device_id: _,
                 delta,
                 phase,
-            } => {
-                if state.handle_mouse_wheel(&delta, &phase) {
-                    window.request_redraw();
-                }
+            } if state.handle_mouse_wheel(&delta, &phase) => {
+                window.request_redraw();
             }
             _ => {}
         }
