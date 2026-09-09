@@ -9,16 +9,19 @@ mod schedule;
 mod state;
 
 fn main() {
-    env_logger::builder().format(log_format).init();
+    env_logger::builder()
+        .target(env_logger::Target::Stderr)
+        .format(log_format)
+        .init();
 
     let args = env::args();
     if args.len() != 2 {
-        log::error!("Usage: jihe <path>");
+        println!("Usage: jihe <path>");
         return;
     }
     let path = args.last().unwrap();
     if !fs::exists(&path).is_ok_and(|b| b) {
-        log::error!("File at {} not found", &path);
+        println!("File at {} not found", &path);
         return;
     }
 
@@ -56,20 +59,25 @@ impl winit::application::ApplicationHandler for App {
         let window = match event_loop.create_window(Default::default()) {
             Ok(w) => w,
             Err(e) => {
-                log::error!("Can't create window because:\n{e}");
+                log::error!("Can't create window because:{e}");
                 return;
             }
         };
         window.set_title("jihe");
-        log::info!("Created window");
         let window = Arc::new(window);
 
-        let parse = Parse::new(path.clone(), scene.clone(), {
+        let parse = match Parse::new(path.as_ref(), scene.clone(), {
             let window = window.clone();
             move || {
                 window.request_redraw();
             }
-        });
+        }) {
+            Some(r) => r,
+            None => {
+                log::error!("Can't create parse");
+                return;
+            }
+        };
 
         let render = match Render::new(
             scene,
@@ -83,7 +91,6 @@ impl winit::application::ApplicationHandler for App {
                 return;
             }
         };
-        log::info!("Created render");
 
         *self = App::Ready {
             state,

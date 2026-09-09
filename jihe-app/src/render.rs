@@ -34,18 +34,17 @@ impl Render {
             {
                 Ok(rt) => rt,
                 Err(e) => {
-                    log::error!("Can't create tokio runtime because:\n{e}");
+                    log::error!("Can't create tokio runtime for render because:{e}");
                     return None;
                 }
             };
             let render = match rt.block_on(jihe_render::Render::new(scene, window, size)) {
                 Ok(r) => r,
                 Err(e) => {
-                    log::error!("Can't create render because:\n{e}");
+                    log::error!("Can't create render because:{e}");
                     return None;
                 }
             };
-            log::info!("Created inner render");
             thread::spawn(move || {
                 rt.block_on(run(
                     render,

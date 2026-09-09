@@ -334,13 +334,13 @@ fn create_render_pass<'a>(
 
 #[derive(thiserror::Error, Debug)]
 pub enum CreateRendererError {
-    #[error("Failed to create surface because:\n{0}")]
+    #[error("Failed to create surface because:{0}")]
     CreateSurface(#[from] wgpu::CreateSurfaceError),
-    #[error("Failed to request adapter because:\n{0}")]
+    #[error("Failed to request adapter because:{0}")]
     RequestAdapter(#[from] wgpu::RequestAdapterError),
     #[error("Required feature or limit not met")]
     RequiedFeatureOrLimitNotMet,
-    #[error("Failed to request device because:\n{0}")]
+    #[error("Failed to request device because:{0}")]
     RequestDevice(#[from] wgpu::RequestDeviceError),
 }
 
