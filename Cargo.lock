@@ -891,6 +891,8 @@ name = "jihe-parse"
 version = "0.1.0"
 dependencies = [
  "jihe-shared",
+ "log",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

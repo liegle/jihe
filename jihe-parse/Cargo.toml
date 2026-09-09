@@ -5,3 +5,7 @@ edition     = { workspace = true, }
 
 [dependencies]
 jihe-shared = { path = "../jihe-shared" }
+
+#external
+log         = { workspace = true, }
+thiserror   = { workspace = true, }

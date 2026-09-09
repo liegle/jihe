@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{self, PathBuf},
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
 };
@@ -12,8 +12,6 @@ use crate::schedule::Scheduler;
 enum Task {
     Exit,
     Parse,
-    Rename(PathBuf),
-    Lost,
 }
 
 pub(super) struct Parse {
@@ -23,7 +21,7 @@ pub(super) struct Parse {
 
 impl Parse {
     pub(super) fn new(
-        path: &Path,
+        path: PathBuf,
         scene: Arc<Mutex<jihe_render::Scene>>,
         callback: impl Fn() + Send + Sync + 'static,
     ) -> Option<Self> {
@@ -40,8 +38,11 @@ impl Parse {
                     return None;
                 }
             };
+
+            let abs = path::absolute(&path).unwrap();
+            let dir = abs.parent().unwrap().to_owned();
             let mut watcher = match notify::recommended_watcher(Filter {
-                path: path.to_owned(),
+                path: path.clone(),
                 sender,
             }) {
                 Ok(watcher) => watcher,
@@ -50,11 +51,16 @@ impl Parse {
                     return None;
                 }
             };
-            if let Err(e) = watcher.watch(path, notify::RecursiveMode::NonRecursive) {
+
+            if let Err(e) = watcher.watch(&dir, notify::RecursiveMode::NonRecursive) {
                 log::error!("Can't watch target file because:{e}");
                 return None;
             }
-            thread::spawn(move || rt.block_on(run(scene, callback, receiver)))
+            let parse = jihe_parse::Parse::new(&path);
+            thread::spawn(move || {
+                rt.block_on(run(parse, scene, callback, receiver));
+                let _ = watcher.unwatch(&dir); // Keep watcher alive
+            })
         };
         Some(Self {
             join_handle,
@@ -80,76 +86,41 @@ struct Filter {
 
 impl notify::EventHandler for Filter {
     fn handle_event(&mut self, event: notify::Result<notify::Event>) {
-        use notify::{
-            Event, EventKind,
-            event::{DataChange, ModifyKind, RenameMode},
-        };
+        use notify::{Event, EventKind, event::ModifyKind};
 
+        log::error!("{event:?}"); // TEMP
         match event {
             Ok(event) => match event {
                 Event {
-                    kind: EventKind::Modify(ModifyKind::Data(DataChange::Content)),
-                    ..
-                } => {
-                    self.parse();
-                }
-                Event {
-                    kind: EventKind::Modify(ModifyKind::Name(mode)),
+                    kind: EventKind::Modify(ModifyKind::Data(_)),
                     paths,
                     ..
-                } => match mode {
-                    RenameMode::To => {
-                        if let Some(path) = paths.first() {
-                            self.rename(path.to_owned());
+                } => {
+                    let file_name = self.path.file_name();
+                    if paths.iter().any(|path| path.file_name() == file_name)
+                        && matches!(fs::exists(&self.path), Ok(true) | Err(_))
+                    {
+
+                        if self.sender.send(Task::Parse).is_err() {
+                            log::error!("Parse task receiver has been closed");
                         }
                     }
-                    RenameMode::Both => {
-                        if let Some(path) = paths.iter().nth(1) {
-                            self.rename(path.to_owned());
-                        }
-                    }
-                    _ => match fs::exists(&self.path) {
-                        Ok(false) | Err(_) => self.lost(),
-                        _ => {}
-                    },
-                },
+                }
                 _ => {}
             },
             Err(e) => {
                 log::error!("Fail to handle notify event because:{e}");
             }
-        }
-    }
-}
-
-impl Filter {
-    fn parse(&self) {
-        self.send(Task::Parse);
-    }
-
-    fn rename(&mut self, path: PathBuf) {
-        self.path = path.clone();
-        self.send(Task::Rename(path));
-    }
-
-    fn lost(&self) {
-        self.send(Task::Lost);
-    }
-
-    fn send(&self, task: Task) {
-        if self.sender.send(task).is_err() {
-            log::error!("Parse task receiver has been closed");
-        }
+        };
     }
 }
 
 async fn run(
+    parse: jihe_parse::Parse,
     scene: Arc<Mutex<jihe_render::Scene>>,
     callback: impl Fn(),
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
 ) {
-    let todo = || {};
-
     let mut scheduler = Scheduler::new(1);
 
     loop {
@@ -169,19 +140,25 @@ async fn run(
                     }
                     Some(Task::Parse) => {
                         if let Some(_) = scheduler.push_task(()) {
-                            // TODO
+                            match parse.parse() {
+                                Ok(content) => {
+                                    scene.lock().unwrap().content = content;
+                                    callback();
+                                }
+                                Err(e) => log::error!("Failed to parse jihe because:{e}")
+                            }
                         }
-                    }
-                    Some(Task::Rename(path)) => {
-
-                    }
-                    Some(Task::Lost) => {
-                        break;
                     }
                 }
             }
             Some(_) = scheduler.sleep() => {
-                // TODO
+                match parse.parse() {
+                    Ok(content) => {
+                        scene.lock().unwrap().content = content;
+                        callback();
+                    }
+                    Err(e) => log::error!("Failed to parse jihe because:{e}")
+                }
             }
         }
     }

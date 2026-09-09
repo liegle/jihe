@@ -1,4 +1,4 @@
-use std::{env, fs, io::Write, mem, panic, sync::Arc};
+use std::{env, fs, io::Write, mem, panic, path::PathBuf, str::FromStr, sync::Arc};
 
 use crate::{config::Config, parse::Parse, render::Render, state::State};
 
@@ -66,7 +66,7 @@ impl winit::application::ApplicationHandler for App {
         window.set_title("jihe");
         let window = Arc::new(window);
 
-        let parse = match Parse::new(path.as_ref(), scene.clone(), {
+        let parse = match Parse::new(PathBuf::from_str(&path).unwrap(), scene.clone(), {
             let window = window.clone();
             move || {
                 window.request_redraw();
