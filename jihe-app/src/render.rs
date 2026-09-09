@@ -3,7 +3,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::schedule::Scheduler;
+use crate::debounce::Debounce;
 
 enum Task {
     Exit,
@@ -95,8 +95,8 @@ async fn run(
     render_per_sec: u64,
     resize_per_sec: u64,
 ) {
-    let mut render_scheduler = Scheduler::new(render_per_sec);
-    let mut resize_scheduler = Scheduler::new(resize_per_sec);
+    let mut render_debounce = Debounce::new(render_per_sec);
+    let mut resize_debounce = Debounce::new(resize_per_sec);
 
     loop {
         if receiver.is_closed() {
@@ -114,12 +114,12 @@ async fn run(
                         break;
                     }
                     Some(Task::Draw) => {
-                        if let Some(_) = render_scheduler.push_task(()) {
+                        if let Some(_) = render_debounce.push_task(()) {
                             render.draw();
                         }
                     }
                     Some(Task::Resize(size)) => {
-                        if let Some(size) = resize_scheduler.push_task(size) {
+                        if let Some(size) = resize_debounce.push_task(size) {
                             render.resize(size);
                             if let Err(e) = sender.send(Task::Draw) {
                                 log::error!("{e}");
@@ -130,10 +130,10 @@ async fn run(
                     }
                 }
             }
-            Some(_) = render_scheduler.sleep() => {
+            Some(_) = render_debounce.sleep() => {
                 render.draw();
             },
-            Some(size) = resize_scheduler.sleep() => {
+            Some(size) = resize_debounce.sleep() => {
                 render.resize(size);
                 if let Err(e) = sender.send(Task::Draw) {
                     log::error!("{e}");

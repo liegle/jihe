@@ -5,7 +5,7 @@ use crate::{config::Config, parse::Parse, render::Render, state::State};
 mod config;
 mod parse;
 mod render;
-mod schedule;
+mod debounce;
 mod state;
 
 fn main() {

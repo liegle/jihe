@@ -1,6 +1,6 @@
 use std::future;
 
-pub(super) struct Scheduler<T: Copy> {
+pub(super) struct Debounce<T: Copy> {
     interval: tokio::time::Duration,
     state: State<T>,
 }
@@ -16,7 +16,7 @@ enum State<T> {
     },
 }
 
-impl<T: Copy> Scheduler<T> {
+impl<T: Copy> Debounce<T> {
     pub(super) fn new(frequency: u64) -> Self {
         Self {
             interval: tokio::time::Duration::from_micros(1000_000 / frequency),

@@ -7,7 +7,7 @@ use std::{
 
 use notify::Watcher as _;
 
-use crate::schedule::Scheduler;
+use crate::debounce::Debounce;
 
 enum Task {
     Exit,
@@ -121,7 +121,7 @@ async fn run(
     callback: impl Fn(),
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
 ) {
-    let mut scheduler = Scheduler::new(1);
+    let mut debounce = Debounce::new(1);
 
     loop {
         if receiver.is_closed() {
@@ -139,7 +139,7 @@ async fn run(
                         break;
                     }
                     Some(Task::Parse) => {
-                        if let Some(_) = scheduler.push_task(()) {
+                        if let Some(_) = debounce.push_task(()) {
                             match parse.parse() {
                                 Ok(content) => {
                                     scene.lock().unwrap().content = content;
@@ -151,7 +151,7 @@ async fn run(
                     }
                 }
             }
-            Some(_) = scheduler.sleep() => {
+            Some(_) = debounce.sleep() => {
                 match parse.parse() {
                     Ok(content) => {
                         scene.lock().unwrap().content = content;
