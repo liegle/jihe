@@ -88,10 +88,12 @@ impl notify::EventHandler for Filter {
     fn handle_event(&mut self, event: notify::Result<notify::Event>) {
         use notify::{Event, EventKind, event::ModifyKind};
 
-        log::error!("{event:?}"); // TEMP
         match event {
             Ok(event) => {
                 if let Event {
+                    #[cfg(windows)]
+                    kind: EventKind::Modify(ModifyKind::Any),
+                    #[cfg(not(windows))]
                     kind: EventKind::Modify(ModifyKind::Data(_)),
                     paths,
                     ..

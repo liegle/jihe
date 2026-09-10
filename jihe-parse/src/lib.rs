@@ -1,7 +1,12 @@
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
+
+use crate::lexer::{BadChar, Lexer};
+
+mod lexer;
+mod token;
 
 pub struct Parse {
     path: PathBuf,
@@ -15,9 +20,14 @@ impl Parse {
     }
 
     pub fn parse(&self) -> Result<jihe_shared::Content, ParseError> {
-        log::info!("Parse"); // TEMP
         if let Ok(false) | Err(_) = fs::exists(&self.path) {
             return Err(ParseError::FileLost);
+        }
+        let source = fs::read_to_string(&self.path)?.chars().collect::<Vec<_>>();
+        let lexer = Lexer::new(&source);
+        for token in lexer {
+            let _ = token?;
+            // TODO
         }
         Ok(jihe_shared::Content::example())
     }
@@ -27,4 +37,8 @@ impl Parse {
 pub enum ParseError {
     #[error("File lost")]
     FileLost,
+    #[error("Failed to read jihe because:{0}")]
+    ReadFail(#[from] io::Error),
+    #[error("Failed to create token because:{0}")]
+    LexError(#[from] BadChar),
 }
