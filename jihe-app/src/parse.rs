@@ -137,7 +137,7 @@ async fn run(
                         break;
                     }
                     Some(Task::Parse) => {
-                        if let Some(_) = debounce.push_task(()) {
+                        if let Some(()) = debounce.push_task(()) {
                             match parse.parse() {
                                 Ok(content) => {
                                     scene.lock().unwrap().content = content;

@@ -1,4 +1,7 @@
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub struct Parse {
     path: PathBuf,
@@ -7,7 +10,7 @@ pub struct Parse {
 impl Parse {
     pub fn new(path: &Path) -> Self {
         Self {
-            path: path.to_owned()
+            path: path.to_owned(),
         }
     }
 

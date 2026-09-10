@@ -102,8 +102,7 @@ impl Lines {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let bind_group =
-            create_bind_group(device, bind_group_layout, &lines_buffer, color_buffer);
+        let bind_group = create_bind_group(device, bind_group_layout, &lines_buffer, color_buffer);
         let render_pipeline =
             create_render_pipeline(device, bind_group_layout, vertex_entry, dst_format);
         Self {
@@ -114,13 +113,7 @@ impl Lines {
         }
     }
 
-    fn prepare(
-        &mut self,
-        queue: &wgpu::Queue,
-        distance: f32,
-        range: Range<f32>,
-        ends: glam::Vec2,
-    ) {
+    fn prepare(&mut self, queue: &wgpu::Queue, distance: f32, range: Range<f32>, ends: glam::Vec2) {
         let w = range.end - range.start;
         let begin_ws = (range.start / distance).ceil() * distance;
         self.count = (w / distance).ceil() as u32;

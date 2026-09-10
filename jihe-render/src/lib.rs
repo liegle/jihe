@@ -345,10 +345,7 @@ pub enum CreateRendererError {
 }
 
 #[cfg(feature = "profile")]
-fn log_profiler_recursive(
-    results: &[wgpu_profiler::GpuTimerQueryResult],
-    indent: usize,
-) {
+fn log_profiler_recursive(results: &[wgpu_profiler::GpuTimerQueryResult], indent: usize) {
     for scope in results {
         log::info!(
             "{:>width$} {:.4}ms - {}",

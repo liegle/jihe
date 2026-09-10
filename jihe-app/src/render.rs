@@ -114,7 +114,7 @@ async fn run(
                         break;
                     }
                     Some(Task::Draw) => {
-                        if let Some(_) = render_debounce.push_task(()) {
+                        if let Some(()) = render_debounce.push_task(()) {
                             render.draw();
                         }
                     }
