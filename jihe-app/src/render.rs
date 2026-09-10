@@ -132,7 +132,7 @@ async fn run(
             }
             Some(_) = render_debounce.sleep() => {
                 render.draw();
-            },
+            }
             Some(size) = resize_debounce.sleep() => {
                 render.resize(size);
                 if let Err(e) = sender.send(Task::Draw) {
@@ -140,7 +140,7 @@ async fn run(
                     log::error!("Render task channel has been closed");
                     break;
                 }
-            },
+            }
             else => break,
         }
     }

@@ -158,6 +158,7 @@ async fn run(
                     Err(e) => log::error!("Failed to parse jihe because:{e}")
                 }
             }
+            else => break,
         }
     }
 }
