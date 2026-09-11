@@ -23,7 +23,7 @@ impl Parse {
         if let Ok(false) | Err(_) = fs::exists(&self.path) {
             return Err(ParseError::FileLost);
         }
-        let source = fs::read_to_string(&self.path)?.chars().collect::<Vec<_>>();
+        let source = fs::read_to_string(&self.path)?;
         let lexer = Lexer::new(&source);
         for token in lexer {
             let _ = token?;
