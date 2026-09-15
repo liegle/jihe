@@ -1,108 +1,224 @@
 use std::{
-    error::Error,
+    cmp::Ordering,
+    error,
     fmt::{self, Display, Formatter},
+    iter::Peekable,
+    ops::RangeInclusive,
     str::Chars,
 };
 
-use crate::token::{Kind, PATTERNS, Pattern, SKIP, Stage, Token};
+use crate::{
+    cursor::Cursor,
+    token::{Kind, PATTERNS, Pattern, SKIP, Token},
+};
 
 pub(super) struct Lexer<'source> {
-    stages: [Stage; PATTERNS.len()],
-    source: Chars<'source>,
+    source: Peekable<Chars<'source>>,
     byte_ptr: usize,
-    char_ptr: usize,
+    char_ptr: Cursor,
 }
 
 impl<'source> Lexer<'source> {
     pub(super) fn new(source: &'source str) -> Self {
         Self {
-            stages: [Stage::Matching { index: 0, count: 0 }; _],
-            source: source.chars(),
+            source: source.chars().peekable(),
             byte_ptr: 0,
-            char_ptr: 0,
+            char_ptr: Default::default(),
+        }
+    }
+
+    fn comsume_whitespaces(&mut self) {
+        while let Some(c) = self.source.peek() {
+            if SKIP.contains(c) {
+                self.byte_ptr += c.len_utf8();
+                self.char_ptr.step(*c == '\n');
+                self.source.next();
+            } else {
+                break;
+            }
         }
     }
 }
 
 impl<'source> Iterator for Lexer<'source> {
-    type Item = Result<Token, BadChar>;
+    type Item = Result<Token, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.comsume_whitespaces();
+
         let byte_begin = self.byte_ptr;
-        let char_begin = self.char_ptr; // TODO: is it really usefull?
-        self.stages = [Stage::Matching { index: 0, count: 0 }; _];
-        while let Some(c) = self.source.next() {
-            self.byte_ptr += c.len_utf8();
-            self.char_ptr += 1;
-            if SKIP.contains(&c) {
-                // TODO: SKIP should end last token
-                continue;
+        let char_begin = self.char_ptr;
+        let mut prev_match = Match::new();
+        let mut curr_match = Match::new();
+
+        while let Some(c) = self.source.peek() {
+            if SKIP.contains(c) {
+                break;
             }
 
-            let mut matched = Matched::None;
-            for (i, p) in PATTERNS.iter().enumerate() {
-                let stage = &mut self.stages[i];
-                let next = stage.step_stage(p, c);
-                if true /*TODO*/ {
-                    *stage = next;
-                }
-                matched = match (stage, matched) {
-                    (Stage::Out, _) => matched,
-                    (_, Matched::None) => Matched::Single(i),
-                    (_, Matched::Single(_)) | (_, Matched::Multi) => Matched::Multi,
-                }
-            }
-            match matched {
-                Matched::None => {
-                    // TODO: first char -> return bad char
-                    // not first char -> return last correct token
-                    return Some(Err(BadChar {
-                        expected: "TODO",
-                        found: c,
-                        pos: (0, 0), // TODO
+            curr_match.step(*c);
+            if curr_match.count == 0 {
+                if prev_match.count == 0 {
+                    return Some(Err(LexerError::UnexpectedBegin {
+                        found: *c,
+                        cursor: self.char_ptr,
                     }));
                 }
-                Matched::Single(index) => {
-                    return Some(Ok(Token {
-                        kind: PATTERNS[index].0,
-                        bytes: byte_begin..self.byte_ptr,
-                    }));
-                }
-                Matched::Multi => {
-                    // TODO: consider priority logic such as VariableX > Identifier
-                }
+                break;
+            } else {
+                (prev_match, curr_match) = (curr_match, Match::new());
+                self.byte_ptr += c.len_utf8();
+                self.char_ptr.step(false);
+                self.source.next();
             }
         }
-        // TODO: let source go back one char or consider using peek
-        // or do we really need to?
-        // yes we do. source should go back one char when matched is none
-        // to get last correct token
-        None
+
+        if prev_match.count != 0 {
+            let matched = prev_match.cmp_priority();
+            match &matched[..] {
+                [] => unreachable!("Technically there should be at least 1 matched token kinds"),
+                [kind] => Some(Ok(Token {
+                    kind: *kind,
+                    bytes: byte_begin..self.byte_ptr,
+                })),
+                _ => Some(Err(LexerError::MultipleMatching {
+                    matched,
+                    range: char_begin..=self.char_ptr,
+                })),
+            }
+        } else {
+            None
+        }
     }
 }
 
 #[derive(Clone, Copy)]
-enum Matched {
-    None,
-    Single(usize),
-    Multi,
+enum Stage {
+    Matching { index: usize, count: usize },
+    Out,
+}
+
+struct Match {
+    stages: [Stage; PATTERNS.len()],
+    count: usize,
+}
+
+impl Match {
+    fn new() -> Self {
+        Self {
+            stages: [Stage::Matching { index: 0, count: 0 }; _],
+            count: 0,
+        }
+    }
+
+    fn step(&mut self, c: char) {
+        for (stage, Pattern { expression, .. }) in self.stages.iter_mut().zip(PATTERNS) {
+            *stage = if let Stage::Matching { index, count } = *stage {
+                // Try to consume as many chars in one sub pattern as possible
+                if let Some((character, repeat)) = expression.get(index)
+                    && character.contains(c)
+                    && repeat.accepts(count + 1)
+                {
+                    Stage::Matching {
+                        index,
+                        count: count + 1,
+                    }
+                } else {
+                    let mut windows = expression[index..].windows(2).enumerate();
+                    let mut prev_count = count;
+                    loop {
+                        if let Some((index_add, [(_, prev_repeat), (curr_character, _)])) =
+                            windows.next()
+                        {
+                            if !prev_repeat.accepts(prev_count) {
+                                break Stage::Out;
+                            }
+                            prev_count = 0;
+                            // 1 must be accepted
+                            if curr_character.contains(c) {
+                                break Stage::Matching {
+                                    index: index + index_add + 1,
+                                    count: 1,
+                                };
+                            }
+                        } else {
+                            break Stage::Out;
+                        }
+                    }
+                }
+            } else {
+                Stage::Out
+            };
+            if let Stage::Matching { .. } = stage {
+                self.count += 1;
+            }
+        }
+    }
+
+    fn cmp_priority(&self) -> Vec<Kind> {
+        let mut greatest_priority = 0;
+        let mut matched = Vec::new();
+        for (stage, Pattern { kind, priority, .. }) in self.stages.iter().zip(PATTERNS) {
+            let Stage::Matching { .. } = stage else {
+                continue;
+            };
+            match priority.cmp(&greatest_priority) {
+                Ordering::Greater => {
+                    greatest_priority = *priority;
+                    matched.clear();
+                    matched.push(*kind);
+                }
+                Ordering::Equal => {
+                    matched.push(*kind);
+                }
+                _ => {}
+            }
+        }
+        matched
+    }
 }
 
 #[derive(Debug)]
-pub struct BadChar {
-    expected: &'static str,
-    found: char,
-    pos: (usize, usize),
+pub enum LexerError {
+    UnexpectedBegin {
+        found: char,
+        cursor: Cursor,
+    },
+    MultipleMatching {
+        matched: Vec<Kind>,
+        range: RangeInclusive<Cursor>,
+    },
 }
 
-impl Error for BadChar {}
+impl error::Error for LexerError {}
 
-impl Display for BadChar {
+impl Display for LexerError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Expected {}, found {} at {}:{}",
-            self.expected, self.found, self.pos.0, self.pos.1
-        )
+        match self {
+            Self::UnexpectedBegin { found, cursor } => {
+                write!(
+                    f,
+                    "Char '{}' at {} is not a beginning of any known token kind",
+                    found, cursor
+                )
+            }
+            Self::MultipleMatching { matched, range } => {
+                write!(
+                    f,
+                    "String from {} to {} can match more than one tokens: [",
+                    range.start(),
+                    range.end(),
+                )?;
+                for k in matched {
+                    write!(f, "{k:?}, ")?;
+                }
+                write!(f, "], this usually means a wrong design in token priority")
+            }
+        }
     }
+}
+
+#[cfg(test)]
+mod test {
+    // TODO
 }

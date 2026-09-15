@@ -91,10 +91,11 @@ impl notify::EventHandler for Filter {
         match event {
             Ok(event) => {
                 if let Event {
-                    #[cfg(windows)]
-                    kind: EventKind::Modify(ModifyKind::Any),
-                    #[cfg(not(windows))]
-                    kind: EventKind::Modify(ModifyKind::Data(_)),
+                    kind:
+                        cfg_select! {
+                            windows => EventKind::Modify(ModifyKind::Any),
+                            _ => EventKind::Modify(ModifyKind::Data(_)),
+                        },
                     paths,
                     ..
                 } = event

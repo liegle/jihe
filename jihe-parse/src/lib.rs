@@ -3,8 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::lexer::{BadChar, Lexer};
+use crate::lexer::{Lexer, LexerError};
 
+mod cursor;
 mod lexer;
 mod token;
 
@@ -40,5 +41,5 @@ pub enum ParseError {
     #[error("Failed to read jihe because:{0}")]
     ReadFail(#[from] io::Error),
     #[error("Failed to create token because:{0}")]
-    LexError(#[from] BadChar),
+    LexError(#[from] LexerError),
 }

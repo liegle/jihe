@@ -7,27 +7,32 @@ pub(super) struct Token {
     pub(super) bytes: Range<usize>,
 }
 
-pub(super) struct Pattern(pub(super) Kind, &'static [(Character, Repeat)]);
+pub(super) struct Pattern {
+    pub(super) kind: Kind,
+    pub(super) priority: u8,
+    pub(super) expression: &'static [(Character, Repeat)],
+}
 
 #[derive(Clone, Copy)]
-enum Character {
+pub(super) enum Character {
     Single(char),
     Number,
     Unicode,
 }
 
 impl Character {
-    fn contains(&self, c: char) -> bool {
+    pub(super) fn contains(&self, c: char) -> bool {
         match self {
             Self::Single(ch) => *ch == c,
-            Self::Number => matches!(c, '0'..='9'),
-            Self::Unicode => matches!(c, 'a'..='z' | 'A'..='Z') || !c.is_ascii(),
+            Self::Number => c.is_ascii_digit(),
+            Self::Unicode => c.is_ascii_alphabetic() || !c.is_ascii(),
         }
     }
 }
 
+#[allow(dead_code)] // TODO: add a token kind that uses NoneOrOnce
 #[derive(Clone, Copy)]
-enum Repeat {
+pub(super) enum Repeat {
     Any,
     NoneOrOnce,
     Once,
@@ -35,7 +40,7 @@ enum Repeat {
 }
 
 impl Repeat {
-    fn accepts(&self, count: usize) -> bool {
+    pub(super) fn accepts(&self, count: usize) -> bool {
         matches!(
             (*self, count),
             (Repeat::Any, _)
@@ -46,54 +51,20 @@ impl Repeat {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum Stage {
-    Matching { index: usize, count: usize },
-    Out,
-}
-
-impl Stage {
-    pub(super) fn step_stage(&self, Pattern(_, patterns): &Pattern, c: char) -> Stage {
-        if let Stage::Matching { index, count } = *self {
-            // Try to consume as many chars in one sub pattern as possible
-            if let Some((character, repeat)) = patterns.get(index)
-                && character.contains(c)
-                && repeat.accepts(count + 1)
-            {
-                return Stage::Matching {
-                    index: index,
-                    count: count + 1,
-                };
-            }
-
-            let mut windows = patterns[index..].windows(2).enumerate();
-            let mut prev_count = count;
-            while let Some((index_add, [(_, prev_repeat), (curr_character, _)])) = windows.next() {
-                if !prev_repeat.accepts(prev_count) {
-                    return Stage::Out;
-                }
-                prev_count = 0;
-                // 1 must be accepted
-                if curr_character.contains(c) {
-                    return Stage::Matching {
-                        index: index + index_add + 1,
-                        count: 1,
-                    };
-                }
-            }
-        }
-        Stage::Out
-    }
-}
-
 #[rustfmt::skip]
 macro_rules! pattern {
-    ($k:expr, $($c:tt $r:tt),*) => { Pattern($k, &[$((character!($c), repeat!($r)),)*]) };
+    ($kind:expr, $prio:literal, $($ch:tt $rpt:tt),*) => {
+        Pattern {
+            kind: $kind,
+            priority: $prio,
+            expression: &[$((character!($ch), repeat!($rpt)),)*],
+        }
+    };
 }
 
 #[rustfmt::skip]
 macro_rules! character {
-    (($c:literal)) => { Character::Single($c) };
+    (($ch:literal)) => { Character::Single($ch) };
     ((number))     => { Character::Number };
     ((unicode))    => { Character::Unicode };
 }
@@ -108,34 +79,34 @@ macro_rules! repeat {
 
 #[rustfmt::skip]
 macro_rules! enum_kind {
-    ($($k:ident = [$($p:tt)*])*) => {
-        #[derive(Clone, Copy)]
-        pub(super) enum Kind {
-            $($k,)*
+    ($(($prio:literal)$kind:ident = [$($patt:tt)*])*) => {
+        #[derive(Clone, Copy, Debug)]
+        pub enum Kind {
+            $($kind,)*
         }
 
         pub(super) const PATTERNS: &[Pattern] = &[
-            $(pattern!(Kind::$k, $($p)*),)*
+            $(pattern!(Kind::$kind, $prio, $($patt)*),)*
         ];
     };
 }
 
 #[rustfmt::skip]
 enum_kind! {
-    Integer     = [(number)+]
-    Fraction    = [(number)+, ('.')!, (number)+]
-    Identifier  = [(unicode)+, ('\'')*]
-    VariableX   = [('x')!]
-    VariableY   = [('y')!]
-    BraceL      = [('{')!]
-    BraceR      = [('}')!]
-    ParentheseL = [('(')!]
-    ParentheseR = [(')')!]
-    Power       = [('^')!]
-    Multiply    = [('*')!]
-    Divide      = [('/')!]
-    Plus        = [('+')!]
-    Minus       = [('-')!]
-    Equal       = [('=')!]
-    Comma       = [(',')!]
+    (0)Integer     = [(number)+]
+    (0)Fraction    = [(number)+, ('.')!, (number)+]
+    (0)Identifier  = [(unicode)+, ('\'')*]
+    (1)VariableX   = [('x')!]
+    (1)VariableY   = [('y')!]
+    (0)BraceL      = [('{')!]
+    (0)BraceR      = [('}')!]
+    (0)ParentheseL = [('(')!]
+    (0)ParentheseR = [(')')!]
+    (0)Power       = [('^')!]
+    (0)Multiply    = [('*')!]
+    (0)Divide      = [('/')!]
+    (0)Plus        = [('+')!]
+    (0)Minus       = [('-')!]
+    (0)Equal       = [('=')!]
+    (0)Comma       = [(',')!]
 }
