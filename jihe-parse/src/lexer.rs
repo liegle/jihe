@@ -2,12 +2,12 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::{
     cursor::Cursor,
-    lexer::{error::LexerError, stage::Match},
+    lexer::{error::LexerError, machine::Machine},
     token::{SKIP, Token},
 };
 
 pub(super) mod error;
-mod stage;
+mod machine;
 #[cfg(test)]
 mod test;
 
@@ -47,40 +47,36 @@ impl<'source> Iterator for Lexer<'source> {
 
         let byte_begin = self.byte_ptr;
         let char_begin = self.char_ptr;
-        let mut prev_match = Match::new();
-        let mut curr_match = Match::new();
+        let mut machine = Machine::new();
 
-        while let Some(c) = self.source.peek() {
-            if SKIP.contains(c) {
+        while let Some(c) = self.source.peek().copied() {
+            if SKIP.contains(&c) {
                 break;
             }
 
-            curr_match.step(*c);
-            if !curr_match.any() {
-                if !prev_match.any() {
+            let next_machine = machine.step(c);
+            if next_machine.last_matched_char.is_none() {
+                if machine.last_matched_char.is_none() {
                     return Some(Err(LexerError::UnexpectedBegin {
-                        found: *c,
+                        found: c,
                         cursor: self.char_ptr,
                     }));
                 }
                 break;
             } else {
-                prev_match = curr_match.clone();
+                machine = next_machine.clone();
                 self.byte_ptr += c.len_utf8();
                 self.char_ptr.step(false);
                 self.source.next();
             }
         }
 
-        if prev_match.any() {
-            let matched = prev_match.cmp_priority();
+        if let Some(c) = machine.last_matched_char {
+            let matched = machine.end();
             match &matched[..] {
                 [] => Some(Err(LexerError::UnexpectedMid {
-                    expected: prev_match.gather_expected(),
-                    found: *self
-                        .source
-                        .peek()
-                        .expect("Technically the source is not end"),
+                    expected: machine.gather_expected(),
+                    found: c,
                     cursor: self.char_ptr,
                 })),
                 [kind] => Some(Ok(Token {

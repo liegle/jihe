@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::HashSet};
 
-use crate::token::{Character, Kind, PATTERNS, Pattern};
+use crate::token::{Character, Kind, PATTERNS, Pattern, Repeat};
 
 #[derive(Clone, Copy, Debug)]
 enum Stage {
@@ -8,67 +8,67 @@ enum Stage {
     Out,
 }
 
-#[derive(Clone)]
-pub(super) struct Match {
-    stages: [Stage; PATTERNS.len()],
-    matching_count: usize,
+impl Stage {
+    fn step(&self, expression: &[(Character, Repeat)], c: char) -> Self {
+        if let Stage::Matching { index, count } = *self {
+            // Try to consume as many chars in one sub pattern as possible
+            if let Some((character, repeat)) = expression.get(index)
+                && character.contains(c)
+                && repeat.accepts(count + 1)
+            {
+                return Stage::Matching { index, count: count + 1 };
+            }
+
+            let mut windows = expression[index..].windows(2).enumerate();
+            let mut prev_count = count;
+
+            while let Some((index_add, [(_, prev_repeat), (curr_character, _)])) = windows.next() {
+                if !prev_repeat.accepts(prev_count) {
+                    return Stage::Out;
+                }
+                prev_count = 0;
+                // 1 must be accepted
+                if curr_character.contains(c) {
+                    return Stage::Matching {
+                        index: index + index_add + 1,
+                        count: 1,
+                    };
+                }
+            }
+        }
+
+        Stage::Out
+    }
 }
 
-impl Match {
+#[derive(Clone)]
+pub(super) struct Machine {
+    stages: [Stage; PATTERNS.len()],
+    pub(super) last_matched_char: Option<char>,
+}
+
+impl Machine {
     pub(super) fn new() -> Self {
         Self {
             stages: [Stage::Matching { index: 0, count: 0 }; _],
-            matching_count: 0,
+            last_matched_char: None,
         }
     }
 
-    pub(super) fn any(&self) -> bool {
-        self.matching_count != 0
-    }
-
-    pub(super) fn step(&mut self, c: char) {
-        self.matching_count = 0;
-        for (stage, Pattern { expression, .. }) in self.stages.iter_mut().zip(PATTERNS) {
-            *stage = if let Stage::Matching { index, count } = *stage {
-                // Try to consume as many chars in one sub pattern as possible
-                if let Some((character, repeat)) = expression.get(index)
-                    && character.contains(c)
-                    && repeat.accepts(count + 1)
-                {
-                    Stage::Matching { index, count: count + 1 }
-                } else {
-                    let mut windows = expression[index..].windows(2).enumerate();
-                    let mut prev_count = count;
-                    loop {
-                        if let Some((index_add, [(_, prev_repeat), (curr_character, _)])) =
-                            windows.next()
-                        {
-                            if !prev_repeat.accepts(prev_count) {
-                                break Stage::Out;
-                            }
-                            prev_count = 0;
-                            // 1 must be accepted
-                            if curr_character.contains(c) {
-                                break Stage::Matching {
-                                    index: index + index_add + 1,
-                                    count: 1,
-                                };
-                            }
-                        } else {
-                            break Stage::Out;
-                        }
-                    }
-                }
-            } else {
-                Stage::Out
-            };
-            if let Stage::Matching { .. } = stage {
-                self.matching_count += 1;
+    pub(super) fn step(&self, c: char) -> Self {
+        let mut next = Self::new();
+        for ((next_stage, stage), Pattern { expression, .. }) in
+            next.stages.iter_mut().zip(self.stages).zip(PATTERNS)
+        {
+            *next_stage = stage.step(expression, c);
+            if let Stage::Matching { .. } = next_stage {
+                next.last_matched_char = Some(c);
             }
         }
+        next
     }
 
-    pub(super) fn cmp_priority(&self) -> Vec<Kind> {
+    pub(super) fn end(&self) -> Vec<Kind> {
         let mut greatest_priority = 0;
         let mut matched = Vec::new();
         for (
