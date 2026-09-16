@@ -1,5 +1,6 @@
 use std::{
     cmp::Ordering,
+    collections::HashSet,
     error,
     fmt::{self, Display, Formatter},
     iter::Peekable,
@@ -9,7 +10,7 @@ use std::{
 
 use crate::{
     cursor::Cursor,
-    token::{Kind, PATTERNS, Pattern, SKIP, Token},
+    token::{Character, Kind, PATTERNS, Pattern, SKIP, Token},
 };
 
 pub(super) struct Lexer<'source> {
@@ -27,7 +28,7 @@ impl<'source> Lexer<'source> {
         }
     }
 
-    fn comsume_whitespaces(&mut self) {
+    fn consume_whitespaces(&mut self) {
         while let Some(c) = self.source.peek() {
             if SKIP.contains(c) {
                 self.byte_ptr += c.len_utf8();
@@ -44,7 +45,7 @@ impl<'source> Iterator for Lexer<'source> {
     type Item = Result<Token, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.comsume_whitespaces();
+        self.consume_whitespaces();
 
         let byte_begin = self.byte_ptr;
         let char_begin = self.char_ptr;
@@ -76,7 +77,14 @@ impl<'source> Iterator for Lexer<'source> {
         if prev_match.matching_count != 0 {
             let matched = prev_match.cmp_priority();
             match &matched[..] {
-                [] => unreachable!("Technically there should be at least 1 matched token kinds"),
+                [] => Some(Err(LexerError::UnexpectedMid {
+                    expected: prev_match.gather_expected(),
+                    found: *self
+                        .source
+                        .peek()
+                        .expect("Technically the source is not end"),
+                    cursor: self.char_ptr,
+                })),
                 [kind] => Some(Ok(Token {
                     kind: *kind,
                     bytes: byte_begin..self.byte_ptr,
@@ -181,11 +189,39 @@ impl Match {
         }
         matched
     }
+
+    fn gather_expected(&self) -> HashSet<Character> {
+        let mut expected = HashSet::new();
+        for (stage, Pattern { expression, .. }) in self.stages.iter().zip(PATTERNS) {
+            let Stage::Matching { index, count } = *stage else {
+                continue;
+            };
+            if let Some((character, repeat)) = expression.get(index)
+                && repeat.accepts(count + 1)
+            {
+                expected.insert(*character);
+            }
+            let mut windows = expression[index..].windows(2);
+            let mut prev_count = count;
+            while let Some([(_, prev_repeat), (curr_character, _)]) = windows.next() {
+                if prev_repeat.accepts(prev_count) {
+                    expected.insert(*curr_character);
+                }
+                prev_count = 0;
+            }
+        }
+        expected
+    }
 }
 
 #[derive(Debug)]
 pub enum LexerError {
     UnexpectedBegin {
+        found: char,
+        cursor: Cursor,
+    },
+    UnexpectedMid {
+        expected: HashSet<Character>,
         found: char,
         cursor: Cursor,
     },
@@ -203,18 +239,36 @@ impl Display for LexerError {
             Self::UnexpectedBegin { found, cursor } => {
                 write!(
                     f,
-                    "Char '{}' at {} is not a beginning of any known token kind",
-                    found, cursor
+                    "Char '{found}' at {cursor} is not a beginning of any known token kind",
                 )
+            }
+            Self::UnexpectedMid { expected, found, cursor } => {
+                write!(f, "Expected ")?;
+                let mut is_begin = true;
+                for e in expected {
+                    if is_begin {
+                        write!(f, "{e:?}")?;
+                        is_begin = false;
+                    } else {
+                        write!(f, "or {e:?}")?;
+                    }
+                }
+                write!(f, ", found '{found}' at {cursor}")
             }
             Self::MultipleMatching { matched, range } => {
                 write!(
                     f,
-                    "String from {} to {} can match more than one tokens: [",
+                    "String from {} to {} can match more than one token kind: [",
                     range.start, range.end,
                 )?;
+                let mut is_begin = true;
                 for k in matched {
-                    write!(f, "{k:?}, ")?;
+                    if is_begin {
+                        write!(f, "{k:?}")?;
+                        is_begin = false;
+                    } else {
+                        write!(f, ", {k:?}")?;
+                    }
                 }
                 write!(f, "], this usually means a wrong design in token priority")
             }
@@ -242,7 +296,7 @@ mod test {
 
     #[test]
     fn test_all() {
-        let mut lexer = Lexer::new("325 \t 0.6 \n 🍎 xx yy x y { () } \r ^*/ + - = ,");
+        let mut lexer = Lexer::new("325 \t 0.6 \n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
         assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Integer, bytes })) if bytes == (0..3));
         assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Fraction, bytes })) if bytes == (6..9));
         assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Identifier, bytes })) if bytes == (12..16));
@@ -261,6 +315,8 @@ mod test {
         assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Minus, bytes })) if bytes == (42..43));
         assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Equal, bytes })) if bytes == (44..45));
         assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Comma, bytes })) if bytes == (46..47));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Colon, bytes })) if bytes == (47..48));
+        assert_matches!(lexer.next(), None);
     }
 
     #[test]
@@ -272,6 +328,6 @@ mod test {
                 found: '@',
                 cursor: Cursor { line: 1, col: 3 }
             }))
-        )
+        );
     }
 }

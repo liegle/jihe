@@ -30,8 +30,8 @@ const fn calc_endable_index(expression: &[(Character, Repeat)]) -> usize {
     0
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(super) enum Character {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Character {
     Single(char),
     Number,
     Unicode,
@@ -130,4 +130,5 @@ enum_kind! {
     (0)Minus       = [('-')!]
     (0)Equal       = [('=')!]
     (0)Comma       = [(',')!]
+    (0)Colon       = [(':')!]
 }
