@@ -101,14 +101,17 @@ macro_rules! repeat {
 #[rustfmt::skip]
 macro_rules! enum_kind {
     ($(($prio:literal)$kind:ident = [$($patt:tt)*])*) => {
-        #[derive(Clone, Copy, Debug)]
+        #[derive(Clone, Copy, Debug, Default)]
         pub enum Kind {
+            #[default]
             $($kind,)*
         }
 
         pub(super) const PATTERNS: &[Pattern] = &[
             $(pattern!(Kind::$kind, $prio, $($patt)*),)*
         ];
+
+        pub(super) const PATTERN_COUNT: usize = PATTERNS.len();
     };
 }
 

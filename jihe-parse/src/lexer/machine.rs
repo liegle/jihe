@@ -1,6 +1,9 @@
 use std::{cmp::Ordering, collections::HashSet};
 
-use crate::token::{Character, Kind, PATTERNS, Pattern, Repeat};
+use crate::{
+    array::DynArray,
+    token::{Character, Kind, PATTERN_COUNT, PATTERNS, Pattern, Repeat},
+};
 
 #[derive(Clone, Copy, Debug)]
 enum Stage {
@@ -43,7 +46,7 @@ impl Stage {
 
 #[derive(Clone)]
 pub(super) struct Machine {
-    stages: [Stage; PATTERNS.len()],
+    stages: [Stage; PATTERN_COUNT],
     pub(super) last_matched_char: Option<char>,
 }
 
@@ -68,9 +71,9 @@ impl Machine {
         next
     }
 
-    pub(super) fn end(&self) -> Vec<Kind> {
+    pub(super) fn end(&self) -> DynArray<Kind, PATTERN_COUNT> {
         let mut greatest_priority = 0;
-        let mut matched = Vec::new();
+        let mut matched = DynArray::new();
         for (
             stage,
             Pattern {
