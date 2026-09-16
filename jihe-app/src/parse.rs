@@ -41,16 +41,14 @@ impl Parse {
 
             let abs = path::absolute(&path).unwrap();
             let dir = abs.parent().unwrap().to_owned();
-            let mut watcher = match notify::recommended_watcher(Filter {
-                path: path.clone(),
-                sender,
-            }) {
-                Ok(watcher) => watcher,
-                Err(e) => {
-                    log::error!("Can't create watcher because:{e}");
-                    return None;
-                }
-            };
+            let mut watcher =
+                match notify::recommended_watcher(Filter { path: path.clone(), sender }) {
+                    Ok(watcher) => watcher,
+                    Err(e) => {
+                        log::error!("Can't create watcher because:{e}");
+                        return None;
+                    }
+                };
 
             if let Err(e) = watcher.watch(&dir, notify::RecursiveMode::NonRecursive) {
                 log::error!("Can't watch target file because:{e}");
@@ -62,10 +60,7 @@ impl Parse {
                 let _ = watcher.unwatch(&dir); // Keep watcher alive
             })
         };
-        Some(Self {
-            join_handle,
-            sender,
-        })
+        Some(Self { join_handle, sender })
     }
 
     pub(super) fn join(self) -> thread::Result<()> {

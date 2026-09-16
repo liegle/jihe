@@ -62,9 +62,7 @@ impl Content {
                     color: glam::vec3(0.1, 0.1, 0.1),
                     grad_height: 5,
                 }),
-                grid: Some(Grid {
-                    color: glam::vec3(0.5, 0.5, 0.5),
-                }),
+                grid: Some(Grid { color: glam::vec3(0.5, 0.5, 0.5) }),
                 spacing: 100,
             },
             curves: vec![

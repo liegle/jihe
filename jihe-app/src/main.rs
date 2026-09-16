@@ -90,12 +90,7 @@ impl winit::application::ApplicationHandler for App {
             }
         };
 
-        *self = App::Ready {
-            state,
-            window,
-            parse,
-            render,
-        };
+        *self = App::Ready { state, window, parse, render };
     }
 
     fn window_event(
@@ -104,13 +99,7 @@ impl winit::application::ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let App::Ready {
-            state,
-            window,
-            parse,
-            render,
-        } = self
-        else {
+        let App::Ready { state, window, parse, render } = self else {
             return;
         };
         use winit::event::WindowEvent;
@@ -130,10 +119,9 @@ impl winit::application::ApplicationHandler for App {
             } if state.handle_keyboard_input(&event) => {
                 window.request_redraw();
             }
-            WindowEvent::CursorMoved {
-                device_id: _,
-                position,
-            } if state.handle_cursor_moved(&position) => {
+            WindowEvent::CursorMoved { device_id: _, position }
+                if state.handle_cursor_moved(&position) =>
+            {
                 window.request_redraw();
             }
             WindowEvent::MouseInput {
@@ -148,11 +136,9 @@ impl winit::application::ApplicationHandler for App {
                     window.set_cursor(Cursor::Icon(CursorIcon::Default));
                 }
             }
-            WindowEvent::MouseWheel {
-                device_id: _,
-                delta,
-                phase,
-            } if state.handle_mouse_wheel(&delta, &phase) => {
+            WindowEvent::MouseWheel { device_id: _, delta, phase }
+                if state.handle_mouse_wheel(&delta, &phase) =>
+            {
                 window.request_redraw();
             }
             _ => {}

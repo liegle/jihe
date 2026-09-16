@@ -3,7 +3,7 @@ use std::{
     error,
     fmt::{self, Display, Formatter},
     iter::Peekable,
-    ops::RangeInclusive,
+    ops::Range,
     str::Chars,
 };
 
@@ -57,8 +57,8 @@ impl<'source> Iterator for Lexer<'source> {
             }
 
             curr_match.step(*c);
-            if curr_match.count == 0 {
-                if prev_match.count == 0 {
+            if curr_match.matching_count == 0 {
+                if prev_match.matching_count == 0 {
                     return Some(Err(LexerError::UnexpectedBegin {
                         found: *c,
                         cursor: self.char_ptr,
@@ -66,14 +66,14 @@ impl<'source> Iterator for Lexer<'source> {
                 }
                 break;
             } else {
-                (prev_match, curr_match) = (curr_match, Match::new());
+                prev_match = curr_match.clone();
                 self.byte_ptr += c.len_utf8();
                 self.char_ptr.step(false);
                 self.source.next();
             }
         }
 
-        if prev_match.count != 0 {
+        if prev_match.matching_count != 0 {
             let matched = prev_match.cmp_priority();
             match &matched[..] {
                 [] => unreachable!("Technically there should be at least 1 matched token kinds"),
@@ -83,7 +83,7 @@ impl<'source> Iterator for Lexer<'source> {
                 })),
                 _ => Some(Err(LexerError::MultipleMatching {
                     matched,
-                    range: char_begin..=self.char_ptr,
+                    range: char_begin..self.char_ptr,
                 })),
             }
         } else {
@@ -92,26 +92,28 @@ impl<'source> Iterator for Lexer<'source> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Stage {
     Matching { index: usize, count: usize },
     Out,
 }
 
+#[derive(Clone)]
 struct Match {
     stages: [Stage; PATTERNS.len()],
-    count: usize,
+    matching_count: usize,
 }
 
 impl Match {
     fn new() -> Self {
         Self {
             stages: [Stage::Matching { index: 0, count: 0 }; _],
-            count: 0,
+            matching_count: 0,
         }
     }
 
     fn step(&mut self, c: char) {
+        self.matching_count = 0;
         for (stage, Pattern { expression, .. }) in self.stages.iter_mut().zip(PATTERNS) {
             *stage = if let Stage::Matching { index, count } = *stage {
                 // Try to consume as many chars in one sub pattern as possible
@@ -119,10 +121,7 @@ impl Match {
                     && character.contains(c)
                     && repeat.accepts(count + 1)
                 {
-                    Stage::Matching {
-                        index,
-                        count: count + 1,
-                    }
+                    Stage::Matching { index, count: count + 1 }
                 } else {
                     let mut windows = expression[index..].windows(2).enumerate();
                     let mut prev_count = count;
@@ -150,7 +149,7 @@ impl Match {
                 Stage::Out
             };
             if let Stage::Matching { .. } = stage {
-                self.count += 1;
+                self.matching_count += 1;
             }
         }
     }
@@ -158,10 +157,16 @@ impl Match {
     fn cmp_priority(&self) -> Vec<Kind> {
         let mut greatest_priority = 0;
         let mut matched = Vec::new();
-        for (stage, Pattern { kind, priority, .. }) in self.stages.iter().zip(PATTERNS) {
-            let Stage::Matching { .. } = stage else {
+        for (
+            stage,
+            Pattern {
+                kind, priority, endable_index, ..
+            },
+        ) in self.stages.iter().zip(PATTERNS)
+        {
+            if !matches!(stage, Stage::Matching { index, .. } if *index >= *endable_index) {
                 continue;
-            };
+            }
             match priority.cmp(&greatest_priority) {
                 Ordering::Greater => {
                     greatest_priority = *priority;
@@ -186,7 +191,7 @@ pub enum LexerError {
     },
     MultipleMatching {
         matched: Vec<Kind>,
-        range: RangeInclusive<Cursor>,
+        range: Range<Cursor>,
     },
 }
 
@@ -206,8 +211,7 @@ impl Display for LexerError {
                 write!(
                     f,
                     "String from {} to {} can match more than one tokens: [",
-                    range.start(),
-                    range.end(),
+                    range.start, range.end,
                 )?;
                 for k in matched {
                     write!(f, "{k:?}, ")?;
@@ -220,5 +224,54 @@ impl Display for LexerError {
 
 #[cfg(test)]
 mod test {
-    // TODO
+    use std::assert_matches;
+
+    use super::*;
+
+    #[test]
+    fn test_none() {
+        let mut lexer = Lexer::new("");
+        assert_matches!(lexer.next(), None);
+    }
+
+    #[test]
+    fn test_whitespaces() {
+        let mut lexer = Lexer::new("   \n\t\r   ");
+        assert_matches!(lexer.next(), None);
+    }
+
+    #[test]
+    fn test_all() {
+        let mut lexer = Lexer::new("325 \t 0.6 \n 🍎 xx yy x y { () } \r ^*/ + - = ,");
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Integer, bytes })) if bytes == (0..3));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Fraction, bytes })) if bytes == (6..9));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Identifier, bytes })) if bytes == (12..16));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Identifier, bytes })) if bytes == (17..19));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Identifier, bytes })) if bytes == (20..22));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::VariableX, bytes })) if bytes == (23..24));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::VariableY, bytes })) if bytes == (25..26));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::BraceL, bytes })) if bytes == (27..28));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::ParentheseL, bytes })) if bytes == (29..30));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::ParentheseR, bytes })) if bytes == (30..31));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::BraceR, bytes })) if bytes == (32..33));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Power, bytes })) if bytes == (36..37));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Multiply, bytes })) if bytes == (37..38));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Divide, bytes })) if bytes == (38..39));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Plus, bytes })) if bytes == (40..41));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Minus, bytes })) if bytes == (42..43));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Equal, bytes })) if bytes == (44..45));
+        assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Comma, bytes })) if bytes == (46..47));
+    }
+
+    #[test]
+    fn test_unexcepted_begin() {
+        let mut lexer = Lexer::new("  \n \t @");
+        assert_matches!(
+            lexer.next(),
+            Some(Err(LexerError::UnexpectedBegin {
+                found: '@',
+                cursor: Cursor { line: 1, col: 3 }
+            }))
+        )
+    }
 }

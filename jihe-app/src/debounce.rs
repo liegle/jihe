@@ -33,23 +33,12 @@ impl<T: Copy> Debounce<T> {
                 },
                 Some(payload),
             ),
-            State::Throttled { deadline } => (
-                State::Scheduled {
-                    deadline: *deadline,
-                    payload,
-                },
-                None,
-            ),
-            State::Scheduled {
-                deadline,
-                payload: _,
-            } => (
-                State::Scheduled {
-                    deadline: *deadline,
-                    payload,
-                },
-                None,
-            ),
+            State::Throttled { deadline } => {
+                (State::Scheduled { deadline: *deadline, payload }, None)
+            }
+            State::Scheduled { deadline, payload: _ } => {
+                (State::Scheduled { deadline: *deadline, payload }, None)
+            }
         };
         result
     }

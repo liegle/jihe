@@ -15,9 +15,7 @@ pub struct Parse {
 
 impl Parse {
     pub fn new(path: &Path) -> Self {
-        Self {
-            path: path.to_owned(),
-        }
+        Self { path: path.to_owned() }
     }
 
     pub fn parse(&self) -> Result<jihe_shared::Content, ParseError> {

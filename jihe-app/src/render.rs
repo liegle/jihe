@@ -55,11 +55,7 @@ impl Render {
                 ))
             })
         };
-        Some(Self {
-            join_handle,
-            sender,
-            size,
-        })
+        Some(Self { join_handle, sender, size })
     }
 
     pub(super) fn join(self) -> thread::Result<()> {

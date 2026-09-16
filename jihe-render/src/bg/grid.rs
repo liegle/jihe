@@ -52,11 +52,7 @@ impl Grid {
             &color_buffer,
             dst_format,
         );
-        Self {
-            color_buffer,
-            hori,
-            vert,
-        }
+        Self { color_buffer, hori, vert }
     }
 
     pub(super) fn prepare(
@@ -123,12 +119,7 @@ impl Lines {
         queue.write_buffer(
             &self.lines_buffer,
             0,
-            &LinesUniform {
-                begin,
-                spacing,
-                ends,
-            }
-            .as_uniform_bytes(),
+            &LinesUniform { begin, spacing, ends }.as_uniform_bytes(),
         );
     }
 

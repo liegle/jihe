@@ -18,9 +18,7 @@ impl State {
         Self {
             config,
             scene,
-            drag: DragState::Released {
-                mouse: glam::vec2(0., 0.),
-            },
+            drag: DragState::Released { mouse: glam::vec2(0., 0.) },
         }
     }
 
@@ -94,9 +92,7 @@ impl State {
             (DragState::DraggingFrom { mouse, cam }, ElementState::Released) => {
                 let camera = &self.scene.lock().unwrap().camera;
                 let delta = (camera.pos - cam) / camera.scale;
-                self.drag = DragState::Released {
-                    mouse: mouse + delta,
-                };
+                self.drag = DragState::Released { mouse: mouse + delta };
                 false
             }
             _ => {

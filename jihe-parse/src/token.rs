@@ -2,6 +2,7 @@ use std::ops::Range;
 
 pub(super) const SKIP: &[char] = &[' ', '\t', '\n', '\r'];
 
+#[derive(Debug)]
 pub(super) struct Token {
     pub(super) kind: Kind,
     pub(super) bytes: Range<usize>,
@@ -11,9 +12,25 @@ pub(super) struct Pattern {
     pub(super) kind: Kind,
     pub(super) priority: u8,
     pub(super) expression: &'static [(Character, Repeat)],
+    pub(super) endable_index: usize,
 }
 
-#[derive(Clone, Copy)]
+const fn calc_endable_index(expression: &[(Character, Repeat)]) -> usize {
+    assert!(
+        !expression.is_empty(),
+        "Technically no expression should be empty"
+    );
+    let mut index = expression.len() - 1;
+    while index > 0 {
+        if !expression[index].1.accepts(0) {
+            return index - 1;
+        }
+        index -= 1;
+    }
+    0
+}
+
+#[derive(Clone, Copy, Debug)]
 pub(super) enum Character {
     Single(char),
     Number,
@@ -31,7 +48,7 @@ impl Character {
 }
 
 #[allow(dead_code)] // TODO: add a token kind that uses NoneOrOnce
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) enum Repeat {
     Any,
     NoneOrOnce,
@@ -40,7 +57,7 @@ pub(super) enum Repeat {
 }
 
 impl Repeat {
-    pub(super) fn accepts(&self, count: usize) -> bool {
+    pub(super) const fn accepts(&self, count: usize) -> bool {
         matches!(
             (*self, count),
             (Repeat::Any, _)
@@ -54,10 +71,14 @@ impl Repeat {
 #[rustfmt::skip]
 macro_rules! pattern {
     ($kind:expr, $prio:literal, $($ch:tt $rpt:tt),*) => {
-        Pattern {
-            kind: $kind,
-            priority: $prio,
-            expression: &[$((character!($ch), repeat!($rpt)),)*],
+        {
+            let expression = &[$((character!($ch), repeat!($rpt)),)*];
+            Pattern {
+                kind: $kind,
+                priority: $prio,
+                expression,
+                endable_index: calc_endable_index(expression),
+            }
         }
     };
 }
@@ -65,8 +86,8 @@ macro_rules! pattern {
 #[rustfmt::skip]
 macro_rules! character {
     (($ch:literal)) => { Character::Single($ch) };
-    ((number))     => { Character::Number };
-    ((unicode))    => { Character::Unicode };
+    ((number))      => { Character::Number };
+    ((unicode))     => { Character::Unicode };
 }
 
 #[rustfmt::skip]

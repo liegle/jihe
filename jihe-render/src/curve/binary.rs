@@ -36,10 +36,7 @@ impl Binary {
             .map(|curve| {
                 let expr = curve.expr.to_owned();
                 let compute_pipeline = create_compute_pipeline(device, &bind_group_layout, &expr);
-                Pipeline {
-                    expr,
-                    compute_pipeline,
-                }
+                Pipeline { expr, compute_pipeline }
             })
             .collect();
         Self {
@@ -63,10 +60,7 @@ impl Binary {
                         let expr = curve.expr.to_owned();
                         let compute_pipeline =
                             create_compute_pipeline(device, &self.bind_group_layout, &expr);
-                        Pipeline {
-                            expr,
-                            compute_pipeline,
-                        }
+                        Pipeline { expr, compute_pipeline }
                     }
                 });
         }

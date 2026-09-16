@@ -33,11 +33,7 @@ impl Bg {
         let axis_area = half_size - AXIS_MARGIN;
         let axis_pos_cs = (-camera.pos / camera.scale).clamp(-axis_area, axis_area) / half_size;
 
-        if let Some(jihe_shared::Axis {
-            color,
-            grad_height: _,
-        }) = bg.axis
-        {
+        if let Some(jihe_shared::Axis { color, grad_height: _ }) = bg.axis {
             self.axis.prepare(queue, axis_pos_cs, color);
         }
         'grid: {

@@ -276,9 +276,8 @@ const SURFACE_VIEW_DESCRIPTOR: wgpu::TextureViewDescriptor = wgpu::TextureViewDe
     array_layer_count: None,
 };
 
-const COMMAND_ENCODER_DECRIPTOR: wgpu::CommandEncoderDescriptor = wgpu::CommandEncoderDescriptor {
-    label: Some("Command Encoder"),
-};
+const COMMAND_ENCODER_DECRIPTOR: wgpu::CommandEncoderDescriptor =
+    wgpu::CommandEncoderDescriptor { label: Some("Command Encoder") };
 
 #[inline]
 fn create_compute_pass<'a>(encoder: &'a mut CommandEncoder) -> ComputePass<'a> {
