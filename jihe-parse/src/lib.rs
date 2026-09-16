@@ -5,6 +5,7 @@ use std::{
 
 use crate::lexer::{Lexer, error::LexerError};
 
+mod array;
 mod cursor;
 mod lexer;
 mod token;
