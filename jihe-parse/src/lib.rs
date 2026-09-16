@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::lexer::{Lexer, LexerError};
+use crate::lexer::{Lexer, error::LexerError};
 
 mod cursor;
 mod lexer;
