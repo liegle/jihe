@@ -112,23 +112,13 @@ impl winit::application::ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => render.draw(),
             WindowEvent::Resized(size) => render.resize(size.into()),
-            WindowEvent::KeyboardInput {
-                device_id: _,
-                event,
-                is_synthetic: _,
-            } if state.handle_keyboard_input(&event) => {
+            WindowEvent::KeyboardInput { event, .. } if state.handle_keyboard_input(&event) => {
                 window.request_redraw();
             }
-            WindowEvent::CursorMoved { device_id: _, position }
-                if state.handle_cursor_moved(&position) =>
-            {
+            WindowEvent::CursorMoved { position, .. } if state.handle_cursor_moved(&position) => {
                 window.request_redraw();
             }
-            WindowEvent::MouseInput {
-                device_id: _,
-                state: elem_state,
-                button,
-            } => {
+            WindowEvent::MouseInput { state: elem_state, button, .. } => {
                 use winit::window::{Cursor, CursorIcon};
                 if state.handle_mouse_input(&elem_state, &button) {
                     window.set_cursor(Cursor::Icon(CursorIcon::Grabbing));
@@ -136,7 +126,7 @@ impl winit::application::ApplicationHandler for App {
                     window.set_cursor(Cursor::Icon(CursorIcon::Default));
                 }
             }
-            WindowEvent::MouseWheel { device_id: _, delta, phase }
+            WindowEvent::MouseWheel { delta, phase, .. }
                 if state.handle_mouse_wheel(&delta, &phase) =>
             {
                 window.request_redraw();

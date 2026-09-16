@@ -60,7 +60,7 @@ impl State {
     ) -> bool {
         let position = glam::vec2(-position.x as f32, position.y as f32);
         match &self.drag {
-            DragState::Released { mouse: _ } => {
+            DragState::Released { .. } => {
                 self.drag = DragState::Released { mouse: position };
                 false
             }
