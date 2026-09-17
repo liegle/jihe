@@ -7,19 +7,19 @@ use crate::token::Kind;
 
 #[test]
 fn test_none() {
-    let mut lexer = Lexer::new("");
+    let mut lexer = Lex::new("");
     assert_matches!(lexer.next(), None);
 }
 
 #[test]
 fn test_whitespaces() {
-    let mut lexer = Lexer::new("   \n\t\r   ");
+    let mut lexer = Lex::new("   \n\t\r   ");
     assert_matches!(lexer.next(), None);
 }
 
 #[test]
 fn test_all() {
-    let mut lexer = Lexer::new("325 \t 0.6 \n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
+    let mut lexer = Lex::new("325 \t 0.6 \n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
     assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Integer, bytes })) if bytes == (0..3));
     assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Fraction, bytes })) if bytes == (6..9));
     assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Identifier, bytes })) if bytes == (12..16));
@@ -44,7 +44,7 @@ fn test_all() {
 
 #[test]
 fn test_unexcepted_begin() {
-    let mut lexer = Lexer::new("  \n \t @");
+    let mut lexer = Lex::new("  \n \t @");
     assert_matches!(
         lexer.next(),
         Some(Err(LexerError::UnexpectedBegin {

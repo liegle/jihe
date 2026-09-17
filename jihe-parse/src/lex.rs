@@ -2,7 +2,7 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::{
     cursor::Cursor,
-    lexer::{error::LexerError, machine::Machine},
+    lex::{error::LexerError, machine::Machine},
     token::{SKIP, Token},
 };
 
@@ -11,14 +11,14 @@ mod machine;
 #[cfg(test)]
 mod test;
 
-pub(super) struct Lexer<'source> {
-    source: Peekable<Chars<'source>>,
+pub(super) struct Lex<'src> {
+    source: Peekable<Chars<'src>>,
     byte_ptr: usize,
     char_ptr: Cursor,
 }
 
-impl<'source> Lexer<'source> {
-    pub(super) fn new(source: &'source str) -> Self {
+impl<'src> Lex<'src> {
+    pub(super) fn new(source: &'src str) -> Self {
         Self {
             source: source.chars().peekable(),
             byte_ptr: 0,
@@ -39,7 +39,7 @@ impl<'source> Lexer<'source> {
     }
 }
 
-impl<'source> Iterator for Lexer<'source> {
+impl<'source> Iterator for Lex<'source> {
     type Item = Result<Token, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -72,6 +72,8 @@ impl<'source> Iterator for Lexer<'source> {
         }
 
         if let Some(c) = machine.last_matched_char {
+            // v v v v x x x x ...
+            //   curr^ ^peek
             let matched = machine.end();
             match &matched[..] {
                 [] => Some(Err(LexerError::UnexpectedMid {
@@ -89,6 +91,9 @@ impl<'source> Iterator for Lexer<'source> {
                 })),
             }
         } else {
+            //     o last
+            // v v v _ _
+            //   curr^ ^peek
             None
         }
     }

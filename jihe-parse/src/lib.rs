@@ -3,12 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::lexer::{Lexer, error::LexerError};
+use crate::lex::{Lex, error::LexerError};
 
 mod array;
 mod cursor;
-mod lexer;
+mod lex;
+mod syn;
 mod token;
+mod tree;
 
 pub struct Parse {
     path: PathBuf,
@@ -24,7 +26,7 @@ impl Parse {
             return Err(ParseError::FileLost);
         }
         let source = fs::read_to_string(&self.path)?;
-        let lexer = Lexer::new(&source);
+        let lexer = Lex::new(&source);
         for token in lexer {
             let _ = token?;
             // TODO
