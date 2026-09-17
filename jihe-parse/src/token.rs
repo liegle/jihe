@@ -1,11 +1,9 @@
-use std::ops::Range;
-
 pub(super) const SKIP: &[char] = &[' ', '\t', '\n', '\r'];
 
 #[derive(Debug)]
-pub(super) struct Token {
+pub(super) struct Token<'src> {
     pub(super) kind: Kind,
-    pub(super) bytes: Range<usize>,
+    pub(super) string: &'src str,
 }
 
 pub(super) struct Pattern {
@@ -16,14 +14,24 @@ pub(super) struct Pattern {
 }
 
 const fn calc_endable_index(expression: &[(Character, Repeat)]) -> usize {
-    assert!(
-        !expression.is_empty(),
-        "Technically no expression should be empty"
-    );
+    {
+        assert!(!expression.is_empty(), "No expression should be empty");
+        let mut i = 0;
+        let mut all_zeroable = true;
+        while i < expression.len() {
+            if !expression[i].1.accepts(0) {
+                all_zeroable = false;
+                break;
+            }
+            i += 1;
+        }
+        assert!(!all_zeroable, "No expression should be all zeroable");
+    }
+
     let mut index = expression.len() - 1;
     while index > 0 {
         if !expression[index].1.accepts(0) {
-            return index - 1;
+            return index;
         }
         index -= 1;
     }
@@ -47,7 +55,6 @@ impl Character {
     }
 }
 
-#[allow(dead_code)] // TODO: add a token kind that uses NoneOrOnce
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Repeat {
     Any,
@@ -86,8 +93,8 @@ macro_rules! pattern {
 #[rustfmt::skip]
 macro_rules! character {
     (($ch:literal)) => { Character::Single($ch) };
-    ((number))      => { Character::Number };
-    ((unicode))     => { Character::Unicode };
+    ((num))         => { Character::Number };
+    ((uni))         => { Character::Unicode };
 }
 
 #[rustfmt::skip]
@@ -117,9 +124,8 @@ macro_rules! enum_kind {
 
 #[rustfmt::skip]
 enum_kind! {
-    (0)Integer     = [(number)+]
-    (0)Fraction    = [(number)+, ('.')!, (number)+]
-    (0)Identifier  = [(unicode)+, ('\'')*]
+    (0)Number      = [(num)+, ('.')?, (num)*]
+    (0)Identifier  = [(uni)+, ('\'')*]
     (1)VariableX   = [('x')!]
     (1)VariableY   = [('y')!]
     (0)BraceL      = [('{')!]
@@ -134,4 +140,17 @@ enum_kind! {
     (0)Equal       = [('=')!]
     (0)Comma       = [(',')!]
     (0)Colon       = [(':')!]
+}
+
+#[cfg(test)]
+#[test]
+fn test_calc_endable_index() {
+    let p = pattern!(Kind::Number, 0, ('x')!, ('x')!, ('x')?).expression;
+    assert_eq!(calc_endable_index(p), 1);
+
+    let p = pattern!(Kind::Number, 0, ('x')!, ('x')*, ('x')!).expression;
+    assert_eq!(calc_endable_index(p), 2);
+
+    let p = pattern!(Kind::Number, 0, ('x')+, ('x')*, ('x')!, ('x')*).expression;
+    assert_eq!(calc_endable_index(p), 2);
 }

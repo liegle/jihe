@@ -7,46 +7,47 @@ use crate::token::Kind;
 
 #[test]
 fn test_none() {
-    let mut lexer = Lex::new("");
-    assert_matches!(lexer.next(), None);
+    let mut lex = Lex::new("");
+    assert_matches!(lex.next(), None);
 }
 
 #[test]
 fn test_whitespaces() {
-    let mut lexer = Lex::new("   \n\t\r   ");
-    assert_matches!(lexer.next(), None);
+    let mut lex = Lex::new("   \n\t\r   ");
+    assert_matches!(lex.next(), None);
 }
 
 #[test]
 fn test_all() {
-    let mut lexer = Lex::new("325 \t 0.6 \n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Integer, bytes })) if bytes == (0..3));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Fraction, bytes })) if bytes == (6..9));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Identifier, bytes })) if bytes == (12..16));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Identifier, bytes })) if bytes == (17..19));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Identifier, bytes })) if bytes == (20..22));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::VariableX, bytes })) if bytes == (23..24));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::VariableY, bytes })) if bytes == (25..26));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::BraceL, bytes })) if bytes == (27..28));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::ParentheseL, bytes })) if bytes == (29..30));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::ParentheseR, bytes })) if bytes == (30..31));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::BraceR, bytes })) if bytes == (32..33));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Power, bytes })) if bytes == (36..37));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Multiply, bytes })) if bytes == (37..38));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Divide, bytes })) if bytes == (38..39));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Plus, bytes })) if bytes == (40..41));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Minus, bytes })) if bytes == (42..43));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Equal, bytes })) if bytes == (44..45));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Comma, bytes })) if bytes == (46..47));
-    assert_matches!(lexer.next(), Some(Ok(Token { kind: Kind::Colon, bytes })) if bytes == (47..48));
-    assert_matches!(lexer.next(), None);
+    let mut lex = Lex::new("325 \t 0.6 777. \n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Number, string: "325" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Number, string: "0.6" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Number, string: "777." })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Identifier, string: "🍎" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Identifier, string: "xx" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Identifier, string: "yy" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::VariableX, string: "x" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::VariableY, string: "y" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::BraceL, string: "{" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::ParentheseL, string: "(" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::ParentheseR, string: ")" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::BraceR, string: "}" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Power, string: "^" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Multiply, string: "*" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Divide, string: "/" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Plus, string: "+" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Minus, string: "-" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Equal, string: "=" })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Comma, string: "," })));
+    assert_matches!(lex.next(), Some(Ok(Token { kind: Kind::Colon, string: ":" })));
+    assert_matches!(lex.next(), None);
 }
 
 #[test]
 fn test_unexcepted_begin() {
-    let mut lexer = Lex::new("  \n \t @");
+    let mut lex = Lex::new("  \n \t @");
     assert_matches!(
-        lexer.next(),
+        lex.next(),
         Some(Err(LexerError::UnexpectedBegin {
             found: '@',
             cursor: Cursor { line: 1, col: 3 }

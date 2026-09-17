@@ -26,8 +26,8 @@ impl Parse {
             return Err(ParseError::FileLost);
         }
         let source = fs::read_to_string(&self.path)?;
-        let lexer = Lex::new(&source);
-        for token in lexer {
+        let lex = Lex::new(&source);
+        for token in lex {
             let _ = token?;
             // TODO
         }

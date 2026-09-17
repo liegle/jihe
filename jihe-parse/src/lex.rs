@@ -12,7 +12,8 @@ mod machine;
 mod test;
 
 pub(super) struct Lex<'src> {
-    source: Peekable<Chars<'src>>,
+    source: &'src str,
+    chars: Peekable<Chars<'src>>,
     byte_ptr: usize,
     char_ptr: Cursor,
 }
@@ -20,18 +21,19 @@ pub(super) struct Lex<'src> {
 impl<'src> Lex<'src> {
     pub(super) fn new(source: &'src str) -> Self {
         Self {
-            source: source.chars().peekable(),
+            source,
+            chars: source.chars().peekable(),
             byte_ptr: 0,
             char_ptr: Default::default(),
         }
     }
 
     fn consume_whitespaces(&mut self) {
-        while let Some(c) = self.source.peek() {
+        while let Some(c) = self.chars.peek() {
             if SKIP.contains(c) {
                 self.byte_ptr += c.len_utf8();
                 self.char_ptr.step(*c == '\n');
-                self.source.next();
+                self.chars.next();
             } else {
                 break;
             }
@@ -39,8 +41,8 @@ impl<'src> Lex<'src> {
     }
 }
 
-impl<'source> Iterator for Lex<'source> {
-    type Item = Result<Token, LexerError>;
+impl<'src> Iterator for Lex<'src> {
+    type Item = Result<Token<'src>, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.consume_whitespaces();
@@ -49,7 +51,7 @@ impl<'source> Iterator for Lex<'source> {
         let char_begin = self.char_ptr;
         let mut machine = Machine::new();
 
-        while let Some(c) = self.source.peek().copied() {
+        while let Some(c) = self.chars.peek().copied() {
             if SKIP.contains(&c) {
                 break;
             }
@@ -67,7 +69,7 @@ impl<'source> Iterator for Lex<'source> {
                 machine = next_machine.clone();
                 self.byte_ptr += c.len_utf8();
                 self.char_ptr.step(false);
-                self.source.next();
+                self.chars.next();
             }
         }
 
@@ -83,7 +85,7 @@ impl<'source> Iterator for Lex<'source> {
                 })),
                 [kind] => Some(Ok(Token {
                     kind: *kind,
-                    bytes: byte_begin..self.byte_ptr,
+                    string: &self.source[byte_begin..self.byte_ptr],
                 })),
                 _ => Some(Err(LexerError::MultipleMatching {
                     matched,
