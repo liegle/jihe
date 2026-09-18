@@ -3,7 +3,7 @@
 use std::assert_matches;
 
 use super::*;
-use crate::token::Kind;
+use crate::lex::token::{Kind, Token};
 
 #[test]
 fn test_none() {
@@ -48,7 +48,7 @@ fn test_unexcepted_begin() {
     let mut lex = Lex::new("  \n \t @");
     assert_matches!(
         lex.next(),
-        Some(Err(LexerError::UnexpectedBegin {
+        Some(Err(LexError::UnexpectedBegin {
             found: '@',
             cursor: Cursor { line: 1, col: 3 }
         }))

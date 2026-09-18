@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    error,
+    error::Error,
     fmt::{self, Display, Formatter},
     ops::Range,
 };
@@ -8,11 +8,11 @@ use std::{
 use crate::{
     array::DynArray,
     cursor::Cursor,
-    token::{Character, Kind, PATTERN_COUNT},
+    lex::token::{Character, Kind, PATTERN_COUNT},
 };
 
 #[derive(Debug)]
-pub enum LexerError {
+pub enum LexError {
     UnexpectedBegin {
         found: char,
         cursor: Cursor,
@@ -28,9 +28,9 @@ pub enum LexerError {
     },
 }
 
-impl error::Error for LexerError {}
+impl Error for LexError {}
 
-impl Display for LexerError {
+impl Display for LexError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnexpectedBegin { found, cursor } => {

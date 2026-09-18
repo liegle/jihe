@@ -3,14 +3,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::lex::{Lex, error::LexerError};
+use crate::{
+    lex::{Lex, LexError},
+    syn::{Syn, SynError},
+};
 
 mod array;
 mod cursor;
 mod lex;
 mod syn;
-mod token;
-mod tree;
 
 pub struct Parse {
     path: PathBuf,
@@ -27,10 +28,11 @@ impl Parse {
         }
         let source = fs::read_to_string(&self.path)?;
         let lex = Lex::new(&source);
+        let mut syn = Syn::new();
         for token in lex {
-            let _ = token?;
-            // TODO
+            syn.input(token?)?;
         }
+        let _ = syn.output()?;
         Ok(jihe_shared::Content::example())
     }
 }
@@ -42,5 +44,7 @@ pub enum ParseError {
     #[error("Failed to read jihe because:{0}")]
     ReadFail(#[from] io::Error),
     #[error("Failed to create token because:{0}")]
-    LexError(#[from] LexerError),
+    LexError(#[from] LexError),
+    #[error("Failed to create syntax because:{0}")]
+    SynError(#[from] SynError),
 }

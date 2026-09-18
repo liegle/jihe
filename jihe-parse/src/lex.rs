@@ -1,15 +1,19 @@
 use std::{iter::Peekable, str::Chars};
 
+pub(super) use crate::lex::{
+    error::LexError,
+    token::{Kind, Token},
+};
 use crate::{
     cursor::Cursor,
-    lex::{error::LexerError, machine::Machine},
-    token::{SKIP, Token},
+    lex::{machine::Machine, token::SKIP},
 };
 
-pub(super) mod error;
+mod error;
 mod machine;
 #[cfg(test)]
 mod test;
+mod token;
 
 pub(super) struct Lex<'src> {
     source: &'src str,
@@ -42,7 +46,7 @@ impl<'src> Lex<'src> {
 }
 
 impl<'src> Iterator for Lex<'src> {
-    type Item = Result<Token<'src>, LexerError>;
+    type Item = Result<Token<'src>, LexError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.consume_whitespaces();
@@ -59,7 +63,7 @@ impl<'src> Iterator for Lex<'src> {
             let next_machine = machine.step(c);
             if next_machine.last_matched_char.is_none() {
                 if machine.last_matched_char.is_none() {
-                    return Some(Err(LexerError::UnexpectedBegin {
+                    return Some(Err(LexError::UnexpectedBegin {
                         found: c,
                         cursor: self.char_ptr,
                     }));
@@ -78,7 +82,7 @@ impl<'src> Iterator for Lex<'src> {
             //   curr^ ^peek
             let matched = machine.end();
             match &matched[..] {
-                [] => Some(Err(LexerError::UnexpectedMid {
+                [] => Some(Err(LexError::UnexpectedMid {
                     expected: machine.gather_expected(),
                     found: c,
                     cursor: self.char_ptr,
@@ -87,7 +91,7 @@ impl<'src> Iterator for Lex<'src> {
                     kind: *kind,
                     string: &self.source[byte_begin..self.byte_ptr],
                 })),
-                _ => Some(Err(LexerError::MultipleMatching {
+                _ => Some(Err(LexError::MultipleMatching {
                     matched,
                     range: char_begin..self.char_ptr,
                 })),

@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{
     array::DynArray,
-    token::{Character, Kind, PATTERN_COUNT, PATTERNS, Pattern, Repeat},
+    lex::token::{Character, Kind, PATTERN_COUNT, PATTERNS, Pattern, Repeat},
 };
 
 #[derive(Clone, Copy, Debug)]
