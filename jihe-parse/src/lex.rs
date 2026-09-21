@@ -5,10 +5,11 @@ pub(super) use crate::lex::{
     token::{Kind, Token},
 };
 use crate::{
-    cursor::Cursor,
+    Cursor,
     lex::{machine::Machine, token::SKIP},
 };
 
+mod automata;
 mod error;
 mod machine;
 #[cfg(test)]

@@ -9,7 +9,6 @@ use crate::{
 };
 
 mod array;
-mod cursor;
 mod lex;
 mod syn;
 
@@ -47,4 +46,29 @@ pub enum ParseError {
     LexError(#[from] LexError),
     #[error("Failed to create syntax because:{0}")]
     SynError(#[from] SynError),
+}
+
+use std::fmt::{self, Display, Formatter};
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Cursor {
+    pub line: usize,
+    pub col: usize,
+}
+
+impl Cursor {
+    pub fn step(&mut self, is_line: bool) {
+        if is_line {
+            self.line += 1;
+            self.col = 0;
+        } else {
+            self.col += 1;
+        }
+    }
+}
+
+impl Display for Cursor {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.line, self.col)
+    }
 }

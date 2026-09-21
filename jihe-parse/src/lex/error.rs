@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
+    Cursor,
     array::DynArray,
-    cursor::Cursor,
     lex::token::{Character, Kind, PATTERN_COUNT},
 };
 
