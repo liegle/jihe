@@ -1,41 +1,19 @@
+use crate::lex::automata::Automata;
+
+use std::cell::LazyCell;
+
 pub(super) const SKIP: &[char] = &[' ', '\t', '\n', '\r'];
 
 #[derive(Debug)]
-pub(super) struct Token<'src> {
-    pub(super) kind: Kind,
-    pub(super) string: &'src str,
+pub(crate) struct Token<'src> {
+    pub(crate) kind: Kind,
+    pub(crate) string: &'src str,
 }
 
-pub(super) struct Pattern {
+pub(crate) struct Pattern {
     pub(super) kind: Kind,
     pub(super) priority: u8,
-    pub(super) expression: &'static [(Character, Repeat)],
-    pub(super) endable_index: usize,
-}
-
-const fn calc_endable_index(expression: &[(Character, Repeat)]) -> usize {
-    {
-        assert!(!expression.is_empty(), "No expression should be empty");
-        let mut i = 0;
-        let mut all_zeroable = true;
-        while i < expression.len() {
-            if !expression[i].1.accepts(0) {
-                all_zeroable = false;
-                break;
-            }
-            i += 1;
-        }
-        assert!(!all_zeroable, "No expression should be all zeroable");
-    }
-
-    let mut index = expression.len() - 1;
-    while index > 0 {
-        if !expression[index].1.accepts(0) {
-            return index;
-        }
-        index -= 1;
-    }
-    0
+    pub(super) automata: Automata,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -45,12 +23,13 @@ pub enum Character {
     Unicode,
 }
 
-impl Character {
-    pub(super) fn contains(&self, c: char) -> bool {
-        match self {
-            Self::Single(ch) => *ch == c,
-            Self::Number => c.is_ascii_digit(),
-            Self::Unicode => c.is_ascii_alphabetic() || !c.is_ascii(),
+impl From<char> for Character {
+    fn from(value: char) -> Self {
+        match value {
+            '0'..='9' => Character::Number,
+            'a'..='z' | 'A'..='Z' => Character::Unicode,
+            c if !c.is_ascii() => Character::Unicode,
+            c => Character::Single(c),
         }
     }
 }
@@ -63,28 +42,14 @@ pub(super) enum Repeat {
     OnceOrMultiple,
 }
 
-impl Repeat {
-    pub(super) const fn accepts(&self, count: usize) -> bool {
-        matches!(
-            (*self, count),
-            (Repeat::Any, _)
-                | (Repeat::NoneOrOnce, 0 | 1)
-                | (Repeat::Once, 1)
-                | (Repeat::OnceOrMultiple, 1..)
-        )
-    }
-}
-
 #[rustfmt::skip]
 macro_rules! pattern {
     ($kind:expr, $prio:literal, $($ch:tt $rpt:tt),*) => {
         {
-            let expression = &[$((character!($ch), repeat!($rpt)),)*];
             Pattern {
                 kind: $kind,
                 priority: $prio,
-                expression,
-                endable_index: calc_endable_index(expression),
+                automata: Automata::new(&[$((character!($ch), repeat!($rpt)),)*]),
             }
         }
     };
@@ -114,11 +79,11 @@ macro_rules! enum_kind {
             $($kind,)*
         }
 
-        pub(super) const PATTERNS: &[Pattern] = &[
+        pub(super) const PATTERNS: LazyCell<Vec<Pattern>> = LazyCell::new(|| vec![
             $(pattern!(Kind::$kind, $prio, $($patt)*),)*
-        ];
+        ]);
 
-        pub(super) const PATTERN_COUNT: usize = PATTERNS.len();
+        pub(super) const PATTERN_COUNT: usize = $({ let _ = $prio; 1 } + )* 0;
     };
 }
 
@@ -140,17 +105,4 @@ enum_kind! {
     (0)Equal       = [('=')!]
     (0)Comma       = [(',')!]
     (0)Colon       = [(':')!]
-}
-
-#[cfg(test)]
-#[test]
-fn test_calc_endable_index() {
-    let p = pattern!(Kind::Number, 0, ('x')!, ('x')!, ('x')?).expression;
-    assert_eq!(calc_endable_index(p), 1);
-
-    let p = pattern!(Kind::Number, 0, ('x')!, ('x')*, ('x')!).expression;
-    assert_eq!(calc_endable_index(p), 2);
-
-    let p = pattern!(Kind::Number, 0, ('x')+, ('x')*, ('x')!, ('x')*).expression;
-    assert_eq!(calc_endable_index(p), 2);
 }

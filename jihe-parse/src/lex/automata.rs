@@ -1,10 +1,18 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet, VecDeque},
+    convert,
     rc::Rc,
 };
 
 use crate::lex::token::{Character, Repeat};
+
+pub(super) struct Automata {
+    map: Vec<HashMap<Character, u8>>,
+    exits: IntSet,
+}
+
+pub(super) type Stage = Option<u8>;
 
 struct Graph<T, E> {
     nodes: Vec<Node<T, E>>,
@@ -38,57 +46,92 @@ impl Subgraph {
     }
 }
 
-pub(super) type Automata = HashMap<(usize, Character), usize>;
 type Nondeterminstic = Graph<Rc<RefCell<Subgraph>>, Option<Character>>; // data = epsilon closure
-type Determinstic = Graph<IntSet, Character>; // data = determinstic state
+type Determinstic = Graph<IntSet, Character>; // data = n state indices contained in this d state
 
-pub(super) fn automata(expression: &[(Character, Repeat)]) -> Automata {
-    assert!(!expression.is_empty(), "Expression shouldn't be empty");
+impl Automata {
+    pub(super) fn new(expression: &[(Character, Repeat)]) -> Automata {
+        assert!(!expression.is_empty(), "Expression shouldn't be empty");
 
-    let nondeterminstic = Nondeterminstic::new(expression);
-    let epsilon_closure_0 = nondeterminstic.nodes[0].data.borrow();
-    let mut determinstic = Determinstic {
-        nodes: vec![node(epsilon_closure_0.nodes, Vec::new())],
-    };
-    let mut rev_determinstic = HashMap::new();
-    rev_determinstic.insert(epsilon_closure_0.nodes, 0);
+        let nondeterminstic = Nondeterminstic::new(expression);
+        let epsilon_closure_0 = nondeterminstic.nodes[0].data.borrow();
+        let mut determinstic = Determinstic {
+            nodes: vec![node(epsilon_closure_0.nodes, Vec::new())],
+        };
+        let mut rev_determinstic = HashMap::new();
+        rev_determinstic.insert(epsilon_closure_0.nodes, 0);
 
-    let mut queue = epsilon_closure_0
-        .alphabet
-        .iter()
-        .map(|trans| (0, *trans))
-        .collect::<VecDeque<_>>();
-    while let Some((from_d_node_index, trans)) = queue.pop_front() {
-        let mut to_subgraph = Subgraph::new();
-        for from_n_node in determinstic.nodes[from_d_node_index].data.into_iter() {
-            to_subgraph.merge(&nondeterminstic.reachables(from_n_node, trans));
+        let mut queue = epsilon_closure_0
+            .alphabet
+            .iter()
+            .map(|trans| (0, *trans))
+            .collect::<VecDeque<_>>();
+        while let Some((from_d_node_index, trans)) = queue.pop_front() {
+            let mut to_subgraph = Subgraph::new();
+            for from_n_node in determinstic.nodes[from_d_node_index].data.into_iter() {
+                to_subgraph.merge(&nondeterminstic.reachables(from_n_node, trans));
+            }
+
+            let to_d_node_index = rev_determinstic
+                .get(&to_subgraph.nodes)
+                .copied()
+                .unwrap_or_else(|| {
+                    let index = determinstic.nodes.len();
+                    determinstic.nodes.push(node(to_subgraph.nodes, Vec::new()));
+                    rev_determinstic.insert(to_subgraph.nodes, index);
+                    queue.extend(to_subgraph.alphabet.iter().map(|e| (index, *e)));
+                    index
+                });
+            determinstic.nodes[from_d_node_index]
+                .edges
+                .push((to_d_node_index, trans));
         }
 
-        let to_d_node_index = rev_determinstic
-            .get(&to_subgraph.nodes)
-            .copied()
-            .unwrap_or_else(|| {
-                let index = determinstic.nodes.len();
-                determinstic.nodes.push(node(to_subgraph.nodes, Vec::new()));
-                rev_determinstic.insert(to_subgraph.nodes, index);
-                queue.extend(to_subgraph.alphabet.iter().map(|e| (index, *e)));
-                index
-            });
-        determinstic.nodes[from_d_node_index]
-            .edges
-            .push((to_d_node_index, trans));
+        let mut map = vec![HashMap::new(); determinstic.nodes.len()];
+        let mut exits = IntSet::new();
+        let exit = (nondeterminstic.nodes.len() - 1) as u8;
+
+        for (from_index, node) in determinstic.nodes.iter().enumerate() {
+            for (to_index, ch) in &node.edges {
+                map[from_index].insert(*ch, *to_index as u8);
+            }
+            if node.data.contains(exit).is_some_and(convert::identity) {
+                exits.insert(from_index as u8);
+            }
+        }
+
+        Self { map, exits }
     }
 
-    determinstic
-        .nodes
-        .into_iter()
-        .enumerate()
-        .flat_map(|(from_index, Node { edges, .. })| {
-            edges
-                .into_iter()
-                .map(move |(to_index, ch)| ((from_index, ch), to_index))
-        })
-        .collect()
+    pub(super) fn step(&self, stage: Stage, c: char) -> Stage {
+        match stage {
+            None => stage,
+            Some(stage) => match self.map.get(stage as usize) {
+                None => None,
+                Some(map) => match map.get(&c.into()) {
+                    None => None,
+                    Some(stage) => Some(*stage),
+                },
+            },
+        }
+    }
+
+    pub(super) fn is_exit(&self, stage: Stage) -> bool {
+        match stage {
+            None => false,
+            Some(stage) => self.exits.contains(stage).is_some_and(convert::identity),
+        }
+    }
+
+    pub(super) fn expected(&self, stage: Stage) -> HashSet<Character> {
+        match stage {
+            None => HashSet::new(),
+            Some(stage) => match self.map.get(stage as usize) {
+                None => HashSet::new(),
+                Some(map) => map.keys().copied().collect(),
+            },
+        }
+    }
 }
 
 impl Nondeterminstic {
@@ -163,20 +206,20 @@ impl Nondeterminstic {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct IntSet(u32);
+struct IntSet(u32);
 
 impl IntSet {
-    pub const CAPACITY: u8 = u32::BITS as u8;
+    const CAPACITY: u8 = u32::BITS as u8;
 
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self(0)
     }
 
-    pub fn clear(&mut self) {
+    fn clear(&mut self) {
         self.0 = 0;
     }
 
-    pub fn insert(&mut self, value: u8) -> Option<bool> {
+    fn insert(&mut self, value: u8) -> Option<bool> {
         if value >= Self::CAPACITY {
             None
         } else {
@@ -187,6 +230,14 @@ impl IntSet {
             } else {
                 Some(false)
             }
+        }
+    }
+
+    fn contains(&self, value: u8) -> Option<bool> {
+        if value >= Self::CAPACITY {
+            None
+        } else {
+            Some(self.0 & (1 << value) != 0)
         }
     }
 }
@@ -216,7 +267,7 @@ impl IntoIterator for IntSet {
     }
 }
 
-pub struct IntoIter(u32, u8);
+struct IntoIter(u32, u8);
 
 impl Iterator for IntoIter {
     type Item = u8;
