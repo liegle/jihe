@@ -4,7 +4,7 @@ use crate::{
     array::DynArray,
     lex::{
         automata::Stage,
-        token::{Character, Kind, PATTERN_COUNT, PATTERNS, Pattern, Repeat},
+        token::{Character, Kind, PATTERN_COUNT, PATTERNS, Pattern},
     },
 };
 
@@ -24,7 +24,7 @@ impl Machine {
 
     pub(super) fn step(&self, c: char) -> Self {
         let mut next = Self::new();
-        for ((next_stage, stage), Pattern { automata, kind, .. }) in
+        for ((next_stage, stage), Pattern { automata, .. }) in
             next.stages.iter_mut().zip(self.stages).zip(PATTERNS.iter())
         {
             *next_stage = automata.step(stage, c);

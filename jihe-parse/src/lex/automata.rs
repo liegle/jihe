@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet, VecDeque},
-    convert,
     rc::Rc,
 };
 
@@ -9,17 +8,19 @@ use crate::lex::token::{Character, Repeat};
 
 #[derive(Debug)]
 pub(super) struct Automata {
-    map: Vec<HashMap<Character, u8>>,
+    maps: Vec<HashMap<Character, u8>>,
     exits: IntSet,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Stage(IntSet);
 
+#[derive(Debug)]
 struct Graph<T, E> {
     nodes: Vec<Node<T, E>>,
 }
 
+#[derive(Debug)]
 struct Node<T, E> {
     data: T,
     edges: Vec<(usize, E)>,
@@ -29,6 +30,7 @@ fn node<T, E>(data: T, edges: Vec<(usize, E)>) -> Node<T, E> {
     Node { data, edges }
 }
 
+#[derive(Debug)]
 struct Subgraph {
     nodes: IntSet,
     alphabet: HashSet<Character>,
@@ -63,6 +65,7 @@ impl Automata {
         let mut rev_determinstic = HashMap::new();
         rev_determinstic.insert(epsilon_closure_0.nodes, 0);
 
+        // TODO: dont flat
         let mut queue = epsilon_closure_0
             .alphabet
             .iter()
@@ -89,27 +92,27 @@ impl Automata {
                 .push((to_d_node_index, trans));
         }
 
-        let mut map = vec![HashMap::new(); determinstic.nodes.len()];
+        let mut maps = vec![HashMap::new(); determinstic.nodes.len()];
         let mut exits = IntSet::new();
         let exit = (nondeterminstic.nodes.len() - 1) as u8;
 
-        for (from_index, node) in determinstic.nodes.iter().enumerate() {
+        for (from_index, (map, node)) in maps.iter_mut().zip(determinstic.nodes).enumerate() {
             for (to_index, ch) in &node.edges {
-                map[from_index].insert(*ch, *to_index as u8);
+                map.insert(*ch, *to_index as u8);
             }
-            if node.data.contains(exit).is_some_and(convert::identity) {
+            if matches!(node.data.contains(exit), Some(true)) {
                 exits.insert(from_index as u8);
             }
         }
 
-        Self { map, exits }
+        Self { maps, exits }
     }
 
     pub(super) fn step(&self, Stage(nodes): Stage, c: char) -> Stage {
         let mut next_nodes = IntSet::new();
         if !nodes.is_empty() {
             for node in nodes {
-                if let Some(map) = self.map.get(node as usize) {
+                if let Some(map) = self.maps.get(node as usize) {
                     if let Some(next_node) = map.get(&Character::Single(c)) {
                         next_nodes.insert(*next_node);
                     }
@@ -126,14 +129,14 @@ impl Automata {
         !nodes.is_empty()
             && nodes
                 .into_iter()
-                .any(|node| self.exits.contains(node).is_some_and(convert::identity))
+                .any(|node| matches!(self.exits.contains(node), Some(true)))
     }
 
     pub(super) fn expected(&self, Stage(nodes): Stage) -> HashSet<Character> {
         let mut expected = HashSet::new();
         if !nodes.is_empty() {
             for node in nodes {
-                if let Some(map) = self.map.get(node as usize) {
+                if let Some(map) = self.maps.get(node as usize) {
                     expected.extend(map.keys());
                 }
             }
@@ -159,10 +162,6 @@ impl Nondeterminstic {
             let ch = *ch;
             let curr = node_edges.len();
             match rpt {
-                Repeat::ZeroOrMore => {
-                    node_edges.push(vec![(curr + 1, None)]);
-                    node_edges.push(vec![(curr + 1, Some(ch)), (curr + 2, None)]);
-                }
                 Repeat::ZeroOrOne => {
                     node_edges.push(vec![(curr + 1, None), (curr + 2, None)]);
                     node_edges.push(vec![(curr + 2, Some(ch))]);
@@ -174,6 +173,10 @@ impl Nondeterminstic {
                     node_edges.push(vec![(curr + 1, Some(ch))]);
                     node_edges.push(vec![(curr + 1, Some(ch)), (curr + 2, None)]);
                 }
+                Repeat::ZeroOrMore => {
+                    node_edges.push(vec![(curr + 1, None)]);
+                    node_edges.push(vec![(curr + 1, Some(ch)), (curr + 2, None)]);
+                }
             }
         }
         node_edges.push(Vec::new());
@@ -183,10 +186,9 @@ impl Nondeterminstic {
 
         let mut epsilon_closures: Vec<Rc<RefCell<Subgraph>>> = Vec::new();
         for (index, node) in node_edges.iter_mut().enumerate().rev() {
-            let mut epsilon_closure = Rc::new(RefCell::new({
-                let mut subgraph = Subgraph::new();
-                subgraph.nodes.insert(index as u8);
-                subgraph
+            let epsilon_closure = Rc::new(RefCell::new(Subgraph {
+                nodes: IntSet(1 << index),
+                alphabet: HashSet::new(),
             }));
             for edge in node {
                 match edge.1 {
@@ -197,8 +199,7 @@ impl Nondeterminstic {
                         let to = &epsilon_closures
                             .get(len - 1 - edge.0)
                             .expect("Edges could never point backwards");
-                        to.borrow_mut().merge(&epsilon_closure.borrow());
-                        epsilon_closure = Rc::clone(to);
+                        epsilon_closure.borrow_mut().merge(&to.borrow());
                     }
                 }
             }
@@ -342,6 +343,71 @@ mod test {
     }
 
     #[test]
+    fn test_zero_or_one() {
+        let expression = &[
+            (Character::Single('0'), Repeat::One),
+            (Character::Single('1'), Repeat::ZeroOrOne),
+        ];
+
+        let nondeterminstic = Nondeterminstic::new(expression);
+        assert_eq!(nondeterminstic.nodes.len(), 4);
+
+        let edges_0 = &nondeterminstic.nodes[0].edges;
+        assert_eq!(edges_0.len(), 1);
+        assert_eq!(edges_0[0], (1, Some(Character::Single('0'))));
+
+        let edges_1 = &nondeterminstic.nodes[1].edges;
+        assert_eq!(edges_1.len(), 2);
+        assert_eq!(edges_1[0], (2, None));
+        assert_eq!(edges_1[1], (3, None));
+
+        let edges_2 = &nondeterminstic.nodes[2].edges;
+        assert_eq!(edges_2.len(), 1);
+        assert_eq!(edges_2[0], (3, Some(Character::Single('1'))));
+
+        let edges_3 = &nondeterminstic.nodes[3].edges;
+        assert_eq!(edges_3.len(), 0);
+
+        let subgraph_0 = nondeterminstic.nodes[0].data.borrow();
+        assert_eq!(subgraph_0.nodes, IntSet(1));
+        assert_eq!(subgraph_0.alphabet.len(), 1);
+        assert!(subgraph_0.alphabet.contains(&Character::Single('0')));
+
+        let subgraph_1 = nondeterminstic.nodes[1].data.borrow();
+        assert_eq!(subgraph_1.nodes, IntSet(0b1110));
+        assert_eq!(subgraph_1.alphabet.len(), 1);
+        assert!(subgraph_1.alphabet.contains(&Character::Single('1')));
+
+        let subgraph_2 = nondeterminstic.nodes[2].data.borrow();
+        assert_eq!(subgraph_2.nodes, IntSet(0b100));
+        assert_eq!(subgraph_2.alphabet.len(), 1);
+        assert!(subgraph_2.alphabet.contains(&Character::Single('1')));
+
+        let subgraph_3 = nondeterminstic.nodes[3].data.borrow();
+        assert_eq!(subgraph_3.nodes, IntSet(0b1000));
+        assert_eq!(subgraph_3.alphabet.len(), 0);
+
+        let automata = Automata::new(expression);
+        assert_eq!(automata.maps.len(), 3);
+        assert_eq!(automata.maps[0].len(), 1);
+        assert_eq!(automata.maps[0].get(&Character::Single('0')), Some(&1));
+        assert_eq!(automata.maps[1].len(), 1);
+        assert_eq!(automata.maps[1].get(&Character::Single('1')), Some(&2));
+        assert_eq!(automata.maps[2].len(), 0);
+        assert_eq!(automata.exits, IntSet(6));
+
+        let mut stage = Stage::init();
+        assert!(!automata.is_exit(automata.step(stage, '1')));
+        stage = automata.step(stage, '0');
+        assert!(automata.is_exit(stage));
+        assert!(!automata.is_exit(automata.step(stage, '0')));
+        stage = automata.step(stage, '1');
+        assert!(automata.is_exit(stage));
+        stage = automata.step(stage, '1');
+        assert!(!automata.is_exit(stage));
+    }
+
+    #[test]
     fn test_one() {
         let expression = &[(Character::Single('0'), Repeat::One)];
 
@@ -365,13 +431,132 @@ mod test {
         assert_eq!(subgraph_1.alphabet.len(), 0);
 
         let automata = Automata::new(expression);
-        assert_eq!(automata.map.len(), 2);
-        assert_eq!(automata.map[0].len(), 1);
-        assert_eq!(automata.map[0].get(&Character::Single('0')), Some(&1));
-        assert_eq!(automata.map[1].len(), 0);
+        assert_eq!(automata.maps.len(), 2);
+        assert_eq!(automata.maps[0].len(), 1);
+        assert_eq!(automata.maps[0].get(&Character::Single('0')), Some(&1));
+        assert_eq!(automata.maps[1].len(), 0);
         assert_eq!(automata.exits, IntSet(2));
+
+        let mut stage = Stage::init();
+        assert!(!automata.is_exit(automata.step(stage, '1')));
+        stage = automata.step(stage, '0');
+        assert!(automata.is_exit(stage));
+        stage = automata.step(stage, '0');
+        assert!(!automata.is_exit(stage));
     }
 
     #[test]
-    fn test_one_or_more() {}
+    fn test_one_or_more() {
+        let expression = &[(Character::Single('0'), Repeat::OneOrMore)];
+
+        let nondeterminstic = Nondeterminstic::new(expression);
+        assert_eq!(nondeterminstic.nodes.len(), 3);
+
+        let edges_0 = &nondeterminstic.nodes[0].edges;
+        assert_eq!(edges_0.len(), 1);
+        assert_eq!(edges_0[0], (1, Some(Character::Single('0'))));
+
+        let edges_1 = &nondeterminstic.nodes[1].edges;
+        assert_eq!(edges_1.len(), 2);
+        assert_eq!(edges_1[0], (1, Some(Character::Single('0'))));
+        assert_eq!(edges_1[1], (2, None));
+
+        let edges_2 = &nondeterminstic.nodes[2].edges;
+        assert_eq!(edges_2.len(), 0);
+
+        let subgraph_0 = nondeterminstic.nodes[0].data.borrow();
+        assert_eq!(subgraph_0.nodes, IntSet(1));
+        assert_eq!(subgraph_0.alphabet.len(), 1);
+        assert!(subgraph_0.alphabet.contains(&Character::Single('0')));
+
+        let subgraph_1 = nondeterminstic.nodes[1].data.borrow();
+        assert_eq!(subgraph_1.nodes, IntSet(0b110));
+        assert_eq!(subgraph_1.alphabet.len(), 1);
+        assert!(subgraph_1.alphabet.contains(&Character::Single('0')));
+
+        let subgraph_2 = nondeterminstic.nodes[2].data.borrow();
+        assert_eq!(subgraph_2.nodes, IntSet(0b100));
+        assert_eq!(subgraph_2.alphabet.len(), 0);
+
+        let automata = Automata::new(expression);
+        assert_eq!(automata.maps.len(), 2);
+        assert_eq!(automata.maps[0].len(), 1);
+        assert_eq!(automata.maps[0].get(&Character::Single('0')), Some(&1));
+        assert_eq!(automata.maps[1].len(), 1);
+        assert_eq!(automata.maps[1].get(&Character::Single('0')), Some(&1));
+        assert_eq!(automata.exits, IntSet(2));
+
+        let mut stage = Stage::init();
+        assert!(!automata.is_exit(automata.step(stage, '1')));
+        stage = automata.step(stage, '0');
+        assert!(automata.is_exit(stage));
+        stage = automata.step(stage, '0');
+        assert!(automata.is_exit(stage));
+    }
+
+    #[test]
+    fn test_zero_or_more() {
+        let expression = &[
+            (Character::Single('0'), Repeat::One),
+            (Character::Single('1'), Repeat::ZeroOrMore),
+        ];
+
+        let nondeterminstic = Nondeterminstic::new(expression);
+        assert_eq!(nondeterminstic.nodes.len(), 4);
+
+        let edges_0 = &nondeterminstic.nodes[0].edges;
+        assert_eq!(edges_0.len(), 1);
+        assert_eq!(edges_0[0], (1, Some(Character::Single('0'))));
+
+        let edges_1 = &nondeterminstic.nodes[1].edges;
+        assert_eq!(edges_1.len(), 1);
+        assert_eq!(edges_1[0], (2, None));
+
+        let edges_2 = &nondeterminstic.nodes[2].edges;
+        assert_eq!(edges_2.len(), 2);
+        assert_eq!(edges_2[0], (2, Some(Character::Single('1'))));
+        assert_eq!(edges_2[1], (3, None));
+
+        let edges_3 = &nondeterminstic.nodes[3].edges;
+        assert_eq!(edges_3.len(), 0);
+
+        let subgraph_0 = nondeterminstic.nodes[0].data.borrow();
+        assert_eq!(subgraph_0.nodes, IntSet(1));
+        assert_eq!(subgraph_0.alphabet.len(), 1);
+        assert!(subgraph_0.alphabet.contains(&Character::Single('0')));
+
+        let subgraph_1 = nondeterminstic.nodes[1].data.borrow();
+        assert_eq!(subgraph_1.nodes, IntSet(0b1110));
+        assert_eq!(subgraph_1.alphabet.len(), 1);
+        assert!(subgraph_1.alphabet.contains(&Character::Single('1')));
+
+        let subgraph_2 = nondeterminstic.nodes[2].data.borrow();
+        assert_eq!(subgraph_2.nodes, IntSet(0b1100));
+        assert_eq!(subgraph_2.alphabet.len(), 1);
+        assert!(subgraph_2.alphabet.contains(&Character::Single('1')));
+
+        let subgraph_3 = nondeterminstic.nodes[3].data.borrow();
+        assert_eq!(subgraph_3.nodes, IntSet(0b1000));
+        assert_eq!(subgraph_3.alphabet.len(), 0);
+
+        let automata = Automata::new(expression);
+        assert_eq!(automata.maps.len(), 3);
+        assert_eq!(automata.maps[0].len(), 1);
+        assert_eq!(automata.maps[0].get(&Character::Single('0')), Some(&1));
+        assert_eq!(automata.maps[1].len(), 1);
+        assert_eq!(automata.maps[1].get(&Character::Single('1')), Some(&2));
+        assert_eq!(automata.maps[2].len(), 1);
+        assert_eq!(automata.maps[2].get(&Character::Single('1')), Some(&2));
+        assert_eq!(automata.exits, IntSet(6));
+
+        let mut stage = Stage::init();
+        assert!(!automata.is_exit(automata.step(stage, '1')));
+        stage = automata.step(stage, '0');
+        assert!(automata.is_exit(stage));
+        assert!(!automata.is_exit(automata.step(stage, '0')));
+        stage = automata.step(stage, '1');
+        assert!(automata.is_exit(stage));
+        stage = automata.step(stage, '1');
+        assert!(automata.is_exit(stage));
+    }
 }

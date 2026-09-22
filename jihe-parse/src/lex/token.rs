@@ -1,6 +1,6 @@
 use crate::lex::automata::Automata;
 
-use std::cell::LazyCell;
+use std::sync::LazyLock;
 
 pub(super) const SKIP: &[char] = &[' ', '\t', '\n', '\r'];
 
@@ -79,7 +79,7 @@ macro_rules! enum_kind {
             $($kind,)*
         }
 
-        pub(super) const PATTERNS: LazyCell<Vec<Pattern>> = LazyCell::new(|| vec![
+        pub(super) static PATTERNS: LazyLock<Vec<Pattern>> = LazyLock::new(|| vec![
             $(pattern!(Kind::$kind, $prio, $($patt)*),)*
         ]);
 
