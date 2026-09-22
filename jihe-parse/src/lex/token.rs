@@ -73,7 +73,7 @@ macro_rules! repeat {
 #[rustfmt::skip]
 macro_rules! enum_kind {
     ($(($prio:literal)$kind:ident = [$($patt:tt)*])*) => {
-        #[derive(Clone, Copy, Debug, Default)]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
         pub enum Kind {
             #[default]
             $($kind,)*

@@ -1,4 +1,5 @@
 use std::{
+    fmt::{self, Display, Formatter},
     fs, io,
     path::{Path, PathBuf},
 };
@@ -47,8 +48,6 @@ pub enum ParseError {
     #[error("Failed to create syntax because:{0}")]
     SynError(#[from] SynError),
 }
-
-use std::fmt::{self, Display, Formatter};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Cursor {
