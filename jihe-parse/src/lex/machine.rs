@@ -2,7 +2,10 @@ use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{
     array::DynArray,
-    lex::{automata::Stage, token::{Character, Kind, PATTERN_COUNT, PATTERNS, Pattern, Repeat}},
+    lex::{
+        automata::Stage,
+        token::{Character, Kind, PATTERN_COUNT, PATTERNS, Pattern, Repeat},
+    },
 };
 
 #[derive(Clone)]
@@ -14,18 +17,18 @@ pub(super) struct Machine {
 impl Machine {
     pub(super) fn new() -> Self {
         Self {
-            stages: [Stage::default(); _],
+            stages: [Stage::init(); _],
             last_matched_char: None,
         }
     }
 
     pub(super) fn step(&self, c: char) -> Self {
         let mut next = Self::new();
-        for ((next_stage, stage), Pattern { automata, .. }) in
+        for ((next_stage, stage), Pattern { automata, kind, .. }) in
             next.stages.iter_mut().zip(self.stages).zip(PATTERNS.iter())
         {
             *next_stage = automata.step(stage, c);
-            if let Some(_) = next_stage {
+            if !next_stage.is_empty() {
                 next.last_matched_char = Some(c);
             }
         }
@@ -35,13 +38,8 @@ impl Machine {
     pub(super) fn end(&self) -> DynArray<Kind, PATTERN_COUNT> {
         let mut greatest_priority = 0;
         let mut matched = DynArray::new();
-        for (
-            stage,
-            Pattern {
-                kind, priority, automata,
-            },
-        ) in self.stages.iter().zip(PATTERNS.iter())
-        {
+        for (stage, pattern) in self.stages.iter().zip(PATTERNS.iter()) {
+            let Pattern { kind, priority, automata } = pattern;
             if !automata.is_exit(*stage) {
                 continue;
             }

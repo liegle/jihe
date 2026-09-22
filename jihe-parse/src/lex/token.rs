@@ -36,10 +36,10 @@ impl From<char> for Character {
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Repeat {
-    Any,
-    NoneOrOnce,
-    Once,
-    OnceOrMultiple,
+    ZeroOrOne,
+    One,
+    OneOrMore,
+    ZeroOrMore,
 }
 
 #[rustfmt::skip]
@@ -64,10 +64,10 @@ macro_rules! character {
 
 #[rustfmt::skip]
 macro_rules! repeat {
-    (*) => { Repeat::Any };
-    (?) => { Repeat::NoneOrOnce };
-    (!) => { Repeat::Once };
-    (+) => { Repeat::OnceOrMultiple };
+    (?) => { Repeat::ZeroOrOne };
+    (!) => { Repeat::One };
+    (+) => { Repeat::OneOrMore };
+    (*) => { Repeat::ZeroOrMore };
 }
 
 #[rustfmt::skip]

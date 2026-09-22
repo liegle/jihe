@@ -71,7 +71,7 @@ impl<'src> Iterator for Lex<'src> {
                 }
                 break;
             } else {
-                machine = next_machine.clone();
+                machine = next_machine;
                 self.byte_ptr += c.len_utf8();
                 self.char_ptr.step(false);
                 self.chars.next();
