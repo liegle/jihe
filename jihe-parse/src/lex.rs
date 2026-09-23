@@ -34,6 +34,7 @@ impl<'src> Lex<'src> {
     }
 
     fn consume_whitespaces(&mut self) {
+        // TODO: consume comment
         while let Some(c) = self.chars.peek() {
             if SKIP.contains(c) {
                 self.byte_ptr += c.len_utf8();

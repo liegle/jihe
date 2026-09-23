@@ -4,19 +4,19 @@ pub(crate) struct Tree<'src> {
 
 pub(crate) struct Statement<'src> {
     pub(super) name: &'src str,
-    pub(super) kind: Kind<'src>,
+    pub(super) kind: Class<'src>,
 }
 
-pub(crate) enum Kind<'src> {
-    Parameter { f: Number, t: Number },
-    Variable { v: Expr<'src> },
+pub(crate) enum Class<'src> {
+    Param { f: Number, t: Number },
+    Var { v: Expr<'src> },
     Point { x: Expr<'src>, y: Expr<'src>, thickness: Number, color: Color },
     Curve { l: Expr<'src>, r: Expr<'src>, size: Number, color: Color },
 }
 
 pub(crate) enum Expr<'src> {
     Number(Number),
-    Identifier(&'src str),
+    Parameter(&'src str),
     VariableX,
     VariableY,
     FunctionCall(&'src str, Vec<Expr<'src>>),

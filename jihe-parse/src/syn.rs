@@ -2,8 +2,7 @@ use std::{collections::HashSet, mem};
 
 pub(super) use crate::syn::error::SynError;
 use crate::{
-    lex::{self, Token},
-    syn::tree::{Kind, Statement, Tree},
+    lex::{Kind, Token}, syn::tree::{Class, Statement, Tree},
 };
 
 mod error;
@@ -37,16 +36,16 @@ impl<'src> Syn<'src> {
 
 trait Stage<'src, T: 'src> {
     fn step(&mut self, token: Token<'src>) -> Result<Option<T>, SynError>;
-    fn expected(&self) -> HashSet<lex::Kind>;
+    fn expected(&self) -> HashSet<Kind>;
 }
 
 enum StatementStage<'src> {
     None,
     Name(&'src str),
     Colon(&'src str),
-    Kind(&'src str, KindStage),
-    BraceL(&'src str, KindStage),
-    Inner(&'src str, Kind<'src>),
+    Kind(&'src str, ClassStage),
+    BraceL(&'src str, ClassStage),
+    Inner(&'src str, Class<'src>),
 }
 
 impl<'src> Stage<'src, Statement<'src>> for StatementStage<'src> {
@@ -55,12 +54,12 @@ impl<'src> Stage<'src, Statement<'src>> for StatementStage<'src> {
         Token { kind, string }: Token<'src>,
     ) -> Result<Option<Statement<'src>>, SynError> {
         *self = match (mem::replace(self, StatementStage::None), kind) {
-            (StatementStage::None, lex::Kind::Identifier) => StatementStage::Name(string),
-            (StatementStage::Name(name), lex::Kind::Colon) => StatementStage::Colon(name),
-            (StatementStage::Colon(name), lex::Kind::Identifier) => {
-                StatementStage::Kind(name, KindStage::from_str(string)?)
+            (StatementStage::None, Kind::Identifier) => StatementStage::Name(string),
+            (StatementStage::Name(name), Kind::Colon) => StatementStage::Colon(name),
+            (StatementStage::Colon(name), Kind::Identifier) => {
+                StatementStage::Kind(name, ClassStage::from_str(string)?)
             }
-            (StatementStage::Kind(name, inner), lex::Kind::BraceL) => {
+            (StatementStage::Kind(name, inner), Kind::BraceL) => {
                 StatementStage::BraceL(name, inner)
             }
             (StatementStage::BraceL(name, mut inner), kind) => {
@@ -70,7 +69,7 @@ impl<'src> Stage<'src, Statement<'src>> for StatementStage<'src> {
                     StatementStage::BraceL(name, inner)
                 }
             }
-            (StatementStage::Inner(name, kind), lex::Kind::BraceR) => {
+            (StatementStage::Inner(name, kind), Kind::BraceR) => {
                 return Ok(Some(Statement { name, kind }));
             }
             (stage, _) => {
@@ -83,48 +82,52 @@ impl<'src> Stage<'src, Statement<'src>> for StatementStage<'src> {
         Ok(None)
     }
 
-    fn expected(&self) -> HashSet<lex::Kind> {
+    fn expected(&self) -> HashSet<Kind> {
         let mut expected = HashSet::new();
         expected.insert(match self {
-            StatementStage::None => lex::Kind::Identifier,
-            StatementStage::Name(..) => lex::Kind::Colon,
-            StatementStage::Colon(..) => lex::Kind::Identifier,
-            StatementStage::Kind(..) => lex::Kind::BraceL,
+            StatementStage::None => Kind::Identifier,
+            StatementStage::Name(..) => Kind::Colon,
+            StatementStage::Colon(..) => Kind::Identifier,
+            StatementStage::Kind(..) => Kind::BraceL,
             StatementStage::BraceL(_, inner) => {
                 return inner.expected();
             }
-            StatementStage::Inner(..) => lex::Kind::BraceR,
+            StatementStage::Inner(..) => Kind::BraceR,
         });
         expected
     }
 }
 
-enum KindStage {
-    Parameter,
-    Variable,
+enum ClassStage {
+    Param,
+    Var,
     Point,
     Curve,
 }
 
-impl KindStage {
+impl ClassStage {
     fn from_str(string: &str) -> Result<Self, SynError> {
         match string {
-            "Para" => Ok(Self::Parameter),
-            "Var" => Ok(Self::Variable),
+            "Param" => Ok(Self::Param),
+            "Var" => Ok(Self::Var),
             "Point" => Ok(Self::Point),
             "Curve" => Ok(Self::Curve),
-            _ => Err(SynError::UndefinedStatementType(string.to_owned())),
+            _ => Err(SynError::UndefinedStatementKind { found: string.to_owned() }),
         }
     }
 }
 
-impl<'src> Stage<'src, Kind<'src>> for KindStage {
-    fn step(&mut self, token: Token<'src>) -> Result<Option<Kind<'src>>, SynError> {
+impl<'src> Stage<'src, Class<'src>> for ClassStage {
+    fn step(&mut self, token: Token<'src>) -> Result<Option<Class<'src>>, SynError> {
         // TODO
         Ok(None)
     }
 
-    fn expected(&self) -> HashSet<lex::Kind> {
+    fn expected(&self) -> HashSet<Kind> {
         HashSet::new()
     }
+}
+
+enum ClassVarietyStage<const N: usize> {
+    None,
 }

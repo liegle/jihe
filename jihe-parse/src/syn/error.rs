@@ -12,7 +12,9 @@ pub enum SynError {
         expected: HashSet<Kind>,
         found: String,
     },
-    UndefinedStatementType(String),
+    UndefinedStatementKind {
+        found: String,
+    },
 }
 
 impl Error for SynError {}
@@ -33,8 +35,8 @@ impl Display for SynError {
                 }
                 write!(f, ", found '{found}'") // TODO: send cursor to here to print
             }
-            Self::UndefinedStatementType(string) => {
-                write!(f, "Specified type not defined: {string}")
+            Self::UndefinedStatementKind { found } => {
+                write!(f, "Specified kind not defined: {found}")
             }
         }
     }
