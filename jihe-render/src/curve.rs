@@ -157,21 +157,14 @@ impl Curve {
         queue.write_buffer(
             &self.camera_buffer,
             0,
-            &CameraUniform {
-                scale: camera.scale,
-                pos: camera.pos,
-            }
-            .as_uniform_bytes(),
+            &CameraUniform { scale: camera.scale, pos: camera.pos }.as_uniform_bytes(),
         );
         queue.write_buffer(
             &self.curves_buffer,
             0,
             &curves
                 .iter()
-                .map(|c| CurveUniform {
-                    thickness: c.thickness,
-                    color: c.color,
-                })
+                .map(|c| CurveUniform { thickness: c.thickness, color: c.color })
                 .collect::<Vec<_>>()
                 .as_dynamic_storage_bytes(),
         );

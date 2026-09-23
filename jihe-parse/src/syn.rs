@@ -2,7 +2,8 @@ use std::{collections::HashSet, mem};
 
 pub(super) use crate::syn::error::SynError;
 use crate::{
-    lex::{Kind, Token}, syn::tree::{Class, Statement, Tree},
+    lex::{Kind, Token},
+    syn::tree::{Class, Statement, Tree},
 };
 
 mod error;

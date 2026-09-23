@@ -8,13 +8,8 @@ use crate::lex::Kind;
 
 #[derive(Debug)]
 pub enum SynError {
-    UnexpectedToken {
-        expected: HashSet<Kind>,
-        found: String,
-    },
-    UndefinedStatementKind {
-        found: String,
-    },
+    UnexpectedToken { expected: HashSet<Kind>, found: String },
+    UndefinedStatementKind { found: String },
 }
 
 impl Error for SynError {}

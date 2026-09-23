@@ -40,7 +40,6 @@ impl Axis {
         Self {
             vertex_buffer,
             uniform_buffer,
-
             bind_group,
             render_pipeline,
         }

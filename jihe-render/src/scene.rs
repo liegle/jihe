@@ -14,10 +14,7 @@ pub struct Camera {
 impl Scene {
     pub fn new(content: jihe_shared::Content) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
-            camera: Camera {
-                scale: 0.01,
-                pos: glam::Vec2::ZERO,
-            },
+            camera: Camera { scale: 0.01, pos: glam::Vec2::ZERO },
             content,
         }))
     }

@@ -10,10 +10,7 @@ pub struct DynArray<T, const N: usize> {
 
 impl<T: Default + Copy, const N: usize> DynArray<T, N> {
     pub fn new() -> Self {
-        Self {
-            data: [Default::default(); _],
-            size: 0,
-        }
+        Self { data: [Default::default(); _], size: 0 }
     }
 
     pub fn push(&mut self, value: T) {

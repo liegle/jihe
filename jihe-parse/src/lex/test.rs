@@ -17,6 +17,7 @@ fn test_whitespaces() {
     assert_matches!(lex.next(), None);
 }
 
+#[rustfmt::skip]
 #[test]
 fn test_all() {
     let mut lex = Lex::new("325 \t 0.6 777. \n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
