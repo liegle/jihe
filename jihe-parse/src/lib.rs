@@ -10,6 +10,7 @@ use crate::{
 };
 
 mod array;
+mod intset;
 mod lex;
 mod syn;
 

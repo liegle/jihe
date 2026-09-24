@@ -1,8 +1,8 @@
-use std::{collections::HashSet, iter::Peekable};
+use std::iter::Peekable;
 
 use crate::{
     Lex,
-    lex::{Kind, Token},
+    lex::{Kind, KindSet, Token},
     syn::tree::{Class, Statement},
 };
 pub(super) use {error::SynError, tree::Tree};
@@ -35,9 +35,10 @@ impl<'src> ExpectKind<'src> for Peekable<Lex<'src>> {
                 if token.kind == kind {
                     Ok(token)
                 } else {
-                    let mut expected = HashSet::new();
-                    expected.insert(kind);
-                    Err(SynError::UnexpectedToken { expected, found: token.string.to_owned() })
+                    Err(SynError::UnexpectedToken {
+                        expected: KindSet::with_values([kind]),
+                        found: token.string.to_owned(),
+                    })
                 }
             }
             Err(e) => Err(SynError::LexError(e)),
@@ -71,10 +72,10 @@ impl<'src> Syn<'src> for Statement<'src> {
                 (Class::unnamed(class, lex)?, Kind::ParentheseR)
             }
             Ok(Token { string, .. }) => {
-                let mut expected = HashSet::new();
-                expected.insert(Kind::BraceL);
-                expected.insert(Kind::ParentheseL);
-                return Err(SynError::UnexpectedToken { expected, found: string.to_owned() });
+                return Err(SynError::UnexpectedToken {
+                    expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL]),
+                    found: string.to_owned(),
+                });
             }
             Err(e) => return Err(SynError::LexError(e)),
         };
@@ -89,11 +90,10 @@ impl<'src> Syn<'src> for Statement<'src> {
             }
             Ok(Token { kind, .. }) if kind == r => {}
             Ok(Token { string, .. }) => {
-                let mut expected = HashSet::new();
-                expected.insert(Kind::BraceR);
-                expected.insert(Kind::ParentheseR);
-                expected.insert(Kind::Comma);
-                return Err(SynError::UnexpectedToken { expected, found: string.to_owned() });
+                return Err(SynError::UnexpectedToken {
+                    expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL, Kind::Comma]),
+                    found: string.to_owned(),
+                });
             }
             Err(e) => return Err(SynError::LexError(e)),
         }

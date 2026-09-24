@@ -1,16 +1,15 @@
 use std::{
-    collections::HashSet,
     error::Error,
     fmt::{self, Display, Formatter},
 };
 
-use crate::{LexError, lex::Kind};
+use crate::{LexError, lex::KindSet};
 
 #[derive(Debug)]
 pub enum SynError {
     LexError(LexError),
     UnexpectedEof,
-    UnexpectedToken { expected: HashSet<Kind>, found: String },
+    UnexpectedToken { expected: KindSet, found: String },
     UndefinedStatementKind { found: String },
 }
 
@@ -26,7 +25,7 @@ impl Display for SynError {
             Self::UnexpectedToken { expected, found } => {
                 write!(f, "Expected ")?;
                 let mut is_begin = true;
-                for e in expected {
+                for e in expected.into_iter() {
                     if is_begin {
                         write!(f, "{e:?}")?;
                         is_begin = false;

@@ -1,16 +1,15 @@
 // TODO: to proc macro
 use std::collections::{HashMap, HashSet};
 
-use crate::lex::{
-    automata::{
-        graph::{Determinstic, Nondeterminstic},
-        set::IntSet,
+use crate::{
+    intset::IntSet,
+    lex::{
+        automata::graph::{Determinstic, Nondeterminstic},
+        token::{Character, Repeat},
     },
-    token::{Character, Repeat},
 };
 
 mod graph;
-mod set;
 
 #[derive(Debug)]
 pub(super) struct Automata {
@@ -85,7 +84,7 @@ impl Automata {
 
 impl Stage {
     pub(super) fn init() -> Self {
-        Self(IntSet::with_values(&[0]))
+        Self(IntSet::with_values([0]))
     }
 
     pub(super) fn is_empty(&self) -> bool {
@@ -111,7 +110,7 @@ mod test {
         assert_eq!(automata.maps[1].len(), 1);
         assert_eq!(automata.maps[1].get(&Character::Single('1')), Some(&2));
         assert_eq!(automata.maps[2].len(), 0);
-        assert_eq!(automata.exits, IntSet::with_values(&[1, 2]));
+        assert_eq!(automata.exits, IntSet::with_values([1, 2]));
 
         let mut stage = Stage::init();
         assert!(!automata.is_exit(automata.step(stage, '1')));
@@ -133,7 +132,7 @@ mod test {
         assert_eq!(automata.maps[0].len(), 1);
         assert_eq!(automata.maps[0].get(&Character::Single('0')), Some(&1));
         assert_eq!(automata.maps[1].len(), 0);
-        assert_eq!(automata.exits, IntSet::with_values(&[1]));
+        assert_eq!(automata.exits, IntSet::with_values([1]));
 
         let mut stage = Stage::init();
         assert!(!automata.is_exit(automata.step(stage, '1')));
@@ -153,7 +152,7 @@ mod test {
         assert_eq!(automata.maps[0].get(&Character::Single('0')), Some(&1));
         assert_eq!(automata.maps[1].len(), 1);
         assert_eq!(automata.maps[1].get(&Character::Single('0')), Some(&1));
-        assert_eq!(automata.exits, IntSet::with_values(&[1]));
+        assert_eq!(automata.exits, IntSet::with_values([1]));
 
         let mut stage = Stage::init();
         assert!(!automata.is_exit(automata.step(stage, '1')));
@@ -178,7 +177,7 @@ mod test {
         assert_eq!(automata.maps[1].get(&Character::Single('1')), Some(&2));
         assert_eq!(automata.maps[2].len(), 1);
         assert_eq!(automata.maps[2].get(&Character::Single('1')), Some(&2));
-        assert_eq!(automata.exits, IntSet::with_values(&[1, 2]));
+        assert_eq!(automata.exits, IntSet::with_values([1, 2]));
 
         let mut stage = Stage::init();
         assert!(!automata.is_exit(automata.step(stage, '1')));

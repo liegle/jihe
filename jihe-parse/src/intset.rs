@@ -8,12 +8,12 @@ impl IntSet {
         Self(0)
     }
 
-    pub(super) fn with_values(values: &[u8]) -> Self {
+    pub(super) fn with_values<'a, T: IntoIterator<Item = u8>>(values: T) -> Self {
         Self(
             values
-                .iter()
+                .into_iter()
                 .filter_map(|value| {
-                    if *value >= Self::CAPACITY {
+                    if value >= Self::CAPACITY {
                         None
                     } else {
                         Some(1 << value)
@@ -70,7 +70,7 @@ impl IntoIterator for IntSet {
     type Item = u8;
     type IntoIter = IntoIter;
 
-    fn into_iter(self) -> Self::IntoIter {
+    fn into_iter(self) -> IntoIter {
         IntoIter(self.0, 0)
     }
 }

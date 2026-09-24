@@ -86,7 +86,7 @@ impl Nondeterminstic {
         let mut epsilon_closures: Vec<Subgraph> = Vec::new();
         for (index, node) in node_edges.iter().enumerate().rev() {
             let mut epsilon_closure = Subgraph {
-                nodes: IntSet::with_values(&[index as u8]),
+                nodes: IntSet::with_values([index as u8]),
                 alphabet: HashSet::new(),
             };
             for edge in node {
@@ -195,22 +195,22 @@ mod test {
         assert_eq!(edges_3.len(), 0);
 
         let subgraph_0 = &nondeterminstic.nodes[0].data;
-        assert_eq!(subgraph_0.nodes, IntSet::with_values(&[0]));
+        assert_eq!(subgraph_0.nodes, IntSet::with_values([0]));
         assert_eq!(subgraph_0.alphabet.len(), 1);
         assert!(subgraph_0.alphabet.contains(&Character::Single('0')));
 
         let subgraph_1 = &nondeterminstic.nodes[1].data;
-        assert_eq!(subgraph_1.nodes, IntSet::with_values(&[1, 2, 3]));
+        assert_eq!(subgraph_1.nodes, IntSet::with_values([1, 2, 3]));
         assert_eq!(subgraph_1.alphabet.len(), 1);
         assert!(subgraph_1.alphabet.contains(&Character::Single('1')));
 
         let subgraph_2 = &nondeterminstic.nodes[2].data;
-        assert_eq!(subgraph_2.nodes, IntSet::with_values(&[2]));
+        assert_eq!(subgraph_2.nodes, IntSet::with_values([2]));
         assert_eq!(subgraph_2.alphabet.len(), 1);
         assert!(subgraph_2.alphabet.contains(&Character::Single('1')));
 
         let subgraph_3 = &nondeterminstic.nodes[3].data;
-        assert_eq!(subgraph_3.nodes, IntSet::with_values(&[3]));
+        assert_eq!(subgraph_3.nodes, IntSet::with_values([3]));
         assert_eq!(subgraph_3.alphabet.len(), 0);
     }
 
@@ -229,12 +229,12 @@ mod test {
         assert_eq!(edges_1.len(), 0);
 
         let subgraph_0 = &nondeterminstic.nodes[0].data;
-        assert_eq!(subgraph_0.nodes, IntSet::with_values(&[0]));
+        assert_eq!(subgraph_0.nodes, IntSet::with_values([0]));
         assert_eq!(subgraph_0.alphabet.len(), 1);
         assert!(subgraph_0.alphabet.contains(&Character::Single('0')));
 
         let subgraph_1 = &nondeterminstic.nodes[1].data;
-        assert_eq!(subgraph_1.nodes, IntSet::with_values(&[1]));
+        assert_eq!(subgraph_1.nodes, IntSet::with_values([1]));
         assert_eq!(subgraph_1.alphabet.len(), 0);
     }
 
@@ -258,17 +258,17 @@ mod test {
         assert_eq!(edges_2.len(), 0);
 
         let subgraph_0 = &nondeterminstic.nodes[0].data;
-        assert_eq!(subgraph_0.nodes, IntSet::with_values(&[0]));
+        assert_eq!(subgraph_0.nodes, IntSet::with_values([0]));
         assert_eq!(subgraph_0.alphabet.len(), 1);
         assert!(subgraph_0.alphabet.contains(&Character::Single('0')));
 
         let subgraph_1 = &nondeterminstic.nodes[1].data;
-        assert_eq!(subgraph_1.nodes, IntSet::with_values(&[1, 2]));
+        assert_eq!(subgraph_1.nodes, IntSet::with_values([1, 2]));
         assert_eq!(subgraph_1.alphabet.len(), 1);
         assert!(subgraph_1.alphabet.contains(&Character::Single('0')));
 
         let subgraph_2 = &nondeterminstic.nodes[2].data;
-        assert_eq!(subgraph_2.nodes, IntSet::with_values(&[2]));
+        assert_eq!(subgraph_2.nodes, IntSet::with_values([2]));
         assert_eq!(subgraph_2.alphabet.len(), 0);
     }
 
@@ -299,22 +299,22 @@ mod test {
         assert_eq!(edges_3.len(), 0);
 
         let subgraph_0 = &nondeterminstic.nodes[0].data;
-        assert_eq!(subgraph_0.nodes, IntSet::with_values(&[0]));
+        assert_eq!(subgraph_0.nodes, IntSet::with_values([0]));
         assert_eq!(subgraph_0.alphabet.len(), 1);
         assert!(subgraph_0.alphabet.contains(&Character::Single('0')));
 
         let subgraph_1 = &nondeterminstic.nodes[1].data;
-        assert_eq!(subgraph_1.nodes, IntSet::with_values(&[1, 2, 3]));
+        assert_eq!(subgraph_1.nodes, IntSet::with_values([1, 2, 3]));
         assert_eq!(subgraph_1.alphabet.len(), 1);
         assert!(subgraph_1.alphabet.contains(&Character::Single('1')));
 
         let subgraph_2 = &nondeterminstic.nodes[2].data;
-        assert_eq!(subgraph_2.nodes, IntSet::with_values(&[2, 3]));
+        assert_eq!(subgraph_2.nodes, IntSet::with_values([2, 3]));
         assert_eq!(subgraph_2.alphabet.len(), 1);
         assert!(subgraph_2.alphabet.contains(&Character::Single('1')));
 
         let subgraph_3 = &nondeterminstic.nodes[3].data;
-        assert_eq!(subgraph_3.nodes, IntSet::with_values(&[3]));
+        assert_eq!(subgraph_3.nodes, IntSet::with_values([3]));
         assert_eq!(subgraph_3.alphabet.len(), 0);
     }
 }

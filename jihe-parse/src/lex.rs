@@ -2,7 +2,7 @@ use std::{iter::Peekable, str::Chars};
 
 pub(super) use crate::lex::{
     error::LexError,
-    token::{Kind, Token},
+    token::{Kind, KindSet, Token},
 };
 use crate::{
     Cursor,

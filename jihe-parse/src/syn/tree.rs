@@ -33,10 +33,7 @@ pub(crate) enum Class<'src> {
 }
 
 impl<'src> Class<'src> {
-    pub(super) fn named(
-        class: &'src str,
-        lex: &mut Peekable<Lex<'src>>,
-    ) -> Result<Self, SynError> {
+    pub(super) fn named(class: &'src str, lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
         todo!()
     }
 
