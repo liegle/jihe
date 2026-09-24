@@ -16,6 +16,8 @@ mod machine;
 mod test;
 mod token;
 
+pub(super) type LexItem<'src> = Result<Token<'src>, LexError>;
+
 pub(super) struct Lex<'src> {
     source: &'src str,
     chars: Peekable<Chars<'src>>,
@@ -48,7 +50,7 @@ impl<'src> Lex<'src> {
 }
 
 impl<'src> Iterator for Lex<'src> {
-    type Item = Result<Token<'src>, LexError>;
+    type Item = LexItem<'src>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.consume_whitespaces();

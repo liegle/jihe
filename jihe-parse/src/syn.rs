@@ -1,134 +1,103 @@
-use std::{collections::HashSet, mem};
+use std::{collections::HashSet, iter::Peekable};
 
-pub(super) use crate::syn::error::SynError;
 use crate::{
+    Lex,
     lex::{Kind, Token},
-    syn::tree::{Class, Statement, Tree},
+    syn::tree::{Class, Statement},
 };
+pub(super) use {error::SynError, tree::Tree};
 
 mod error;
+mod expr;
 mod tree;
 
-pub(super) struct Syn<'src> {
-    tree: Tree<'src>,
-    stage: StatementStage<'src>,
+// Why there's no TryFromIterator
+pub(super) fn syn<'src>(lex: Lex<'src>) -> Result<Tree<'src>, SynError> {
+    let mut lex = lex.peekable();
+    Tree::parse(&mut lex)
 }
 
-impl<'src> Syn<'src> {
-    pub(super) fn new() -> Self {
-        Self {
-            tree: Tree { statements: Vec::new() },
-            stage: StatementStage::None,
-        }
-    }
-
-    pub(super) fn input(&mut self, token: Token<'src>) -> Result<(), SynError> {
-        if let Some(statement) = self.stage.step(token)? {
-            self.tree.statements.push(statement);
-        }
-        Ok(())
-    }
-
-    pub(super) fn output(self) -> Result<Tree<'src>, SynError> {
-        // TODO
-        Ok(self.tree)
-    }
+trait Syn<'src>: Sized {
+    fn parse(iter: &mut Peekable<Lex<'src>>) -> Result<Self, SynError>;
 }
 
-trait Stage<'src, T: 'src> {
-    fn step(&mut self, token: Token<'src>) -> Result<Option<T>, SynError>;
-    fn expected(&self) -> HashSet<Kind>;
+trait ExpectKind<'src>: 'src {
+    fn next_kind(&mut self, kind: Kind) -> Result<Token<'src>, SynError>;
 }
 
-enum StatementStage<'src> {
-    None,
-    Name(&'src str),
-    Colon(&'src str),
-    Kind(&'src str, ClassStage),
-    BraceL(&'src str, ClassStage),
-    Inner(&'src str, Class<'src>),
-}
-
-impl<'src> Stage<'src, Statement<'src>> for StatementStage<'src> {
-    fn step(
-        &mut self,
-        Token { kind, string }: Token<'src>,
-    ) -> Result<Option<Statement<'src>>, SynError> {
-        *self = match (mem::replace(self, StatementStage::None), kind) {
-            (StatementStage::None, Kind::Identifier) => StatementStage::Name(string),
-            (StatementStage::Name(name), Kind::Colon) => StatementStage::Colon(name),
-            (StatementStage::Colon(name), Kind::Identifier) => {
-                StatementStage::Kind(name, ClassStage::from_str(string)?)
-            }
-            (StatementStage::Kind(name, inner), Kind::BraceL) => {
-                StatementStage::BraceL(name, inner)
-            }
-            (StatementStage::BraceL(name, mut inner), kind) => {
-                if let Some(result) = inner.step(Token { kind, string })? {
-                    StatementStage::Inner(name, result)
+impl<'src> ExpectKind<'src> for Peekable<Lex<'src>> {
+    fn next_kind(&mut self, kind: Kind) -> Result<Token<'src>, SynError> {
+        let Some(token) = self.next() else {
+            return Err(SynError::UnexpectedEof);
+        };
+        match token {
+            Ok(token) => {
+                if token.kind == kind {
+                    Ok(token)
                 } else {
-                    StatementStage::BraceL(name, inner)
+                    let mut expected = HashSet::new();
+                    expected.insert(kind);
+                    Err(SynError::UnexpectedToken { expected, found: token.string.to_owned() })
                 }
             }
-            (StatementStage::Inner(name, kind), Kind::BraceR) => {
-                return Ok(Some(Statement { name, kind }));
-            }
-            (stage, _) => {
-                return Err(SynError::UnexpectedToken {
-                    expected: stage.expected(),
-                    found: string.to_owned(),
-                });
-            }
-        };
-        Ok(None)
-    }
-
-    fn expected(&self) -> HashSet<Kind> {
-        let mut expected = HashSet::new();
-        expected.insert(match self {
-            StatementStage::None => Kind::Identifier,
-            StatementStage::Name(..) => Kind::Colon,
-            StatementStage::Colon(..) => Kind::Identifier,
-            StatementStage::Kind(..) => Kind::BraceL,
-            StatementStage::BraceL(_, inner) => {
-                return inner.expected();
-            }
-            StatementStage::Inner(..) => Kind::BraceR,
-        });
-        expected
-    }
-}
-
-enum ClassStage {
-    Param,
-    Var,
-    Point,
-    Curve,
-}
-
-impl ClassStage {
-    fn from_str(string: &str) -> Result<Self, SynError> {
-        match string {
-            "Param" => Ok(Self::Param),
-            "Var" => Ok(Self::Var),
-            "Point" => Ok(Self::Point),
-            "Curve" => Ok(Self::Curve),
-            _ => Err(SynError::UndefinedStatementKind { found: string.to_owned() }),
+            Err(e) => Err(SynError::LexError(e)),
         }
     }
 }
 
-impl<'src> Stage<'src, Class<'src>> for ClassStage {
-    fn step(&mut self, token: Token<'src>) -> Result<Option<Class<'src>>, SynError> {
-        // TODO
-        Ok(None)
-    }
+impl<'src> Syn<'src> for Tree<'src> {
+    fn parse(iter: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
+        let mut statements = Vec::new();
+        while iter.peek().is_some() {
+            statements.push(Statement::parse(iter)?);
+        }
 
-    fn expected(&self) -> HashSet<Kind> {
-        HashSet::new()
+        Ok(Tree { statements })
     }
 }
 
-enum ClassVarietyStage<const N: usize> {
-    None,
+impl<'src> Syn<'src> for Statement<'src> {
+    fn parse(iter: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
+        let name = iter.next_kind(Kind::Identifier)?.string;
+        let _ = iter.next_kind(Kind::Colon)?;
+        let class = iter.next_kind(Kind::Identifier)?.string;
+
+        let Some(l) = iter.next() else {
+            return Err(SynError::UnexpectedEof);
+        };
+        let (class, r) = match l {
+            Ok(Token { kind: Kind::BraceL, .. }) => (Class::named(class, iter)?, Kind::BraceR),
+            Ok(Token { kind: Kind::ParentheseL, .. }) => {
+                (Class::unnamed(class, iter)?, Kind::ParentheseR)
+            }
+            Ok(Token { string, .. }) => {
+                let mut expected = HashSet::new();
+                expected.insert(Kind::BraceL);
+                expected.insert(Kind::ParentheseL);
+                return Err(SynError::UnexpectedToken { expected, found: string.to_owned() });
+            }
+            Err(e) => return Err(SynError::LexError(e)),
+        };
+
+        // trailing comma or end ) or }
+        let Some(token) = iter.next() else {
+            return Err(SynError::UnexpectedEof);
+        };
+        match token {
+            Ok(Token { kind: Kind::Comma, .. }) => {
+                let _ = iter.next_kind(r)?;
+            }
+            Ok(Token { kind, .. }) if kind == r => {}
+            Ok(Token { string, .. }) => {
+                let mut expected = HashSet::new();
+                expected.insert(Kind::BraceR);
+                expected.insert(Kind::ParentheseR);
+                expected.insert(Kind::Comma);
+                return Err(SynError::UnexpectedToken { expected, found: string.to_owned() });
+            }
+            Err(e) => return Err(SynError::LexError(e)),
+        }
+
+        Ok(Statement { name, class })
+    }
 }

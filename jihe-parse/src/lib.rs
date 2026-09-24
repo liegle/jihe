@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     lex::{Lex, LexError},
-    syn::{Syn, SynError},
+    syn::{SynError, syn},
 };
 
 mod array;
@@ -28,11 +28,7 @@ impl Parse {
         }
         let source = fs::read_to_string(&self.path)?;
         let lex = Lex::new(&source);
-        let mut syn = Syn::new();
-        for token in lex {
-            syn.input(token?)?;
-        }
-        let _ = syn.output()?;
+        let _tree = syn(lex)?;
         Ok(jihe_shared::Content::example())
     }
 }

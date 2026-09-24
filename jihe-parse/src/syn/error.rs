@@ -4,10 +4,12 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
-use crate::lex::Kind;
+use crate::{LexError, lex::Kind};
 
 #[derive(Debug)]
 pub enum SynError {
+    LexError(LexError),
+    UnexpectedEof,
     UnexpectedToken { expected: HashSet<Kind>, found: String },
     UndefinedStatementKind { found: String },
 }
@@ -17,6 +19,10 @@ impl Error for SynError {}
 impl Display for SynError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::LexError(e) => e.fmt(f),
+            Self::UnexpectedEof => {
+                write!(f, "Source file ended")
+            }
             Self::UnexpectedToken { expected, found } => {
                 write!(f, "Expected ")?;
                 let mut is_begin = true;
