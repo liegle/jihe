@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 
-use encase::ShaderSize;
-
 use crate::{
     Camera,
     utils::{AsDynamicStorageBytes as _, AsUniformBytes as _},
@@ -34,7 +32,7 @@ impl Point {
         let size_buffer = create_size_buffer(device);
         let points_buffer = create_points_buffer(
             device,
-            PointInstance::SHADER_SIZE.get() * points.len() as u64,
+            <PointInstance as encase::ShaderSize>::SHADER_SIZE.get() * points.len() as u64,
         );
 
         let bind_group_layout = device.create_bind_group_layout(&BIND_GROUP_LAYOUT_DESCRIPTOR);
@@ -76,7 +74,8 @@ impl Point {
             })
             .collect::<Vec<_>>();
         self.instance_count = points.len() as u32;
-        let points_buffer_size = self.instance_count as u64 * PointInstance::SHADER_SIZE.get();
+        let points_buffer_size =
+            self.instance_count as u64 * <PointInstance as encase::ShaderSize>::SHADER_SIZE.get();
         if self.points_buffer.size() < points_buffer_size {
             self.points_buffer.destroy();
             self.points_buffer = create_points_buffer(device, points_buffer_size);
@@ -103,7 +102,7 @@ impl Point {
 fn create_size_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Points Buffer"),
-        size: glam::Vec2::SHADER_SIZE.get(),
+        size: <glam::Vec2 as encase::ShaderSize>::SHADER_SIZE.get(),
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
@@ -176,7 +175,7 @@ fn create_render_pipeline(
             module: &shader,
             entry_point: VERTEX_ENTRY,
             buffers: &[wgpu::VertexBufferLayout {
-                array_stride: PointInstance::SHADER_SIZE.get(),
+                array_stride: <PointInstance as encase::ShaderSize>::SHADER_SIZE.get(),
                 step_mode: wgpu::VertexStepMode::Instance,
                 attributes: &[
                     wgpu::VertexAttribute {
@@ -186,12 +185,12 @@ fn create_render_pipeline(
                     },
                     wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32,
-                        offset: glam::Vec2::SHADER_SIZE.get(),
+                        offset: <glam::Vec2 as encase::ShaderSize>::SHADER_SIZE.get(),
                         shader_location: 1,
                     },
                     wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32x4,
-                        offset: glam::Vec4::SHADER_SIZE.get(),
+                        offset: <glam::Vec4 as encase::ShaderSize>::SHADER_SIZE.get(),
                         shader_location: 2,
                     },
                 ],

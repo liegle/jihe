@@ -5,8 +5,6 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use notify::Watcher as _;
-
 use crate::debounce::Debounce;
 
 enum Task {
@@ -50,14 +48,16 @@ impl Parse {
                     }
                 };
 
-            if let Err(e) = watcher.watch(&dir, notify::RecursiveMode::NonRecursive) {
+            if let Err(e) =
+                notify::Watcher::watch(&mut watcher, &dir, notify::RecursiveMode::NonRecursive)
+            {
                 log::error!("Can't watch target file because:{e}");
                 return None;
             }
             let parse = jihe_parse::Parse::new(&path);
             thread::spawn(move || {
                 rt.block_on(run(parse, scene, callback, receiver));
-                let _ = watcher.unwatch(&dir); // Keep watcher alive
+                let _ = notify::Watcher::unwatch(&mut watcher, &dir); // Keep watcher alive
             })
         };
         Some(Self { join_handle, sender })

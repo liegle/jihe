@@ -1,3 +1,4 @@
+// TODO: to proc macro
 use std::collections::{HashMap, HashSet};
 
 use crate::lex::{

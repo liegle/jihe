@@ -1,7 +1,5 @@
 use std::{borrow::Cow, ops::Range};
 
-use encase::ShaderSize;
-
 use crate::{bg::Bounds, utils::AsUniformBytes as _};
 
 const SHADER: &str = include_str!("grid.wgsl");
@@ -33,7 +31,7 @@ impl Grid {
     pub(super) fn new(device: &wgpu::Device, dst_format: wgpu::TextureFormat) -> Self {
         let color_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Grid Color Buffer"),
-            size: glam::Vec3::SHADER_SIZE.get(),
+            size: <glam::Vec3 as encase::ShaderSize>::SHADER_SIZE.get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -94,7 +92,7 @@ impl Lines {
     ) -> Self {
         let lines_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Grid Lines Buffer"),
-            size: LinesUniform::SHADER_SIZE.get(),
+            size: <LinesUniform as encase::ShaderSize>::SHADER_SIZE.get(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -209,7 +207,7 @@ fn create_render_pipeline(
             module: &shader,
             entry_point: vertex_entry,
             buffers: &[wgpu::VertexBufferLayout {
-                array_stride: glam::Vec2::SHADER_SIZE.get(),
+                array_stride: <glam::Vec2 as encase::ShaderSize>::SHADER_SIZE.get(),
                 step_mode: wgpu::VertexStepMode::Vertex,
                 attributes: &[wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x2,

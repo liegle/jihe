@@ -1,5 +1,3 @@
-use encase::ShaderSize as _;
-
 use crate::{
     Camera,
     curve::{binary::Binary, connect::Connect, measure::Measure, write::Write},
@@ -310,7 +308,7 @@ fn create_curve_texture_view(
 fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Camera Buffer"),
-        size: CameraUniform::SHADER_SIZE.get(),
+        size: <CameraUniform as encase::ShaderSize>::SHADER_SIZE.get(),
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
@@ -320,7 +318,7 @@ fn create_camera_buffer(device: &wgpu::Device) -> wgpu::Buffer {
 fn create_curves_buffer(device: &wgpu::Device, len: usize) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Curves Buffer"),
-        size: CurveUniform::SHADER_SIZE.get() * len.max(1) as u64,
+        size: <CurveUniform as encase::ShaderSize>::SHADER_SIZE.get() * len.max(1) as u64,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
