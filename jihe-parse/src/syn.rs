@@ -18,7 +18,7 @@ pub(super) fn syn<'src>(lex: Lex<'src>) -> Result<Tree<'src>, SynError> {
 }
 
 trait Syn<'src>: Sized {
-    fn parse(iter: &mut Peekable<Lex<'src>>) -> Result<Self, SynError>;
+    fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError>;
 }
 
 trait ExpectKind<'src>: 'src {
@@ -46,10 +46,10 @@ impl<'src> ExpectKind<'src> for Peekable<Lex<'src>> {
 }
 
 impl<'src> Syn<'src> for Tree<'src> {
-    fn parse(iter: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
+    fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
         let mut statements = Vec::new();
-        while iter.peek().is_some() {
-            statements.push(Statement::parse(iter)?);
+        while lex.peek().is_some() {
+            statements.push(Statement::parse(lex)?);
         }
 
         Ok(Tree { statements })
@@ -57,18 +57,18 @@ impl<'src> Syn<'src> for Tree<'src> {
 }
 
 impl<'src> Syn<'src> for Statement<'src> {
-    fn parse(iter: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
-        let name = iter.next_kind(Kind::Identifier)?.string;
-        let _ = iter.next_kind(Kind::Colon)?;
-        let class = iter.next_kind(Kind::Identifier)?.string;
+    fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
+        let name = lex.next_kind(Kind::Identifier)?.string;
+        let _ = lex.next_kind(Kind::Colon)?;
+        let class = lex.next_kind(Kind::Identifier)?.string;
 
-        let Some(l) = iter.next() else {
+        let Some(l) = lex.next() else {
             return Err(SynError::UnexpectedEof);
         };
         let (class, r) = match l {
-            Ok(Token { kind: Kind::BraceL, .. }) => (Class::named(class, iter)?, Kind::BraceR),
+            Ok(Token { kind: Kind::BraceL, .. }) => (Class::named(class, lex)?, Kind::BraceR),
             Ok(Token { kind: Kind::ParentheseL, .. }) => {
-                (Class::unnamed(class, iter)?, Kind::ParentheseR)
+                (Class::unnamed(class, lex)?, Kind::ParentheseR)
             }
             Ok(Token { string, .. }) => {
                 let mut expected = HashSet::new();
@@ -80,12 +80,12 @@ impl<'src> Syn<'src> for Statement<'src> {
         };
 
         // trailing comma or end ) or }
-        let Some(token) = iter.next() else {
+        let Some(token) = lex.next() else {
             return Err(SynError::UnexpectedEof);
         };
         match token {
             Ok(Token { kind: Kind::Comma, .. }) => {
-                let _ = iter.next_kind(r)?;
+                let _ = lex.next_kind(r)?;
             }
             Ok(Token { kind, .. }) if kind == r => {}
             Ok(Token { string, .. }) => {

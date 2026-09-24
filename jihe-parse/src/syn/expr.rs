@@ -25,7 +25,7 @@ pub(crate) enum Expr<'src> {
 }
 
 impl<'src> Syn<'src> for Expr<'src> {
-    fn parse(iter: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
+    fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
         todo!()
     }
 }

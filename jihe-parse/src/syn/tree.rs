@@ -1,4 +1,6 @@
-use crate::{SynError, lex::LexItem, syn::expr::Expr};
+use std::iter::Peekable;
+
+use crate::{Lex, SynError, lex::LexItem, syn::expr::Expr};
 
 pub(crate) struct Tree<'src> {
     pub(super) statements: Vec<Statement<'src>>,
@@ -31,16 +33,16 @@ pub(crate) enum Class<'src> {
 }
 
 impl<'src> Class<'src> {
-    pub(super) fn named<T: Iterator<Item = LexItem<'src>>>(
+    pub(super) fn named(
         class: &'src str,
-        iter: &mut T,
+        lex: &mut Peekable<Lex<'src>>,
     ) -> Result<Self, SynError> {
         todo!()
     }
 
-    pub(super) fn unnamed<T: Iterator<Item = LexItem<'src>>>(
+    pub(super) fn unnamed(
         class: &'src str,
-        iter: &mut T,
+        lex: &mut Peekable<Lex<'src>>,
     ) -> Result<Self, SynError> {
         todo!()
     }
