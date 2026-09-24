@@ -1,16 +1,24 @@
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
+    ops::Range,
 };
 
-use crate::{LexError, lex::KindSet};
+use crate::{Cursor, LexError, lex::KindSet};
 
 #[derive(Debug)]
 pub enum SynError {
     LexError(LexError),
     UnexpectedEof,
-    UnexpectedToken { expected: KindSet, found: String },
-    UndefinedStatementKind { found: String },
+    UnexpectedToken {
+        expected: KindSet,
+        found: String,
+        range: Range<Cursor>,
+    },
+    UndefinedStatementKind {
+        found: String,
+        range: Range<Cursor>,
+    },
 }
 
 impl Error for SynError {}
@@ -22,7 +30,7 @@ impl Display for SynError {
             Self::UnexpectedEof => {
                 write!(f, "Source file ended")
             }
-            Self::UnexpectedToken { expected, found } => {
+            Self::UnexpectedToken { expected, found, range } => {
                 write!(f, "Expected ")?;
                 let mut is_begin = true;
                 for e in expected.into_iter() {
@@ -33,10 +41,14 @@ impl Display for SynError {
                         write!(f, "or {e:?}")?;
                     }
                 }
-                write!(f, ", found '{found}'") // TODO: send cursor to here to print
+                write!(f, ", found \"{found}\" at {}..{}", range.start, range.end)
             }
-            Self::UndefinedStatementKind { found } => {
-                write!(f, "Specified kind not defined: {found}")
+            Self::UndefinedStatementKind { found, range } => {
+                write!(
+                    f,
+                    "Specified kind not defined: {found} at {}..{}",
+                    range.start, range.end
+                )
             }
         }
     }

@@ -94,6 +94,7 @@ impl<'src> Iterator for Lex<'src> {
                 [kind] => Some(Ok(Token {
                     kind: *kind,
                     string: &self.source[byte_begin..self.byte_ptr],
+                    range: char_begin..self.char_ptr,
                 })),
                 _ => Some(Err(LexError::MultipleMatching {
                     matched,

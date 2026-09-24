@@ -38,6 +38,7 @@ impl<'src> ExpectKind<'src> for Peekable<Lex<'src>> {
                     Err(SynError::UnexpectedToken {
                         expected: KindSet::with_values([kind]),
                         found: token.string.to_owned(),
+                        range: token.range,
                     })
                 }
             }
@@ -71,10 +72,11 @@ impl<'src> Syn<'src> for Statement<'src> {
             Ok(Token { kind: Kind::ParentheseL, .. }) => {
                 (Class::unnamed(class, lex)?, Kind::ParentheseR)
             }
-            Ok(Token { string, .. }) => {
+            Ok(Token { string, range, .. }) => {
                 return Err(SynError::UnexpectedToken {
                     expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL]),
                     found: string.to_owned(),
+                    range,
                 });
             }
             Err(e) => return Err(SynError::LexError(e)),
@@ -89,10 +91,11 @@ impl<'src> Syn<'src> for Statement<'src> {
                 let _ = lex.next_kind(r)?;
             }
             Ok(Token { kind, .. }) if kind == r => {}
-            Ok(Token { string, .. }) => {
+            Ok(Token { string, range, .. }) => {
                 return Err(SynError::UnexpectedToken {
                     expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL, Kind::Comma]),
                     found: string.to_owned(),
+                    range,
                 });
             }
             Err(e) => return Err(SynError::LexError(e)),

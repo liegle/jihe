@@ -1,9 +1,10 @@
 use crate::{
+    Cursor,
     intset::{self, IntSet},
     lex::automata::Automata,
 };
 
-use std::sync::LazyLock;
+use std::{ops::Range, sync::LazyLock};
 
 pub(super) const SKIP: &[char] = &[' ', '\t', '\n', '\r'];
 
@@ -11,6 +12,7 @@ pub(super) const SKIP: &[char] = &[' ', '\t', '\n', '\r'];
 pub(crate) struct Token<'src> {
     pub(crate) kind: Kind,
     pub(crate) string: &'src str,
+    pub(crate) range: Range<Cursor>,
 }
 
 pub(crate) struct Pattern {
