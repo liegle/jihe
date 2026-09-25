@@ -47,12 +47,12 @@ pub(super) enum Repeat {
 
 #[rustfmt::skip]
 macro_rules! pattern {
-    ($kind:expr, $prio:literal, $($ch:tt $rpt:tt),*) => {
+    ($kind:expr, $prio:literal, $($ch:tt $rpt:tt),+) => {
         {
             Pattern {
                 kind: $kind,
                 priority: $prio,
-                automata: Automata::new(&[$((character!($ch), repeat!($rpt)),)*]),
+                automata: Automata::new(&[$((character!($ch), repeat!($rpt))),+]),
             }
         }
     };
@@ -80,11 +80,11 @@ macro_rules! enum_kind {
         #[repr(u8)]
         pub enum Kind {
             #[default]
-            $($kind,)+
+            $($kind),+
         }
 
         pub(super) static PATTERNS: LazyLock<Vec<Pattern>> = LazyLock::new(|| vec![
-            $(pattern!(Kind::$kind, $prio, $($patt)+),)+
+            $(pattern!(Kind::$kind, $prio, $($patt)+)),+
         ]);
 
         pub(super) const PATTERN_COUNT: usize = {

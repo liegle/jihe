@@ -30,6 +30,7 @@ impl<'src> Field<'src> {
     }
 }
 
+#[rustfmt::skip]
 macro_rules! default_field {
     () => { Field::None };
     ($default:expr) => { Field::Default($default) };
@@ -41,9 +42,9 @@ struct Constructor {
 }
 
 macro_rules! enum_class {
-    ($($class:ident=[$($field:ident$(=$default:expr)?),+])+) => {
+    ($($class:ident={$($field:ident$(=$default:expr)?),+})+) => {
         pub(crate) enum Class<'src> {
-            $($class{$($field: Expr<'src>,)+},)+
+            $($class{$($field: Expr<'src>),+}),+
         }
 
         static CONSTRUCTORS: LazyLock<HashMap<&'static str, Constructor>> = LazyLock::new(|| {
@@ -86,7 +87,9 @@ macro_rules! enum_class {
         }
 
         paste::paste! {$(
-            fn [<$class:lower _named>]<'src>(lex: &mut Peekable<Lex<'src>>) -> Result<Class<'src>, SynError> {
+            fn [<$class:snake:lower _named>]<'src>(
+                lex: &mut Peekable<Lex<'src>>
+            ) -> Result<Class<'src>, SynError> {
                 let mut fields = HashMap::new();
                 $(fields.insert(stringify!($field), default_field!($($default)?));)+
                 let mut is_first = true;
@@ -114,11 +117,13 @@ macro_rules! enum_class {
                 lex.maybe_kind(Kind::Comma);
                 let _ = lex.next_kind(Kind::BraceR)?;
                 $(let $field = fields.remove(stringify!($field)).unwrap().unwrap(stringify!($field))?;)+
-                Ok(Class::$class{ $($field,)+ })
+                Ok(Class::$class{ $($field),+ })
             }
 
-            fn [<$class:lower _unnamed>]<'src>(lex: &mut Peekable<Lex<'src>>) -> Result<Class<'src>, SynError> {
-                let mut fields = vec![Field::None];
+            fn [<$class:snake:lower _unnamed>]<'src>(
+                lex: &mut Peekable<Lex<'src>>
+            ) -> Result<Class<'src>, SynError> {
+                let mut fields = vec![$(default_field!($($default)?)),+];
                 let mut is_first = true;
                 for field in &mut fields {
                     if is_first {
@@ -137,7 +142,7 @@ macro_rules! enum_class {
                 $(
                     let $field = fields.remove(0).unwrap(stringify!($field))?;
                 )+
-                Ok(Class::$class{ $($field,)+ })
+                Ok(Class::$class{ $($field),+ })
             }
         )+}
     };
@@ -148,6 +153,7 @@ macro_rules! number {
         Expr::Number { negative: false, integer: $i, decimal: 0 }
     };
 }
+
 macro_rules! color {
     ($r:literal, $g:literal, $b:literal) => {
         Expr::FunctionCall("color", vec![number!($r), number!($g), number!($b)])
@@ -155,17 +161,22 @@ macro_rules! color {
 }
 
 enum_class! {
-    Param = [from, to]
-    Var = [expr]
-    Point = [
+    Param = {
+        from,
+        to
+    }
+    Var = {
+        expr
+    }
+    Point = {
         x,
         y,
         size = number!(3),
         color = color!(0, 0, 0)
-    ]
-    Curve = [
+    }
+    Curve = {
         equation,
         thickness = number!(3),
         color = color!(0, 0, 1)
-    ]
+    }
 }
