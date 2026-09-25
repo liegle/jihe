@@ -23,6 +23,7 @@ trait Syn<'src>: Sized {
 
 trait ExpectKind<'src>: 'src {
     fn next_kind(&mut self, kind: Kind) -> Result<Token<'src>, SynError>;
+    fn maybe_kind(&mut self, kind: Kind);
 }
 
 impl<'src> ExpectKind<'src> for Peekable<Lex<'src>> {
@@ -45,6 +46,10 @@ impl<'src> ExpectKind<'src> for Peekable<Lex<'src>> {
             Err(e) => Err(SynError::LexError(e)),
         }
     }
+
+    fn maybe_kind(&mut self, kind: Kind) {
+        self.next_if(|next| matches!(next, Ok(Token { kind: k, .. }) if kind == *k));
+    }
 }
 
 impl<'src> Syn<'src> for Tree<'src> {
@@ -62,45 +67,7 @@ impl<'src> Syn<'src> for Statement<'src> {
     fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
         let name = lex.next_kind(Kind::Identifier)?.string;
         let _ = lex.next_kind(Kind::Colon)?;
-        let class = lex.next_kind(Kind::Identifier)?.string;
-
-        let Some(l) = lex.next() else {
-            return Err(SynError::UnexpectedEof);
-        };
-        let (class, r) = match l {
-            Ok(Token { kind: Kind::BraceL, .. }) => (Class::named(class, lex)?, Kind::BraceR),
-            Ok(Token { kind: Kind::ParentheseL, .. }) => {
-                (Class::unnamed(class, lex)?, Kind::ParentheseR)
-            }
-            Ok(Token { string, range, .. }) => {
-                return Err(SynError::UnexpectedToken {
-                    expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL]),
-                    found: string.to_owned(),
-                    range,
-                });
-            }
-            Err(e) => return Err(SynError::LexError(e)),
-        };
-
-        // trailing comma or end ) or }
-        let Some(token) = lex.next() else {
-            return Err(SynError::UnexpectedEof);
-        };
-        match token {
-            Ok(Token { kind: Kind::Comma, .. }) => {
-                let _ = lex.next_kind(r)?;
-            }
-            Ok(Token { kind, .. }) if kind == r => {}
-            Ok(Token { string, range, .. }) => {
-                return Err(SynError::UnexpectedToken {
-                    expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL, Kind::Comma]),
-                    found: string.to_owned(),
-                    range,
-                });
-            }
-            Err(e) => return Err(SynError::LexError(e)),
-        }
-
+        let class = Class::parse(lex)?;
         Ok(Statement { name, class })
     }
 }

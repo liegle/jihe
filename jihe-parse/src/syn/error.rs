@@ -19,6 +19,13 @@ pub enum SynError {
         found: String,
         range: Range<Cursor>,
     },
+    DuplicatedStatementField {
+        name: String,
+        range: Range<Cursor>,
+    },
+    StatementFieldLost {
+        name: &'static str,
+    },
 }
 
 impl Error for SynError {}
@@ -49,6 +56,16 @@ impl Display for SynError {
                     "Specified kind not defined: {found} at {}..{}",
                     range.start, range.end
                 )
+            }
+            Self::DuplicatedStatementField { name, range } => {
+                write!(
+                    f,
+                    "Field {name} has been defined twice at {}..{}",
+                    range.start, range.end
+                )
+            }
+            Self::StatementFieldLost { name } => {
+                write!(f, "Field {name} is not defined")
             }
         }
     }

@@ -75,20 +75,20 @@ macro_rules! repeat {
 
 #[rustfmt::skip]
 macro_rules! enum_kind {
-    ($(($prio:literal)$kind:ident = [$($patt:tt)*])*) => {
+    ($(($prio:literal)$kind:ident = [$($patt:tt)+])+) => {
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
         #[repr(u8)]
         pub enum Kind {
             #[default]
-            $($kind,)*
+            $($kind,)+
         }
 
         pub(super) static PATTERNS: LazyLock<Vec<Pattern>> = LazyLock::new(|| vec![
-            $(pattern!(Kind::$kind, $prio, $($patt)*),)*
+            $(pattern!(Kind::$kind, $prio, $($patt)+),)+
         ]);
 
         pub(super) const PATTERN_COUNT: usize = {
-            let count = $({ let _ = $prio; 1 } + )* 0;
+            let count = $({ let _ = $prio; 1 } + )+ 0;
             assert!(count < IntSet::CAPACITY, "Count of kind is to large to use intset");
             count as usize
         };

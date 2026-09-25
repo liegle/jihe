@@ -8,4 +8,5 @@ jihe-shared = { path = "../jihe-shared" }
 
 #external
 log         = { workspace = true, }
+paste       = { workspace = true, }
 thiserror   = { workspace = true, }
