@@ -31,12 +31,8 @@ impl<'src> Field<'src> {
 }
 
 macro_rules! default_field {
-    () => {
-        Field::None
-    };
-    ($default:expr) => {
-        Field::Default($default)
-    };
+    () => { Field::None };
+    ($default:expr) => { Field::Default($default) };
 }
 
 struct Constructor {
@@ -45,7 +41,7 @@ struct Constructor {
 }
 
 macro_rules! enum_class {
-    ($($class:ident = [$($field:ident$(=$default:expr)?),+])+) => {
+    ($($class:ident=[$($field:ident$(=$default:expr)?),+])+) => {
         pub(crate) enum Class<'src> {
             $($class{$($field: Expr<'src>,)+},)+
         }
@@ -147,12 +143,14 @@ macro_rules! enum_class {
     };
 }
 
-macro_rules! expr {
+macro_rules! number {
     ($i:literal) => {
         Expr::Number { negative: false, integer: $i, decimal: 0 }
     };
-    (color($r:literal, $g:literal, $b:literal)) => {
-        Expr::FunctionCall("color", vec![expr!($r), expr!($g), expr!($b)])
+}
+macro_rules! color {
+    ($r:literal, $g:literal, $b:literal) => {
+        Expr::FunctionCall("color", vec![number!($r), number!($g), number!($b)])
     };
 }
 
@@ -162,12 +160,12 @@ enum_class! {
     Point = [
         x,
         y,
-        size = expr!(3),
-        color = expr!(color(0, 0, 0))
+        size = number!(3),
+        color = color!(0, 0, 0)
     ]
     Curve = [
         equation,
-        thickness = Expr::number(3),
-        color = expr!(color(0, 0, 1))
+        thickness = number!(3),
+        color = color!(0, 0, 1)
     ]
 }

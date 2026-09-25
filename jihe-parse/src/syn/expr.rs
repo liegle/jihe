@@ -24,16 +24,6 @@ pub(crate) enum Expr<'src> {
     Equal(Box<Expr<'src>>, Box<Expr<'src>>),
 }
 
-impl Expr<'static> {
-    pub(super) const fn number(value: u32) -> Self {
-        Expr::Number {
-            negative: false,
-            integer: value,
-            decimal: 0,
-        }
-    }
-}
-
 impl<'src> Syn<'src> for Expr<'src> {
     fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
         todo!()
