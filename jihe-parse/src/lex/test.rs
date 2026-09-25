@@ -19,7 +19,8 @@ fn test_whitespaces() {
 
 #[test]
 fn test_all() {
-    let mut lex = Lex::new("325 \t 0.6 777. \n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
+    let mut lex =
+        Lex::new("325 \t 0.6 777. # This is comment\n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
     assert_matches!(
         lex.next(),
         Some(Ok(Token { kind: Kind::Number, string: "325", range }))

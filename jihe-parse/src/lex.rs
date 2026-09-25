@@ -4,10 +4,7 @@ pub(super) use crate::lex::{
     error::LexError,
     token::{Kind, KindSet, Token},
 };
-use crate::{
-    Cursor,
-    lex::{machine::Machine, token::SKIP},
-};
+use crate::{Cursor, lex::machine::Machine};
 
 mod automata;
 mod error;
@@ -35,16 +32,19 @@ impl<'src> Lex<'src> {
         }
     }
 
-    fn consume_whitespaces(&mut self) {
-        // TODO: consume comment
-        while let Some(c) = self.chars.peek() {
-            if SKIP.contains(c) {
-                self.byte_ptr += c.len_utf8();
-                self.char_ptr.step(*c == '\n');
-                self.chars.next();
-            } else {
-                break;
-            }
+    fn consume_ignored(&mut self) {
+        let mut comment = false;
+        while let Some(c) = self.chars.peek().copied() {
+            comment = match (c, comment) {
+                ('#', _) => true,
+                ('\n', true) => false,
+                (_, true) => true,
+                (' ' | '\n' | '\r' | '\t', _) => comment,
+                _ => break,
+            };
+            self.byte_ptr += c.len_utf8();
+            self.char_ptr.step(c == '\n');
+            let _ = self.chars.next();
         }
     }
 }
@@ -53,17 +53,13 @@ impl<'src> Iterator for Lex<'src> {
     type Item = LexItem<'src>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.consume_whitespaces();
+        self.consume_ignored();
 
         let byte_begin = self.byte_ptr;
         let char_begin = self.char_ptr;
         let mut machine = Machine::new();
 
         while let Some(c) = self.chars.peek().copied() {
-            if SKIP.contains(&c) {
-                break;
-            }
-
             let next_machine = machine.step(c);
             if next_machine.last_matched_char.is_none() {
                 if machine.last_matched_char.is_none() {

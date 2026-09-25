@@ -6,8 +6,6 @@ use crate::{
 
 use std::{ops::Range, sync::LazyLock};
 
-pub(super) const SKIP: &[char] = &[' ', '\t', '\n', '\r'];
-
 #[derive(Debug)]
 pub(crate) struct Token<'src> {
     pub(crate) kind: Kind,
