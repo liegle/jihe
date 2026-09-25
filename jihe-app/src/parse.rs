@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::{self, PathBuf},
+    path::{self, Path, PathBuf},
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
 };
@@ -54,9 +54,8 @@ impl Parse {
                 log::error!("Can't watch target file because:{e}");
                 return None;
             }
-            let parse = jihe_parse::Parse::new(&path);
             thread::spawn(move || {
-                rt.block_on(run(parse, scene, callback, receiver));
+                rt.block_on(run(path, scene, callback, receiver));
                 let _ = notify::Watcher::unwatch(&mut watcher, &dir); // Keep watcher alive
             })
         };
@@ -112,7 +111,7 @@ impl notify::EventHandler for Filter {
 }
 
 async fn run(
-    parse: jihe_parse::Parse,
+    path: PathBuf,
     scene: Arc<Mutex<jihe_render::Scene>>,
     callback: impl Fn(),
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<Task>,
@@ -136,27 +135,36 @@ async fn run(
                     }
                     Some(Task::Parse) => {
                         if let Some(()) = debounce.push_task(()) {
-                            match parse.parse() {
-                                Ok(content) => {
-                                    scene.lock().unwrap().content = content;
-                                    callback();
-                                }
-                                Err(e) => log::error!("Failed to parse jihe because:{e}")
-                            }
+                            parse(&path, &scene, &callback);
                         }
                     }
                 }
             }
             Some(_) = debounce.sleep() => {
-                match parse.parse() {
-                    Ok(content) => {
-                        scene.lock().unwrap().content = content;
-                        callback();
-                    }
-                    Err(e) => log::error!("Failed to parse jihe because:{e}")
-                }
+                parse(&path, &scene, &callback);
             }
             else => break,
         }
+    }
+}
+
+fn parse(path: &Path, scene: &Arc<Mutex<jihe_render::Scene>>, callback: &impl Fn()) {
+    if let Ok(false) | Err(_) = fs::exists(path) {
+        log::error!("Source file {path:?} lost");
+        return;
+    }
+    let source = match fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(e) => {
+            log::error!("Can't read source file because:{e}");
+            return;
+        }
+    };
+    match jihe_parse::parse(&source) {
+        Ok(content) => {
+            scene.lock().unwrap().content = content;
+            callback();
+        }
+        Err(e) => log::error!("Failed to parse jihe because:{e}"),
     }
 }

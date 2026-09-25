@@ -1,8 +1,4 @@
-use std::{
-    fmt::{self, Display, Formatter},
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::fmt::{self, Display, Formatter};
 
 use crate::{
     lex::{Lex, LexError},
@@ -14,32 +10,14 @@ mod intset;
 mod lex;
 mod syn;
 
-pub struct Parse {
-    path: PathBuf,
-}
-
-impl Parse {
-    pub fn new(path: &Path) -> Self {
-        Self { path: path.to_owned() }
-    }
-
-    pub fn parse(&self) -> Result<jihe_shared::Content, ParseError> {
-        if let Ok(false) | Err(_) = fs::exists(&self.path) {
-            return Err(ParseError::FileLost);
-        }
-        let source = fs::read_to_string(&self.path)?;
-        let lex = Lex::new(&source);
-        let _tree = syn(lex)?;
-        Ok(jihe_shared::Content::example())
-    }
+pub fn parse<'src>(source: &'src str) -> Result<jihe_shared::Content, ParseError> {
+    let lex = Lex::new(&source);
+    let _tree = syn(lex)?;
+    Ok(jihe_shared::Content::example())
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParseError {
-    #[error("File lost")]
-    FileLost,
-    #[error("Failed to read jihe because:{0}")]
-    ReadFail(#[from] io::Error),
     #[error("Failed to create token because:{0}")]
     LexError(#[from] LexError),
     #[error("Failed to create syntax because:{0}")]
