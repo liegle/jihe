@@ -1,7 +1,14 @@
-use std::{collections::HashMap, iter::Peekable, sync::LazyLock};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display, Formatter},
+    iter::Peekable,
+    sync::LazyLock,
+};
 
 use crate::{
-    Cursor, Lex, SynError, lex::{Kind, KindSet, Token}, syn::{ExpectKind, Syn, expr::Expr}
+    Cursor, Lex, SynError,
+    lex::{Kind, KindSet, Token},
+    syn::{ExpectKind, Syn, expr::Expr},
 };
 
 pub(crate) struct Tree<'src> {
@@ -13,13 +20,18 @@ pub(crate) struct Statement<'src> {
     pub(super) class: Class<'src>,
 }
 
-enum Field<'src> {
+struct Field<'src> {
+    slot: Slot<'src>,
+    check: Check,
+}
+
+enum Slot<'src> {
     None,
     Parsed(Expr<'src>),
     Default(Expr<'src>),
 }
 
-impl<'src> Field<'src> {
+impl<'src> Slot<'src> {
     fn get(self, name: &'static str, cursor: Cursor) -> Result<Expr<'src>, SynError> {
         match self {
             Self::None => Err(SynError::StatementFieldLost { name, cursor }),
@@ -29,9 +41,48 @@ impl<'src> Field<'src> {
 }
 
 #[rustfmt::skip]
-macro_rules! default_field {
-    () => { Field::None };
-    ($default:expr) => { Field::Default($default) };
+macro_rules! default_slot {
+    () => { Slot::None };
+    ($default:expr) => { Slot::Default($default) };
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Check {
+    None,
+    Fn,
+    Eq,
+    Def,
+}
+
+impl Display for Check {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let example = match self {
+            Self::None => "",
+            Self::Fn => "_(_)",
+            Self::Eq => "_ = _",
+            Self::Def => "_(_) = _",
+        };
+        write!(f, "{}", example)
+    }
+}
+
+impl Check {
+    fn check(&self, expr: &Expr) -> bool {
+        match self {
+            Self::None => true,
+            Self::Fn => matches!(expr, Expr::Fn(..)),
+            Self::Eq => matches!(expr, Expr::Eq(..)),
+            Self::Def => matches!(expr, Expr::Eq(l, _) if matches!(**l, Expr::Fn(..))),
+        }
+    }
+}
+
+#[rustfmt::skip]
+macro_rules! check {
+    (expr) => { Check::None };
+    (fn) => { Check::Fn };
+    (eq) => { Check::Eq };
+    (def) => { Check::Def };
 }
 
 struct Constructor {
@@ -40,7 +91,7 @@ struct Constructor {
 }
 
 macro_rules! enum_class {
-    ($($class:ident {$($field:ident$(=$default:expr)?),+}),+) => {
+    ($($class:ident {$($field:ident:$check:ident$(=$slot:expr)?),+}),+) => {
         pub(crate) enum Class<'src> {
             $($class{$($field: Expr<'src>),+}),+
         }
@@ -64,7 +115,15 @@ macro_rules! enum_class {
                 lex: &mut Peekable<Lex<'src>>
             ) -> Result<Class<'src>, SynError> {
                 let mut fields = HashMap::new();
-                $(fields.insert(stringify!($field), default_field!($($default)?));)+
+                $(
+                    fields.insert(
+                        stringify!($field),
+                        Field {
+                            check:check!($check),
+                            slot: default_slot!($($slot)?)
+                        }
+                    );
+                )+
                 let mut is_first = true;
                 for _ in 0..fields.len() {
                     if is_first {
@@ -77,9 +136,18 @@ macro_rules! enum_class {
                         return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
                     };
                     let _ = lex.next_kind(Kind::Colon)?;
-                    *field = match field {
-                        Field::None | Field::Default(_) => Field::Parsed(Expr::parse(lex)?),
-                        Field::Parsed(_) => {
+                    field.slot = match field.slot {
+                        Slot::None | Slot::Default(_) => {
+                            let expr = Expr::parse(lex)?;
+                            if !field.check.check(&expr) {
+                                return Err(SynError:: UnexpectedStatementFieldKind {
+                                    expected: field.check,
+                                    cursor: range.start,
+                                });
+                            }
+                            Slot::Parsed(expr)
+                        },
+                        Slot::Parsed(_) => {
                             return Err(SynError::DuplicatedStatementField {
                                 name: string.to_owned(),
                                 range,
@@ -89,14 +157,20 @@ macro_rules! enum_class {
                 }
                 lex.maybe_kind(Kind::Comma);
                 let end = lex.next_kind(Kind::BraceR)?.range.end;
-                $(let $field = fields.remove(stringify!($field)).unwrap().get(stringify!($field), end)?;)+
+                $(let $field =
+                    fields.remove(stringify!($field)).unwrap().slot.get(stringify!($field), end)?;)+
                 Ok(Class::$class{ $($field),+ })
             }
 
             fn [<$class:snake:lower _unnamed>]<'src>(
                 lex: &mut Peekable<Lex<'src>>
             ) -> Result<Class<'src>, SynError> {
-                let mut fields = vec![$(default_field!($($default)?)),+];
+                let mut fields = vec![$(
+                    Field {
+                        check:check!($check),
+                        slot: default_slot!($($slot)?)
+                    }
+                ),+];
                 let mut is_first = true;
                 for field in &mut fields {
                     if is_first {
@@ -106,13 +180,24 @@ macro_rules! enum_class {
                     }
                     match lex.peek() {
                         Some(Ok(Token { kind: Kind::ParenR, .. })) => break,
-                        Some(_) => *field = Field::Parsed(Expr::parse(lex)?), // let expr handle lex error
+                        Some(Ok(Token { range, .. })) => field.slot = {
+                            let start = range.start;
+                            let expr = Expr::parse(lex)?;
+                            if !field.check.check(&expr) {
+                                return Err(SynError::UnexpectedStatementFieldKind {
+                                    expected: field.check,
+                                    cursor: start,
+                                });
+                            }
+                            Slot::Parsed(expr)
+                        },
+                        Some(Err(_)) => return Err(SynError::LexError(lex.next().unwrap().unwrap_err())),
                         None => return Err(SynError::UnexpectedEof),
                     }
                 }
                 lex.maybe_kind(Kind::Comma);
                 let end = lex.next_kind(Kind::ParenR)?.range.end;
-                $(let $field = fields.remove(0).get(stringify!($field), end)?;)+
+                $(let $field = fields.remove(0).slot.get(stringify!($field), end)?;)+
                 Ok(Class::$class{ $($field),+ })
             }
         )+}
@@ -123,10 +208,7 @@ impl<'src> Syn<'src> for Class<'src> {
     fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
         let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
         let Some(Constructor { named, unnamed }) = CONSTRUCTORS.get(string) else {
-            return Err(SynError::UndefinedStatementKind {
-                found: string.to_owned(),
-                range,
-            });
+            return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
         };
         let Some(l) = lex.next() else {
             return Err(SynError::UnexpectedEof);
@@ -158,21 +240,24 @@ macro_rules! color {
 
 enum_class! {
     Param {
-        from,
-        to
+        from: expr,
+        to: expr
     },
     Var {
-        expr
+        expr: expr
+    },
+    Fn {
+        def: def
     },
     Point {
-        x,
-        y,
-        size = num!(3),
-        color = color!(0, 0, 0)
+        x: expr,
+        y: expr,
+        size: expr = num!(3),
+        color: fn = color!(0, 0, 0)
     },
     Curve {
-        equation,
-        thickness = num!(3),
-        color = color!(0, 0, 1)
+        equation: eq,
+        thickness: expr = num!(3),
+        color: fn = color!(0, 0, 1)
     }
 }

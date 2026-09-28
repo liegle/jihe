@@ -29,19 +29,3 @@ impl<'src> Syn<'src> for Expr<'src> {
         todo!()
     }
 }
-
-pub(super) enum ExprCheck {
-    None,
-    Fn,
-    Eq,
-}
-
-impl ExprCheck {
-    pub(super) fn check(&self, expr: &Expr) -> bool {
-        match self {
-            Self::None => true,
-            Self::Fn => matches!(expr, Expr::Fn(..)),
-            Self::Eq => matches!(expr, Expr::Eq(..)),
-        }
-    }
-}

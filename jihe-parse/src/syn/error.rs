@@ -4,7 +4,7 @@ use std::{
     ops::Range,
 };
 
-use crate::{Cursor, LexError, lex::KindSet};
+use crate::{Cursor, LexError, lex::KindSet, syn::tree::Check};
 
 #[derive(Debug)]
 pub enum SynError {
@@ -27,6 +27,10 @@ pub enum SynError {
         name: &'static str,
         cursor: Cursor,
     },
+    UnexpectedStatementFieldKind {
+        expected: Check,
+        cursor: Cursor,
+    }
 }
 
 impl Error for SynError {}
@@ -67,6 +71,9 @@ impl Display for SynError {
             }
             Self::StatementFieldLost { name, cursor } => {
                 write!(f, "Field {name} is not defined before {cursor}")
+            }
+            Self::UnexpectedStatementFieldKind { expected, cursor } => {
+                write!(f, "Field at {cursor} should be {expected}")
             }
         }
     }
