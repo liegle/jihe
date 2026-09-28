@@ -6,26 +6,42 @@ use crate::{
 };
 
 pub(crate) enum Expr<'src> {
-    Number {
+    Num {
         integer: u32,
         decimal: u32,
     },
-    Parameter(&'src str),
-    VariableX,
-    VariableY,
-    FunctionCall(&'src str, Vec<Expr<'src>>),
-    Parenthese(Box<Expr<'src>>),
-    Negative(Box<Expr<'src>>),
-    Power(Box<Expr<'src>>, Box<Expr<'src>>),
-    Multiply(Box<Expr<'src>>, Box<Expr<'src>>),
-    Divide(Box<Expr<'src>>, Box<Expr<'src>>),
-    Plus(Box<Expr<'src>>, Box<Expr<'src>>),
-    Minus(Box<Expr<'src>>, Box<Expr<'src>>),
-    Equal(Box<Expr<'src>>, Box<Expr<'src>>),
+    Param(&'src str),
+    VarX,
+    VarY,
+    Fn(&'src str, Vec<Expr<'src>>),
+    Paren(Box<Expr<'src>>),
+    Neg(Box<Expr<'src>>),
+    Pow(Box<Expr<'src>>, Box<Expr<'src>>),
+    Mul(Box<Expr<'src>>, Box<Expr<'src>>),
+    Div(Box<Expr<'src>>, Box<Expr<'src>>),
+    Add(Box<Expr<'src>>, Box<Expr<'src>>),
+    Sub(Box<Expr<'src>>, Box<Expr<'src>>),
+    Eq(Box<Expr<'src>>, Box<Expr<'src>>),
 }
 
 impl<'src> Syn<'src> for Expr<'src> {
     fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
         todo!()
+    }
+}
+
+pub(super) enum ExprCheck {
+    None,
+    Fn,
+    Eq,
+}
+
+impl ExprCheck {
+    pub(super) fn check(&self, expr: &Expr) -> bool {
+        match self {
+            Self::None => true,
+            Self::Fn => matches!(expr, Expr::Fn(..)),
+            Self::Eq => matches!(expr, Expr::Eq(..)),
+        }
     }
 }

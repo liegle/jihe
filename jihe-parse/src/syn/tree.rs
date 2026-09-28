@@ -72,7 +72,7 @@ macro_rules! enum_class {
                     } else {
                         let _ = lex.next_kind(Kind::Comma)?;
                     }
-                    let Token { string, range, .. } = lex.next_kind(Kind::Identifier)?;
+                    let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
                     let Some(field) = fields.get_mut(string) else {
                         return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
                     };
@@ -105,13 +105,13 @@ macro_rules! enum_class {
                         let _ = lex.next_kind(Kind::Comma)?;
                     }
                     match lex.peek() {
-                        Some(Ok(Token { kind: Kind::ParentheseR, .. })) => break,
+                        Some(Ok(Token { kind: Kind::ParenR, .. })) => break,
                         Some(_) => *field = Field::Parsed(Expr::parse(lex)?), // let expr handle lex error
                         None => return Err(SynError::UnexpectedEof),
                     }
                 }
                 lex.maybe_kind(Kind::Comma);
-                let end = lex.next_kind(Kind::ParentheseR)?.range.end;
+                let end = lex.next_kind(Kind::ParenR)?.range.end;
                 $(let $field = fields.remove(0).get(stringify!($field), end)?;)+
                 Ok(Class::$class{ $($field),+ })
             }
@@ -121,7 +121,7 @@ macro_rules! enum_class {
 
 impl<'src> Syn<'src> for Class<'src> {
     fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
-        let Token { string, range, .. } = lex.next_kind(Kind::Identifier)?;
+        let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
         let Some(Constructor { named, unnamed }) = CONSTRUCTORS.get(string) else {
             return Err(SynError::UndefinedStatementKind {
                 found: string.to_owned(),
@@ -133,9 +133,9 @@ impl<'src> Syn<'src> for Class<'src> {
         };
         match l {
             Ok(Token { kind: Kind::BraceL, .. }) => Ok(named(lex)?),
-            Ok(Token { kind: Kind::ParentheseL, .. }) => Ok(unnamed(lex)?),
+            Ok(Token { kind: Kind::ParenL, .. }) => Ok(unnamed(lex)?),
             Ok(Token { string, range, .. }) => Err(SynError::UnexpectedToken {
-                expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL]),
+                expected: KindSet::with_values([Kind::BraceL, Kind::ParenL]),
                 found: string.to_owned(),
                 range,
             }),
@@ -144,15 +144,15 @@ impl<'src> Syn<'src> for Class<'src> {
     }
 }
 
-macro_rules! number {
+macro_rules! num {
     ($i:literal) => {
-        Expr::Number { integer: $i, decimal: 0 }
+        Expr::Num { integer: $i, decimal: 0 }
     };
 }
 
 macro_rules! color {
     ($r:literal, $g:literal, $b:literal) => {
-        Expr::FunctionCall("color", vec![number!($r), number!($g), number!($b)])
+        Expr::Fn("color", vec![num!($r), num!($g), num!($b)])
     };
 }
 
@@ -167,12 +167,12 @@ enum_class! {
     Point {
         x,
         y,
-        size = number!(3),
+        size = num!(3),
         color = color!(0, 0, 0)
     },
     Curve {
         equation,
-        thickness = number!(3),
+        thickness = num!(3),
         color = color!(0, 0, 1)
     }
 }

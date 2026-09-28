@@ -65,7 +65,7 @@ impl<'src> Syn<'src> for Tree<'src> {
 
 impl<'src> Syn<'src> for Statement<'src> {
     fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
-        let name = lex.next_kind(Kind::Identifier)?.string;
+        let name = lex.next_kind(Kind::Ident)?.string;
         let _ = lex.next_kind(Kind::Colon)?;
         let class = Class::parse(lex)?;
         Ok(Statement { name, class })
