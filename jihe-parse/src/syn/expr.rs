@@ -7,7 +7,6 @@ use crate::{
 
 pub(crate) enum Expr<'src> {
     Number {
-        negative: bool,
         integer: u32,
         decimal: u32,
     },
@@ -16,6 +15,7 @@ pub(crate) enum Expr<'src> {
     VariableY,
     FunctionCall(&'src str, Vec<Expr<'src>>),
     Parenthese(Box<Expr<'src>>),
+    Negative(Box<Expr<'src>>),
     Power(Box<Expr<'src>>, Box<Expr<'src>>),
     Multiply(Box<Expr<'src>>, Box<Expr<'src>>),
     Divide(Box<Expr<'src>>, Box<Expr<'src>>),

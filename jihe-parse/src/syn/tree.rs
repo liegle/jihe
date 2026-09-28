@@ -1,9 +1,7 @@
 use std::{collections::HashMap, iter::Peekable, sync::LazyLock};
 
 use crate::{
-    Lex, SynError,
-    lex::{Kind, KindSet, Token},
-    syn::{ExpectKind, Syn, expr::Expr},
+    Cursor, Lex, SynError, lex::{Kind, KindSet, Token}, syn::{ExpectKind, Syn, expr::Expr}
 };
 
 pub(crate) struct Tree<'src> {
@@ -22,9 +20,9 @@ enum Field<'src> {
 }
 
 impl<'src> Field<'src> {
-    fn unwrap(self, name: &'static str) -> Result<Expr<'src>, SynError> {
+    fn get(self, name: &'static str, cursor: Cursor) -> Result<Expr<'src>, SynError> {
         match self {
-            Field::None => Err(SynError::StatementFieldLost { name }),
+            Self::None => Err(SynError::StatementFieldLost { name, cursor }),
             Self::Parsed(f) | Self::Default(f) => Ok(f),
         }
     }
@@ -42,7 +40,7 @@ struct Constructor {
 }
 
 macro_rules! enum_class {
-    ($($class:ident={$($field:ident$(=$default:expr)?),+})+) => {
+    ($($class:ident {$($field:ident$(=$default:expr)?),+}),+) => {
         pub(crate) enum Class<'src> {
             $($class{$($field: Expr<'src>),+}),+
         }
@@ -53,38 +51,13 @@ macro_rules! enum_class {
                 map.insert(
                     stringify!($class),
                     Constructor {
-                        named: [<$class:lower _named>],
-                        unnamed: [<$class:lower _unnamed>],
+                        named: [<$class:snake:lower _named>],
+                        unnamed: [<$class:snake:lower _unnamed>],
                     }
                 );
             )+}
             map
         });
-
-        impl<'src> Syn<'src> for Class<'src> {
-            fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
-                let Token { string, range, .. } = lex.next_kind(Kind::Identifier)?;
-                let Some(Constructor { named, unnamed }) = CONSTRUCTORS.get(string) else {
-                    return Err(SynError::UndefinedStatementKind {
-                        found: string.to_owned(),
-                        range,
-                    });
-                };
-                let Some(l) = lex.next() else {
-                    return Err(SynError::UnexpectedEof);
-                };
-                match l {
-                    Ok(Token { kind: Kind::BraceL, .. }) => Ok(named(lex)?),
-                    Ok(Token { kind: Kind::ParentheseL, .. }) => Ok(unnamed(lex)?),
-                    Ok(Token { string, range, .. }) => Err(SynError::UnexpectedToken {
-                        expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL]),
-                        found: string.to_owned(),
-                        range,
-                    }),
-                    Err(e) => Err(SynError::LexError(e)),
-                }
-            }
-        }
 
         paste::paste! {$(
             fn [<$class:snake:lower _named>]<'src>(
@@ -115,8 +88,8 @@ macro_rules! enum_class {
                     }
                 }
                 lex.maybe_kind(Kind::Comma);
-                let _ = lex.next_kind(Kind::BraceR)?;
-                $(let $field = fields.remove(stringify!($field)).unwrap().unwrap(stringify!($field))?;)+
+                let end = lex.next_kind(Kind::BraceR)?.range.end;
+                $(let $field = fields.remove(stringify!($field)).unwrap().get(stringify!($field), end)?;)+
                 Ok(Class::$class{ $($field),+ })
             }
 
@@ -132,25 +105,48 @@ macro_rules! enum_class {
                         let _ = lex.next_kind(Kind::Comma)?;
                     }
                     match lex.peek() {
-                        Some(Ok(Token { kind: Kind::BraceR, .. })) => break,
+                        Some(Ok(Token { kind: Kind::ParentheseR, .. })) => break,
                         Some(_) => *field = Field::Parsed(Expr::parse(lex)?), // let expr handle lex error
                         None => return Err(SynError::UnexpectedEof),
                     }
                 }
                 lex.maybe_kind(Kind::Comma);
-                let _ = lex.next_kind(Kind::ParentheseR)?;
-                $(
-                    let $field = fields.remove(0).unwrap(stringify!($field))?;
-                )+
+                let end = lex.next_kind(Kind::ParentheseR)?.range.end;
+                $(let $field = fields.remove(0).get(stringify!($field), end)?;)+
                 Ok(Class::$class{ $($field),+ })
             }
         )+}
     };
 }
 
+impl<'src> Syn<'src> for Class<'src> {
+    fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
+        let Token { string, range, .. } = lex.next_kind(Kind::Identifier)?;
+        let Some(Constructor { named, unnamed }) = CONSTRUCTORS.get(string) else {
+            return Err(SynError::UndefinedStatementKind {
+                found: string.to_owned(),
+                range,
+            });
+        };
+        let Some(l) = lex.next() else {
+            return Err(SynError::UnexpectedEof);
+        };
+        match l {
+            Ok(Token { kind: Kind::BraceL, .. }) => Ok(named(lex)?),
+            Ok(Token { kind: Kind::ParentheseL, .. }) => Ok(unnamed(lex)?),
+            Ok(Token { string, range, .. }) => Err(SynError::UnexpectedToken {
+                expected: KindSet::with_values([Kind::BraceL, Kind::ParentheseL]),
+                found: string.to_owned(),
+                range,
+            }),
+            Err(e) => Err(SynError::LexError(e)),
+        }
+    }
+}
+
 macro_rules! number {
     ($i:literal) => {
-        Expr::Number { negative: false, integer: $i, decimal: 0 }
+        Expr::Number { integer: $i, decimal: 0 }
     };
 }
 
@@ -161,20 +157,20 @@ macro_rules! color {
 }
 
 enum_class! {
-    Param = {
+    Param {
         from,
         to
-    }
-    Var = {
+    },
+    Var {
         expr
-    }
-    Point = {
+    },
+    Point {
         x,
         y,
         size = number!(3),
         color = color!(0, 0, 0)
-    }
-    Curve = {
+    },
+    Curve {
         equation,
         thickness = number!(3),
         color = color!(0, 0, 1)

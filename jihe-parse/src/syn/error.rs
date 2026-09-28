@@ -25,6 +25,7 @@ pub enum SynError {
     },
     StatementFieldLost {
         name: &'static str,
+        cursor: Cursor,
     },
 }
 
@@ -64,8 +65,8 @@ impl Display for SynError {
                     range.start, range.end
                 )
             }
-            Self::StatementFieldLost { name } => {
-                write!(f, "Field {name} is not defined")
+            Self::StatementFieldLost { name, cursor } => {
+                write!(f, "Field {name} is not defined before {cursor}")
             }
         }
     }
