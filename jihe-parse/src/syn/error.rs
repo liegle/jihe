@@ -31,6 +31,9 @@ pub enum SynError {
         expected: Check,
         cursor: Cursor,
     },
+    NegInsideExpr {
+        cursor: Cursor,
+    }
 }
 
 impl Error for SynError {}
@@ -74,6 +77,9 @@ impl Display for SynError {
             }
             Self::UnexpectedStatementFieldKind { expected, cursor } => {
                 write!(f, "Field at {cursor} should be {expected}")
+            }
+            Self::NegInsideExpr { cursor } => {
+                write!(f, "Negative at {cursor} inside expression should be surrounded by '(' & ')'")
             }
         }
     }
