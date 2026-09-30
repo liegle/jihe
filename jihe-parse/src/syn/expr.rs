@@ -6,6 +6,7 @@ use crate::{
     syn::{ExpectToken, Syn, SynError},
 };
 
+#[derive(Clone)]
 pub(crate) enum Expr<'src> {
     Num { integer: u32, decimal: u32 },
     Param(&'src str),

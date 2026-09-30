@@ -1,13 +1,13 @@
 use std::{
     collections::HashMap,
     fmt::{self, Display, Formatter},
-    iter::Peekable,
+    iter::{self, Peekable},
     sync::LazyLock,
 };
 
 use crate::{
-    Cursor, Lex, SynError,
-    lex::{Kind, KindSet, Token},
+    Lex, SynError,
+    lex::{Kind, KindSet, LexItem, Token},
     syn::{ExpectToken, Syn, expr::Expr},
 };
 
@@ -20,11 +20,13 @@ pub(crate) struct Statement<'src> {
     pub(super) class: Class<'src>,
 }
 
+#[derive(Clone)]
 struct Field<'src> {
     slot: Slot<'src>,
     check: Check,
 }
 
+#[derive(Clone)]
 enum Slot<'src> {
     None,
     Parsed(Expr<'src>),
@@ -32,10 +34,10 @@ enum Slot<'src> {
 }
 
 impl<'src> Slot<'src> {
-    fn get(self, name: &'static str, cursor: Cursor) -> Result<Expr<'src>, SynError> {
+    fn get(self) -> Option<Expr<'src>> {
         match self {
-            Self::None => Err(SynError::StatementFieldLost { name, cursor }),
-            Self::Parsed(f) | Self::Default(f) => Ok(f),
+            Self::None => None,
+            Self::Parsed(f) | Self::Default(f) => Some(f),
         }
     }
 }
@@ -86,8 +88,96 @@ macro_rules! check {
 }
 
 struct Constructor {
-    named: for<'src> fn(&mut Peekable<Lex<'src>>) -> Result<Class<'src>, SynError>,
-    unnamed: for<'src> fn(&mut Peekable<Lex<'src>>) -> Result<Class<'src>, SynError>,
+    named: (
+        HashMap<&'static str, Field<'static>>,
+        for<'src> fn(HashMap<&'static str, Field<'src>>) -> Result<Class<'src>, &'static str>,
+    ),
+    unnamed: (
+        Vec<Field<'static>>,
+        for<'src> fn(Vec<Field<'src>>) -> Result<Class<'src>, &'static str>,
+    ),
+}
+
+fn parse_named<'src>(
+    lex: &mut Peekable<Lex<'src>>,
+    default: &HashMap<&'static str, Field<'static>>,
+    insert: fn(HashMap<&'static str, Field<'src>>) -> Result<Class<'src>, &'static str>,
+) -> Result<Class<'src>, SynError> {
+    let mut fields = default.clone();
+    let mut is_first = true;
+    for _ in 0..fields.len() {
+        if is_first {
+            is_first = false;
+        } else {
+            let _ = lex.next_kind(Kind::Comma)?;
+        }
+        let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
+        let Some(field) = fields.get_mut(string) else {
+            return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
+        };
+        let _ = lex.next_kind(Kind::Colon)?;
+        field.slot = match field.slot {
+            Slot::None | Slot::Default(_) => {
+                let expr = Expr::parse(lex)?;
+                if !field.check.check(&expr) {
+                    return Err(SynError::UnexpectedStatementFieldKind {
+                        expected: field.check,
+                        cursor: range.start,
+                    });
+                }
+                Slot::Parsed(expr)
+            }
+            Slot::Parsed(_) => {
+                return Err(SynError::DuplicatedStatementField { name: string.to_owned(), range });
+            }
+        }
+    }
+    lex.next_if_kind(Kind::Comma);
+    let end = lex.next_kind(Kind::BraceR)?.range.end;
+    match insert(fields) {
+        Ok(c) => Ok(c),
+        Err(f) => Err(SynError::StatementFieldLost { name: f, cursor: end }),
+    }
+}
+
+fn parse_unnamed<'src>(
+    lex: &mut Peekable<Lex<'src>>,
+    default: &Vec<Field<'static>>,
+    insert: fn(Vec<Field<'src>>) -> Result<Class<'src>, &'static str>,
+) -> Result<Class<'src>, SynError> {
+    let mut fields = default.clone();
+    let mut is_first = true;
+    for field in &mut fields {
+        if is_first {
+            is_first = false;
+        } else {
+            let _ = lex.next_kind(Kind::Comma)?;
+        }
+        match lex.peek() {
+            Some(Ok(Token { kind: Kind::ParenR, .. })) => break,
+            Some(Ok(Token { range, .. })) => {
+                field.slot = {
+                    let start = range.start;
+                    let expr = Expr::parse(lex)?;
+                    if !field.check.check(&expr) {
+                        return Err(SynError::UnexpectedStatementFieldKind {
+                            expected: field.check,
+                            cursor: start,
+                        });
+                    }
+                    Slot::Parsed(expr)
+                }
+            }
+            Some(Err(_)) => return Err(SynError::LexError(lex.next().unwrap().unwrap_err())),
+            None => return Err(SynError::UnexpectedEof),
+        }
+    }
+    lex.next_if_kind(Kind::Comma);
+    let end = lex.next_kind(Kind::ParenR)?.range.end;
+    match insert(fields) {
+        Ok(c) => Ok(c),
+        Err(f) => Err(SynError::StatementFieldLost { name: f, cursor: end }),
+    }
 }
 
 macro_rules! enum_class {
@@ -101,9 +191,21 @@ macro_rules! enum_class {
             paste::paste! {$(
                 map.insert(
                     stringify!($class),
-                    Constructor {
-                        named: [<$class:snake:lower _named>],
-                        unnamed: [<$class:snake:lower _unnamed>],
+                    {
+                        let mut named_fields = HashMap::new();
+                        $(
+                            named_fields.insert(
+                                stringify!($field),
+                                Field { check: check!($check), slot: default_slot!($($slot)?) }
+                            );
+                        )+
+                        let unnamed_fields = vec![$(
+                            Field { check: check!($check), slot: default_slot!($($slot)?) }
+                        ),+];
+                        Constructor {
+                            named: (named_fields, [<$class:snake:lower _named>]),
+                            unnamed: (unnamed_fields, [<$class:snake:lower _unnamed>]),
+                        }
                     }
                 );
             )+}
@@ -112,86 +214,32 @@ macro_rules! enum_class {
 
         paste::paste! {$(
             fn [<$class:snake:lower _named>]<'src>(
-                lex: &mut Peekable<Lex<'src>>
-            ) -> Result<Class<'src>, SynError> {
-                let mut fields = HashMap::new();
+                mut fields: HashMap<&'static str, Field<'src>>
+            ) -> Result<Class<'src>, &'static str> {
                 $(
-                    fields.insert(
-                        stringify!($field),
-                        Field { check: check!($check), slot: default_slot!($($slot)?) }
-                    );
-                )+
-                let mut is_first = true;
-                for _ in 0..fields.len() {
-                    if is_first {
-                        is_first = false;
-                    } else {
-                        let _ = lex.next_kind(Kind::Comma)?;
-                    }
-                    let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
-                    let Some(field) = fields.get_mut(string) else {
-                        return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
+                    let Some($field) = fields.remove(stringify!($field)) else {
+                        return Err(stringify!($field));
                     };
-                    let _ = lex.next_kind(Kind::Colon)?;
-                    field.slot = match field.slot {
-                        Slot::None | Slot::Default(_) => {
-                            let expr = Expr::parse(lex)?;
-                            if !field.check.check(&expr) {
-                                return Err(SynError:: UnexpectedStatementFieldKind {
-                                    expected: field.check,
-                                    cursor: range.start,
-                                });
-                            }
-                            Slot::Parsed(expr)
-                        },
-                        Slot::Parsed(_) => {
-                            return Err(SynError::DuplicatedStatementField {
-                                name: string.to_owned(),
-                                range,
-                            });
-                        }
-                    }
-                }
-                lex.next_if_kind(Kind::Comma);
-                let end = lex.next_kind(Kind::BraceR)?.range.end;
-                $(let $field =
-                    fields.remove(stringify!($field)).unwrap().slot.get(stringify!($field), end)?;)+
+                    let Some($field) = $field.slot.get() else {
+                        return Err(stringify!($field));
+                    };
+                )+
                 Ok(Class::$class{ $($field),+ })
             }
 
             fn [<$class:snake:lower _unnamed>]<'src>(
-                lex: &mut Peekable<Lex<'src>>
-            ) -> Result<Class<'src>, SynError> {
-                let mut fields = vec![$(
-                    Field { check: check!($check), slot: default_slot!($($slot)?) }
-                ),+];
-                let mut is_first = true;
-                for field in &mut fields {
-                    if is_first {
-                        is_first = false;
-                    } else {
-                        let _ = lex.next_kind(Kind::Comma)?;
-                    }
-                    match lex.peek() {
-                        Some(Ok(Token { kind: Kind::ParenR, .. })) => break,
-                        Some(Ok(Token { range, .. })) => field.slot = {
-                            let start = range.start;
-                            let expr = Expr::parse(lex)?;
-                            if !field.check.check(&expr) {
-                                return Err(SynError::UnexpectedStatementFieldKind {
-                                    expected: field.check,
-                                    cursor: start,
-                                });
-                            }
-                            Slot::Parsed(expr)
-                        },
-                        Some(Err(_)) => return Err(SynError::LexError(lex.next().unwrap().unwrap_err())),
-                        None => return Err(SynError::UnexpectedEof),
-                    }
-                }
-                lex.next_if_kind(Kind::Comma);
-                let end = lex.next_kind(Kind::ParenR)?.range.end;
-                $(let $field = fields.remove(0).slot.get(stringify!($field), end)?;)+
+                mut fields: Vec<Field<'src>>
+            ) -> Result<Class<'src>, &'static str> {
+                // TODO: vec_try_remove #146954
+                fields.reverse();
+                $(
+                    let Some($field) = fields.pop() else {
+                        return Err(stringify!($field));
+                    };
+                    let Some($field) = $field.slot.get() else {
+                        return Err(stringify!($field));
+                    };
+                )+
                 Ok(Class::$class{ $($field),+ })
             }
         )+}
@@ -206,8 +254,8 @@ impl<'src> Syn<'src> for Class<'src> {
         };
         let l = lex.next_token()?;
         match l {
-            Token { kind: Kind::BraceL, .. } => Ok(named(lex)?),
-            Token { kind: Kind::ParenL, .. } => Ok(unnamed(lex)?),
+            Token { kind: Kind::BraceL, .. } => Ok(parse_named(lex, &named.0, named.1)?),
+            Token { kind: Kind::ParenL, .. } => Ok(parse_unnamed(lex, &unnamed.0, unnamed.1)?),
             Token { string, range, .. } => Err(SynError::UnexpectedToken {
                 expected: KindSet::with_values([Kind::BraceL, Kind::ParenL]),
                 found: string.to_owned(),
