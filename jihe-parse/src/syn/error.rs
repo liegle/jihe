@@ -30,7 +30,7 @@ pub enum SynError {
     UnexpectedStatementFieldKind {
         expected: Check,
         cursor: Cursor,
-    }
+    },
 }
 
 impl Error for SynError {}

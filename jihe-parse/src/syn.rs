@@ -11,7 +11,6 @@ mod error;
 mod expr;
 mod tree;
 
-// Why there's no TryFromIterator
 pub(super) fn syn<'src>(lex: Lex<'src>) -> Result<Tree<'src>, SynError> {
     let mut lex = lex.peekable();
     Tree::parse(&mut lex)
@@ -21,33 +20,34 @@ trait Syn<'src>: Sized {
     fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError>;
 }
 
-trait ExpectKind<'src>: 'src {
+trait ExpectToken<'src>: 'src {
+    fn next_token(&mut self) -> Result<Token<'src>, SynError>;
     fn next_kind(&mut self, kind: Kind) -> Result<Token<'src>, SynError>;
-    fn maybe_kind(&mut self, kind: Kind);
+    fn next_if_kind(&mut self, kind: Kind);
 }
 
-impl<'src> ExpectKind<'src> for Peekable<Lex<'src>> {
-    fn next_kind(&mut self, kind: Kind) -> Result<Token<'src>, SynError> {
-        let Some(token) = self.next() else {
-            return Err(SynError::UnexpectedEof);
-        };
-        match token {
-            Ok(token) => {
-                if token.kind == kind {
-                    Ok(token)
-                } else {
-                    Err(SynError::UnexpectedToken {
-                        expected: KindSet::with_values([kind]),
-                        found: token.string.to_owned(),
-                        range: token.range,
-                    })
-                }
-            }
-            Err(e) => Err(SynError::LexError(e)),
+impl<'src> ExpectToken<'src> for Peekable<Lex<'src>> {
+    fn next_token(&mut self) -> Result<Token<'src>, SynError> {
+        match self.next() {
+            Some(token) => token.map_err(SynError::LexError),
+            None => Err(SynError::UnexpectedEof),
         }
     }
 
-    fn maybe_kind(&mut self, kind: Kind) {
+    fn next_kind(&mut self, kind: Kind) -> Result<Token<'src>, SynError> {
+        let token = self.next_token()?;
+        if token.kind == kind {
+            Ok(token)
+        } else {
+            Err(SynError::UnexpectedToken {
+                expected: KindSet::with_values([kind]),
+                found: token.string.to_owned(),
+                range: token.range,
+            })
+        }
+    }
+
+    fn next_if_kind(&mut self, kind: Kind) {
         self.next_if(|next| matches!(next, Ok(Token { kind: k, .. }) if kind == *k));
     }
 }

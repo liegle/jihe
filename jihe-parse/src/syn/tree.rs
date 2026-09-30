@@ -8,7 +8,7 @@ use std::{
 use crate::{
     Cursor, Lex, SynError,
     lex::{Kind, KindSet, Token},
-    syn::{ExpectKind, Syn, expr::Expr},
+    syn::{ExpectToken, Syn, expr::Expr},
 };
 
 pub(crate) struct Tree<'src> {
@@ -118,10 +118,7 @@ macro_rules! enum_class {
                 $(
                     fields.insert(
                         stringify!($field),
-                        Field {
-                            check:check!($check),
-                            slot: default_slot!($($slot)?)
-                        }
+                        Field { check: check!($check), slot: default_slot!($($slot)?) }
                     );
                 )+
                 let mut is_first = true;
@@ -155,7 +152,7 @@ macro_rules! enum_class {
                         }
                     }
                 }
-                lex.maybe_kind(Kind::Comma);
+                lex.next_if_kind(Kind::Comma);
                 let end = lex.next_kind(Kind::BraceR)?.range.end;
                 $(let $field =
                     fields.remove(stringify!($field)).unwrap().slot.get(stringify!($field), end)?;)+
@@ -166,10 +163,7 @@ macro_rules! enum_class {
                 lex: &mut Peekable<Lex<'src>>
             ) -> Result<Class<'src>, SynError> {
                 let mut fields = vec![$(
-                    Field {
-                        check:check!($check),
-                        slot: default_slot!($($slot)?)
-                    }
+                    Field { check: check!($check), slot: default_slot!($($slot)?) }
                 ),+];
                 let mut is_first = true;
                 for field in &mut fields {
@@ -195,7 +189,7 @@ macro_rules! enum_class {
                         None => return Err(SynError::UnexpectedEof),
                     }
                 }
-                lex.maybe_kind(Kind::Comma);
+                lex.next_if_kind(Kind::Comma);
                 let end = lex.next_kind(Kind::ParenR)?.range.end;
                 $(let $field = fields.remove(0).slot.get(stringify!($field), end)?;)+
                 Ok(Class::$class{ $($field),+ })
@@ -210,18 +204,15 @@ impl<'src> Syn<'src> for Class<'src> {
         let Some(Constructor { named, unnamed }) = CONSTRUCTORS.get(string) else {
             return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
         };
-        let Some(l) = lex.next() else {
-            return Err(SynError::UnexpectedEof);
-        };
+        let l = lex.next_token()?;
         match l {
-            Ok(Token { kind: Kind::BraceL, .. }) => Ok(named(lex)?),
-            Ok(Token { kind: Kind::ParenL, .. }) => Ok(unnamed(lex)?),
-            Ok(Token { string, range, .. }) => Err(SynError::UnexpectedToken {
+            Token { kind: Kind::BraceL, .. } => Ok(named(lex)?),
+            Token { kind: Kind::ParenL, .. } => Ok(unnamed(lex)?),
+            Token { string, range, .. } => Err(SynError::UnexpectedToken {
                 expected: KindSet::with_values([Kind::BraceL, Kind::ParenL]),
                 found: string.to_owned(),
                 range,
             }),
-            Err(e) => Err(SynError::LexError(e)),
         }
     }
 }

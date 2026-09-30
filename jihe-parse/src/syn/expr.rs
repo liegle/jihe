@@ -6,10 +6,7 @@ use crate::{
 };
 
 pub(crate) enum Expr<'src> {
-    Num {
-        integer: u32,
-        decimal: u32,
-    },
+    Num { integer: u32, decimal: u32 },
     Param(&'src str),
     VarX,
     VarY,
