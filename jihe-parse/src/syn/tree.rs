@@ -1,14 +1,13 @@
 use std::{
     collections::HashMap,
     fmt::{self, Display, Formatter},
-    iter::{self, Peekable},
     sync::LazyLock,
 };
 
 use crate::{
     Lex, SynError,
-    lex::{Kind, KindSet, LexItem, Token},
-    syn::{ExpectToken, Syn, expr::Expr},
+    lex::{Kind, KindSet, Token},
+    syn::{ExpectToken, Prependable, Syn, expr::Expr},
 };
 
 pub(crate) struct Tree<'src> {
@@ -87,7 +86,7 @@ macro_rules! check {
     (def) => { Check::Def };
 }
 
-struct Constructor {
+struct Pair {
     named: (
         HashMap<&'static str, Field<'static>>,
         for<'src> fn(HashMap<&'static str, Field<'src>>) -> Result<Class<'src>, &'static str>,
@@ -98,95 +97,13 @@ struct Constructor {
     ),
 }
 
-fn parse_named<'src>(
-    lex: &mut Peekable<Lex<'src>>,
-    default: &HashMap<&'static str, Field<'static>>,
-    insert: fn(HashMap<&'static str, Field<'src>>) -> Result<Class<'src>, &'static str>,
-) -> Result<Class<'src>, SynError> {
-    let mut fields = default.clone();
-    let mut is_first = true;
-    for _ in 0..fields.len() {
-        if is_first {
-            is_first = false;
-        } else {
-            let _ = lex.next_kind(Kind::Comma)?;
-        }
-        let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
-        let Some(field) = fields.get_mut(string) else {
-            return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
-        };
-        let _ = lex.next_kind(Kind::Colon)?;
-        field.slot = match field.slot {
-            Slot::None | Slot::Default(_) => {
-                let expr = Expr::parse(lex)?;
-                if !field.check.check(&expr) {
-                    return Err(SynError::UnexpectedStatementFieldKind {
-                        expected: field.check,
-                        cursor: range.start,
-                    });
-                }
-                Slot::Parsed(expr)
-            }
-            Slot::Parsed(_) => {
-                return Err(SynError::DuplicatedStatementField { name: string.to_owned(), range });
-            }
-        }
-    }
-    lex.next_if_kind(Kind::Comma);
-    let end = lex.next_kind(Kind::BraceR)?.range.end;
-    match insert(fields) {
-        Ok(c) => Ok(c),
-        Err(f) => Err(SynError::StatementFieldLost { name: f, cursor: end }),
-    }
-}
-
-fn parse_unnamed<'src>(
-    lex: &mut Peekable<Lex<'src>>,
-    default: &Vec<Field<'static>>,
-    insert: fn(Vec<Field<'src>>) -> Result<Class<'src>, &'static str>,
-) -> Result<Class<'src>, SynError> {
-    let mut fields = default.clone();
-    let mut is_first = true;
-    for field in &mut fields {
-        if is_first {
-            is_first = false;
-        } else {
-            let _ = lex.next_kind(Kind::Comma)?;
-        }
-        match lex.peek() {
-            Some(Ok(Token { kind: Kind::ParenR, .. })) => break,
-            Some(Ok(Token { range, .. })) => {
-                field.slot = {
-                    let start = range.start;
-                    let expr = Expr::parse(lex)?;
-                    if !field.check.check(&expr) {
-                        return Err(SynError::UnexpectedStatementFieldKind {
-                            expected: field.check,
-                            cursor: start,
-                        });
-                    }
-                    Slot::Parsed(expr)
-                }
-            }
-            Some(Err(_)) => return Err(SynError::LexError(lex.next().unwrap().unwrap_err())),
-            None => return Err(SynError::UnexpectedEof),
-        }
-    }
-    lex.next_if_kind(Kind::Comma);
-    let end = lex.next_kind(Kind::ParenR)?.range.end;
-    match insert(fields) {
-        Ok(c) => Ok(c),
-        Err(f) => Err(SynError::StatementFieldLost { name: f, cursor: end }),
-    }
-}
-
 macro_rules! enum_class {
     ($($class:ident {$($field:ident:$check:ident$(=$slot:expr)?),+}),+) => {
         pub(crate) enum Class<'src> {
             $($class{$($field: Expr<'src>),+}),+
         }
 
-        static CONSTRUCTORS: LazyLock<HashMap<&'static str, Constructor>> = LazyLock::new(|| {
+        static CONSTRUCTORS: LazyLock<HashMap<&'static str, Pair>> = LazyLock::new(|| {
             let mut map = HashMap::new();
             paste::paste! {$(
                 map.insert(
@@ -202,7 +119,7 @@ macro_rules! enum_class {
                         let unnamed_fields = vec![$(
                             Field { check: check!($check), slot: default_slot!($($slot)?) }
                         ),+];
-                        Constructor {
+                        Pair {
                             named: (named_fields, [<$class:snake:lower _named>]),
                             unnamed: (unnamed_fields, [<$class:snake:lower _unnamed>]),
                         }
@@ -246,16 +163,101 @@ macro_rules! enum_class {
     };
 }
 
+impl<'src> Class<'src> {
+    fn parse_named(
+        lex: &mut Prependable<Lex<'src>>,
+        default: &HashMap<&'static str, Field<'static>>,
+        insert: fn(HashMap<&'static str, Field<'src>>) -> Result<Class<'src>, &'static str>,
+    ) -> Result<Class<'src>, SynError> {
+        let mut fields = default.clone();
+        let mut is_first = true;
+        for _ in 0..fields.len() {
+            if is_first {
+                is_first = false;
+            } else {
+                let _ = lex.next_kind(Kind::Comma)?;
+            }
+            let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
+            let Some(field) = fields.get_mut(string) else {
+                return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
+            };
+            let _ = lex.next_kind(Kind::Colon)?;
+            field.slot = match field.slot {
+                Slot::None | Slot::Default(_) => {
+                    let expr = Expr::parse(lex)?;
+                    if !field.check.check(&expr) {
+                        return Err(SynError::UnexpectedStatementFieldKind {
+                            expected: field.check,
+                            cursor: range.start,
+                        });
+                    }
+                    Slot::Parsed(expr)
+                }
+                Slot::Parsed(_) => {
+                    return Err(SynError::DuplicatedStatementField {
+                        name: string.to_owned(),
+                        range,
+                    });
+                }
+            }
+        }
+        lex.next_if_kind(Kind::Comma);
+        let end = lex.next_kind(Kind::BraceR)?.range.end;
+        insert(fields).map_err(|name| SynError::StatementFieldLost { name, end })
+    }
+
+    fn parse_unnamed(
+        lex: &mut Prependable<Lex<'src>>,
+        default: &Vec<Field<'static>>,
+        insert: fn(Vec<Field<'src>>) -> Result<Class<'src>, &'static str>,
+    ) -> Result<Class<'src>, SynError> {
+        let mut fields = default.clone();
+        let mut is_first = true;
+        for field in &mut fields {
+            if is_first {
+                is_first = false;
+            } else {
+                let _ = lex.next_kind(Kind::Comma)?;
+            }
+            match lex.next_token()? {
+                Token { kind: Kind::ParenR, .. } => break,
+                token => {
+                    let start = token.range.start;
+                    lex.prepend(Ok(token));
+                    let expr = Expr::parse(lex)?;
+                    if !field.check.check(&expr) {
+                        return Err(SynError::UnexpectedStatementFieldKind {
+                            expected: field.check,
+                            cursor: start,
+                        });
+                    }
+                    field.slot = Slot::Parsed(expr)
+                }
+            }
+        }
+        lex.next_if_kind(Kind::Comma);
+        let end = lex.next_kind(Kind::ParenR)?.range.end;
+        insert(fields).map_err(|name| SynError::StatementFieldLost { name, end })
+    }
+}
+
 impl<'src> Syn<'src> for Class<'src> {
-    fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
         let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
-        let Some(Constructor { named, unnamed }) = CONSTRUCTORS.get(string) else {
+        let Some(Pair {
+            named: (named_default, named_insert),
+            unnamed: (unnamed_default, unnamed_insert),
+        }) = CONSTRUCTORS.get(string)
+        else {
             return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
         };
-        let l = lex.next_token()?;
-        match l {
-            Token { kind: Kind::BraceL, .. } => Ok(parse_named(lex, &named.0, named.1)?),
-            Token { kind: Kind::ParenL, .. } => Ok(parse_unnamed(lex, &unnamed.0, unnamed.1)?),
+        match lex.next_token()? {
+            Token { kind: Kind::BraceL, .. } => {
+                Ok(Self::parse_named(lex, named_default, *named_insert)?)
+            }
+            Token { kind: Kind::ParenL, .. } => {
+                Ok(Self::parse_unnamed(lex, unnamed_default, *unnamed_insert)?)
+            }
             Token { string, range, .. } => Err(SynError::UnexpectedToken {
                 expected: KindSet::with_values([Kind::BraceL, Kind::ParenL]),
                 found: string.to_owned(),

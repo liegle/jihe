@@ -1,9 +1,7 @@
-use std::iter::Peekable;
-
 use crate::{
     Lex,
     lex::{Kind, KindSet, Token},
-    syn::{ExpectToken, Syn, SynError},
+    syn::{ExpectToken, Prependable, Syn, SynError},
 };
 
 #[derive(Clone)]
@@ -24,25 +22,24 @@ pub(crate) enum Expr<'src> {
 }
 
 impl<'src> Syn<'src> for Expr<'src> {
-    fn parse(lex: &mut Peekable<Lex<'src>>) -> Result<Self, SynError> {
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
         let accu = Self::unit(lex, true)?;
-        while let Some(token) = lex.peek() {
-            match token {
-                Err(_) => return Err(SynError::LexError(lex.next().unwrap().unwrap_err())),
-                Ok(Token {
+        loop {
+            match lex.next_token()? {
+                Token {
                     kind: Kind::BraceR | Kind::ParenR | Kind::Comma,
                     ..
-                }) => return Ok(accu),
-                _ => {}
+                } => return Ok(accu),
+                token => lex.prepend(Ok(token)),
             }
-            let token = lex.next_token()?;
+            let mid = lex.next_token()?;
+            todo!()
         }
-        Err(SynError::UnexpectedEof)
     }
 }
 
 impl<'src> Expr<'src> {
-    fn unit(lex: &mut Peekable<Lex<'src>>, is_start: bool) -> Result<Self, SynError> {
+    fn unit(lex: &mut Prependable<Lex<'src>>, is_start: bool) -> Result<Self, SynError> {
         let token = lex.next_token()?;
         match token.kind {
             Kind::Num => {

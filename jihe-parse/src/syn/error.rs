@@ -25,7 +25,7 @@ pub enum SynError {
     },
     StatementFieldLost {
         name: &'static str,
-        cursor: Cursor,
+        end: Cursor,
     },
     UnexpectedStatementFieldKind {
         expected: Check,
@@ -33,7 +33,7 @@ pub enum SynError {
     },
     NegInsideExpr {
         cursor: Cursor,
-    }
+    },
 }
 
 impl Error for SynError {}
@@ -72,14 +72,17 @@ impl Display for SynError {
                     range.start, range.end
                 )
             }
-            Self::StatementFieldLost { name, cursor } => {
+            Self::StatementFieldLost { name, end: cursor } => {
                 write!(f, "Field {name} is not defined before {cursor}")
             }
             Self::UnexpectedStatementFieldKind { expected, cursor } => {
                 write!(f, "Field at {cursor} should be {expected}")
             }
             Self::NegInsideExpr { cursor } => {
-                write!(f, "Negative at {cursor} inside expression should be surrounded by '(' & ')'")
+                write!(
+                    f,
+                    "Negative at {cursor} inside expression should be surrounded by '(' & ')'"
+                )
             }
         }
     }
