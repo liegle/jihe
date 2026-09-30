@@ -20,12 +20,6 @@ pub(crate) struct Statement<'src> {
 }
 
 #[derive(Clone)]
-struct Field<'src> {
-    slot: Slot<'src>,
-    check: Check,
-}
-
-#[derive(Clone)]
 enum Slot<'src> {
     None,
     Parsed(Expr<'src>),
@@ -86,6 +80,12 @@ macro_rules! check {
     (def) => { Check::Def };
 }
 
+#[derive(Clone)]
+struct Field<'src> {
+    slot: Slot<'src>,
+    check: Check,
+}
+
 struct Pair {
     named: (
         HashMap<&'static str, Field<'static>>,
@@ -100,29 +100,30 @@ struct Pair {
 macro_rules! enum_class {
     ($($class:ident {$($field:ident:$check:ident$(=$slot:expr)?),+}),+) => {
         pub(crate) enum Class<'src> {
-            $($class{$($field: Expr<'src>),+}),+
+            $($class {
+                $($field: Expr<'src>),+
+            }),+
         }
 
         static CONSTRUCTORS: LazyLock<HashMap<&'static str, Pair>> = LazyLock::new(|| {
             let mut map = HashMap::new();
             paste::paste! {$(
+                // TODO: hash_map_macro #144032
+                let mut named_fields = HashMap::new();
+                $(
+                    named_fields.insert(
+                        stringify!($field),
+                        Field { slot: default_slot!($($slot)?), check: check!($check) }
+                    );
+                )+
+                let unnamed_fields = vec![$(
+                    Field { slot: default_slot!($($slot)?), check: check!($check) }
+                ),+];
                 map.insert(
                     stringify!($class),
-                    {
-                        let mut named_fields = HashMap::new();
-                        $(
-                            named_fields.insert(
-                                stringify!($field),
-                                Field { check: check!($check), slot: default_slot!($($slot)?) }
-                            );
-                        )+
-                        let unnamed_fields = vec![$(
-                            Field { check: check!($check), slot: default_slot!($($slot)?) }
-                        ),+];
-                        Pair {
-                            named: (named_fields, [<$class:snake:lower _named>]),
-                            unnamed: (unnamed_fields, [<$class:snake:lower _unnamed>]),
-                        }
+                    Pair {
+                        named: (named_fields, [<$class:snake:lower _named>]),
+                        unnamed: (unnamed_fields, [<$class:snake:lower _unnamed>]),
                     }
                 );
             )+}
@@ -141,15 +142,15 @@ macro_rules! enum_class {
                         return Err(stringify!($field));
                     };
                 )+
-                Ok(Class::$class{ $($field),+ })
+                Ok(Class::$class { $($field),+ })
             }
 
             fn [<$class:snake:lower _unnamed>]<'src>(
                 mut fields: Vec<Field<'src>>
             ) -> Result<Class<'src>, &'static str> {
-                // TODO: vec_try_remove #146954
                 fields.reverse();
                 $(
+                    // TODO: vec_try_remove #146954
                     let Some($field) = fields.pop() else {
                         return Err(stringify!($field));
                     };
@@ -157,7 +158,7 @@ macro_rules! enum_class {
                         return Err(stringify!($field));
                     };
                 )+
-                Ok(Class::$class{ $($field),+ })
+                Ok(Class::$class { $($field),+ })
             }
         )+}
     };
@@ -166,10 +167,10 @@ macro_rules! enum_class {
 impl<'src> Class<'src> {
     fn parse_named(
         lex: &mut Prependable<Lex<'src>>,
-        default: &HashMap<&'static str, Field<'static>>,
+        fields: &HashMap<&'static str, Field<'static>>,
         insert: fn(HashMap<&'static str, Field<'src>>) -> Result<Class<'src>, &'static str>,
     ) -> Result<Class<'src>, SynError> {
-        let mut fields = default.clone();
+        let mut fields = fields.clone();
         let mut is_first = true;
         for _ in 0..fields.len() {
             if is_first {
@@ -208,10 +209,10 @@ impl<'src> Class<'src> {
 
     fn parse_unnamed(
         lex: &mut Prependable<Lex<'src>>,
-        default: &Vec<Field<'static>>,
+        fields: &Vec<Field<'static>>,
         insert: fn(Vec<Field<'src>>) -> Result<Class<'src>, &'static str>,
     ) -> Result<Class<'src>, SynError> {
-        let mut fields = default.clone();
+        let mut fields = fields.clone();
         let mut is_first = true;
         for field in &mut fields {
             if is_first {
@@ -244,19 +245,17 @@ impl<'src> Class<'src> {
 impl<'src> Syn<'src> for Class<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
         let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
-        let Some(Pair {
-            named: (named_default, named_insert),
-            unnamed: (unnamed_default, unnamed_insert),
-        }) = CONSTRUCTORS.get(string)
-        else {
+        let Some(Pair { named, unnamed }) = CONSTRUCTORS.get(string) else {
             return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
         };
         match lex.next_token()? {
             Token { kind: Kind::BraceL, .. } => {
-                Ok(Self::parse_named(lex, named_default, *named_insert)?)
+                let (fields, insert) = named;
+                Ok(Self::parse_named(lex, fields, *insert)?)
             }
             Token { kind: Kind::ParenL, .. } => {
-                Ok(Self::parse_unnamed(lex, unnamed_default, *unnamed_insert)?)
+                let (fields, insert) = unnamed;
+                Ok(Self::parse_unnamed(lex, fields, *insert)?)
             }
             Token { string, range, .. } => Err(SynError::UnexpectedToken {
                 expected: KindSet::with_values([Kind::BraceL, Kind::ParenL]),
