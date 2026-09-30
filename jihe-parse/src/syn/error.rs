@@ -34,6 +34,12 @@ pub enum SynError {
     NegInsideExpr {
         cursor: Cursor,
     },
+    NumOverflow {
+        range: Range<Cursor>,
+    },
+    NumInvalid {
+        range: Range<Cursor>,
+    },
 }
 
 impl Error for SynError {}
@@ -83,6 +89,12 @@ impl Display for SynError {
                     f,
                     "Negative at {cursor} inside expression should be surrounded by '(' & ')'"
                 )
+            }
+            Self::NumOverflow { range } => {
+                write!(f, "Num at {}..{} overflows", range.start, range.end)
+            }
+            Self::NumInvalid { range } => {
+                write!(f, "Num at {}..{} invalid", range.start, range.end)
             }
         }
     }

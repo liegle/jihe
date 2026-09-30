@@ -1,5 +1,7 @@
+use std::ops::Range;
+
 use crate::{
-    Lex,
+    Cursor, Lex,
     lex::{Kind, KindSet, Token},
     syn::{ExpectToken, Prependable, Syn, SynError},
 };
@@ -41,8 +43,8 @@ impl<'src> Syn<'src> for Expr<'src> {
 impl<'src> Expr<'src> {
     fn unit(lex: &mut Prependable<Lex<'src>>, is_start: bool) -> Result<Self, SynError> {
         match lex.next_token()? {
-            Token { kind: Kind::Num, string, .. } => {
-                let (integer, decimal) = num(string)?;
+            Token { kind: Kind::Num, string, range } => {
+                let (integer, decimal) = num(string, range)?;
                 Ok(Self::Num { integer, decimal })
             }
             Token { kind: Kind::Ident, string, .. } => {
@@ -86,8 +88,26 @@ impl<'src> Expr<'src> {
     }
 }
 
-fn num<'src>(string: &'src str) -> Result<(u32, u32), SynError> {
-    todo!()
+fn num<'src>(string: &'src str, range: Range<Cursor>) -> Result<(u32, u32), SynError> {
+    let mut integer = 0;
+    let mut decimal = 0;
+    let mut curr = &mut integer;
+    for c in string.chars() {
+        match c {
+            '.' => curr = &mut decimal,
+            c @ '0'..='9' => {
+                *curr = match u32::checked_mul(10, *curr) {
+                    None => return Err(SynError::NumOverflow { range }),
+                    Some(n) => match u32::checked_add(n, c as u32 - '0' as u32) {
+                        None => return Err(SynError::NumOverflow { range }),
+                        Some(next) => next,
+                    },
+                };
+            }
+            _ => return Err(SynError::NumInvalid { range }),
+        }
+    }
+    Ok((integer, decimal))
 }
 
 fn args<'src>(lex: &mut Prependable<Lex<'src>>) -> Result<Vec<Expr<'src>>, SynError> {
