@@ -1,4 +1,7 @@
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    ops::Range,
+};
 
 use crate::{
     lex::{Lex, LexError},
@@ -44,5 +47,19 @@ impl Cursor {
 impl Display for Cursor {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.line, self.col)
+    }
+}
+
+#[derive(Debug)]
+struct Spanned<'src, T> {
+    value: T,
+    source: &'src str,
+    byte_span: Range<usize>,
+    cursor_span: Range<Cursor>,
+}
+
+impl<'src, T> Spanned<'src, T> {
+    fn string(&self) -> &'src str {
+        &self.source[self.byte_span.clone()]
     }
 }

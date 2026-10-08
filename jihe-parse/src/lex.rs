@@ -2,9 +2,9 @@ use std::{iter::Peekable, str::Chars};
 
 pub(super) use crate::lex::{
     error::LexError,
-    token::{Kind, KindSet, Token},
+    token::{Token, TokenSet},
 };
-use crate::{Cursor, lex::machine::Machine};
+use crate::{Cursor, Spanned, lex::machine::Machine};
 
 mod automata;
 mod error;
@@ -13,13 +13,13 @@ mod machine;
 mod test;
 mod token;
 
-pub(super) type LexItem<'src> = Result<Token<'src>, LexError>;
+pub(super) type LexItem<'src> = Result<Spanned<'src, Token>, LexError>;
 
 pub(super) struct Lex<'src> {
     source: &'src str,
     chars: Peekable<Chars<'src>>,
     byte_ptr: usize,
-    char_ptr: Cursor,
+    cursor_ptr: Cursor,
 }
 
 impl<'src> Lex<'src> {
@@ -28,7 +28,7 @@ impl<'src> Lex<'src> {
             source,
             chars: source.chars().peekable(),
             byte_ptr: 0,
-            char_ptr: Default::default(),
+            cursor_ptr: Default::default(),
         }
     }
 
@@ -43,7 +43,7 @@ impl<'src> Lex<'src> {
                 _ => break,
             };
             self.byte_ptr += c.len_utf8();
-            self.char_ptr.step(c == '\n');
+            self.cursor_ptr.step(c == '\n');
             let _ = self.chars.next();
         }
     }
@@ -56,7 +56,7 @@ impl<'src> Iterator for Lex<'src> {
         self.consume_ignored();
 
         let byte_begin = self.byte_ptr;
-        let char_begin = self.char_ptr;
+        let cursor_begin = self.cursor_ptr;
         let mut machine = Machine::new();
 
         while let Some(c) = self.chars.peek().copied() {
@@ -65,14 +65,14 @@ impl<'src> Iterator for Lex<'src> {
                 if machine.last_matched_char.is_none() {
                     return Some(Err(LexError::UnexpectedBegin {
                         found: c,
-                        cursor: self.char_ptr,
+                        cursor: self.cursor_ptr,
                     }));
                 }
                 break;
             } else {
                 machine = next_machine;
                 self.byte_ptr += c.len_utf8();
-                self.char_ptr.step(false);
+                self.cursor_ptr.step(false);
                 self.chars.next();
             }
         }
@@ -85,16 +85,17 @@ impl<'src> Iterator for Lex<'src> {
                 [] => Some(Err(LexError::UnexpectedMid {
                     expected: machine.gather_expected(),
                     found: c,
-                    cursor: self.char_ptr,
+                    cursor: self.cursor_ptr,
                 })),
-                [kind] => Some(Ok(Token {
-                    kind: *kind,
-                    string: &self.source[byte_begin..self.byte_ptr],
-                    range: char_begin..self.char_ptr,
+                [token] => Some(Ok(Spanned{
+                    value: *token,
+                    source: self.source,
+                    byte_span: byte_begin..self.byte_ptr,
+                    cursor_span: cursor_begin..self.cursor_ptr,
                 })),
                 _ => Some(Err(LexError::MultipleMatching {
                     matched,
-                    range: char_begin..self.char_ptr,
+                    range: cursor_begin..self.cursor_ptr,
                 })),
             }
         } else {

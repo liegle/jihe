@@ -8,7 +8,7 @@ use std::{
 use crate::{
     Cursor,
     array::DynArray,
-    lex::token::{Character, Kind, PATTERN_COUNT},
+    lex::token::{Character, PATTERN_COUNT, Token},
 };
 
 #[derive(Debug)]
@@ -23,7 +23,7 @@ pub enum LexError {
         cursor: Cursor,
     },
     MultipleMatching {
-        matched: DynArray<Kind, PATTERN_COUNT>,
+        matched: DynArray<Token, PATTERN_COUNT>,
         range: Range<Cursor>,
     },
 }

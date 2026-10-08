@@ -4,7 +4,7 @@ use crate::{
     array::DynArray,
     lex::{
         automata::Stage,
-        token::{Character, Kind, PATTERN_COUNT, PATTERNS, Pattern},
+        token::{Character, PATTERN_COUNT, PATTERNS, Pattern, Token},
     },
 };
 
@@ -35,11 +35,11 @@ impl Machine {
         next
     }
 
-    pub(super) fn end(&self) -> DynArray<Kind, PATTERN_COUNT> {
+    pub(super) fn end(&self) -> DynArray<Token, PATTERN_COUNT> {
         let mut greatest_priority = 0;
         let mut matched = DynArray::new();
         for (stage, pattern) in self.stages.iter().zip(PATTERNS.iter()) {
-            let Pattern { kind, priority, automata } = pattern;
+            let Pattern { token: kind, priority, automata } = pattern;
             if !automata.is_exit(*stage) {
                 continue;
             }

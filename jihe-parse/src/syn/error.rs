@@ -4,30 +4,30 @@ use std::{
     ops::Range,
 };
 
-use crate::{Cursor, LexError, lex::KindSet, syn::tree::Check};
+use crate::{Cursor, LexError, lex::TokenSet, syn::tree::Check};
 
 #[derive(Debug)]
 pub enum SynError {
     LexError(LexError),
     UnexpectedEof,
     UnexpectedToken {
-        expected: KindSet,
+        expected: TokenSet,
         found: String,
-        range: Range<Cursor>,
+        cursor_span: Range<Cursor>,
     },
-    UndefinedStatementKind {
+    UndefinedStatementClass {
         found: String,
-        range: Range<Cursor>,
+        cursor_span: Range<Cursor>,
     },
     DuplicatedStatementField {
         name: String,
-        range: Range<Cursor>,
+        cursor_span: Range<Cursor>,
     },
     StatementFieldLost {
         name: &'static str,
         end: Cursor,
     },
-    UnexpectedStatementFieldKind {
+    UnexpectedStatementFieldType {
         expected: Check,
         cursor: Cursor,
     },
@@ -51,7 +51,7 @@ impl Display for SynError {
             Self::UnexpectedEof => {
                 write!(f, "Source file ended")
             }
-            Self::UnexpectedToken { expected, found, range } => {
+            Self::UnexpectedToken { expected, found, cursor_span: range } => {
                 write!(f, "Expected ")?;
                 let mut is_begin = true;
                 for e in expected.into_iter() {
@@ -64,14 +64,14 @@ impl Display for SynError {
                 }
                 write!(f, ", found \"{found}\" at {}..{}", range.start, range.end)
             }
-            Self::UndefinedStatementKind { found, range } => {
+            Self::UndefinedStatementClass { found, cursor_span } => {
                 write!(
                     f,
                     "Specified kind not defined: {found} at {}..{}",
-                    range.start, range.end
+                    cursor_span.start, cursor_span.end
                 )
             }
-            Self::DuplicatedStatementField { name, range } => {
+            Self::DuplicatedStatementField { name, cursor_span: range } => {
                 write!(
                     f,
                     "Field {name} has been defined twice at {}..{}",
@@ -81,7 +81,7 @@ impl Display for SynError {
             Self::StatementFieldLost { name, end: cursor } => {
                 write!(f, "Field {name} is not defined before {cursor}")
             }
-            Self::UnexpectedStatementFieldKind { expected, cursor } => {
+            Self::UnexpectedStatementFieldType { expected, cursor } => {
                 write!(f, "Field at {cursor} should be {expected}")
             }
             Self::NegInsideExpr { cursor } => {

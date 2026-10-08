@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    Lex, SynError,
-    lex::{Kind, KindSet, Token},
+    Lex, Spanned, SynError,
+    lex::{Token, TokenSet},
     syn::{ExpectToken, Prependable, Syn, expr::Expr},
 };
 
@@ -176,34 +176,37 @@ impl<'src> Class<'src> {
             if is_first {
                 is_first = false;
             } else {
-                let _ = lex.next_kind(Kind::Comma)?;
+                let _ = lex.expect_token(Token::Comma)?;
             }
-            let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
-            let Some(field) = fields.get_mut(string) else {
-                return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
+            let spanned = lex.expect_token(Token::Ident)?;
+            let Some(field) = fields.get_mut(spanned.string()) else {
+                return Err(SynError::UndefinedStatementClass {
+                    found: spanned.string().to_owned(),
+                    cursor_span: spanned.cursor_span,
+                });
             };
-            let _ = lex.next_kind(Kind::Colon)?;
+            let _ = lex.expect_token(Token::Colon)?;
             field.slot = match field.slot {
                 Slot::None | Slot::Default(_) => {
                     let expr = Expr::parse(lex)?;
                     if !field.check.check(&expr) {
-                        return Err(SynError::UnexpectedStatementFieldKind {
+                        return Err(SynError::UnexpectedStatementFieldType {
                             expected: field.check,
-                            cursor: range.start,
+                            cursor: spanned.cursor_span.start,
                         });
                     }
                     Slot::Parsed(expr)
                 }
                 Slot::Parsed(_) => {
                     return Err(SynError::DuplicatedStatementField {
-                        name: string.to_owned(),
-                        range,
+                        name: spanned.string().to_owned(),
+                        cursor_span: spanned.cursor_span,
                     });
                 }
             }
         }
-        lex.next_if_kind(Kind::Comma);
-        let end = lex.next_kind(Kind::BraceR)?.range.end;
+        lex.next_if_token(Token::Comma);
+        let end = lex.expect_token(Token::BraceR)?.cursor_span.end;
         insert(fields).map_err(|name| SynError::StatementFieldLost { name, end })
     }
 
@@ -218,16 +221,16 @@ impl<'src> Class<'src> {
             if is_first {
                 is_first = false;
             } else {
-                let _ = lex.next_kind(Kind::Comma)?;
+                let _ = lex.expect_token(Token::Comma)?;
             }
             match lex.next_token()? {
-                Token { kind: Kind::ParenR, .. } => break,
-                token => {
-                    let start = token.range.start;
-                    lex.prepend(Ok(token));
+                Spanned { value: Token::ParenR, .. } => break,
+                spanned => {
+                    let start = spanned.cursor_span.start;
+                    lex.prepend(Ok(spanned));
                     let expr = Expr::parse(lex)?;
                     if !field.check.check(&expr) {
-                        return Err(SynError::UnexpectedStatementFieldKind {
+                        return Err(SynError::UnexpectedStatementFieldType {
                             expected: field.check,
                             cursor: start,
                         });
@@ -236,31 +239,34 @@ impl<'src> Class<'src> {
                 }
             }
         }
-        lex.next_if_kind(Kind::Comma);
-        let end = lex.next_kind(Kind::ParenR)?.range.end;
+        lex.next_if_token(Token::Comma);
+        let end = lex.expect_token(Token::ParenR)?.cursor_span.end;
         insert(fields).map_err(|name| SynError::StatementFieldLost { name, end })
     }
 }
 
 impl<'src> Syn<'src> for Class<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
-        let Token { string, range, .. } = lex.next_kind(Kind::Ident)?;
-        let Some(Pair { named, unnamed }) = CONSTRUCTORS.get(string) else {
-            return Err(SynError::UndefinedStatementKind { found: string.to_owned(), range });
+        let spanned = lex.expect_token(Token::Ident)?;
+        let Some(Pair { named, unnamed }) = CONSTRUCTORS.get(spanned.string()) else {
+            return Err(SynError::UndefinedStatementClass {
+                found: spanned.string().to_owned(),
+                cursor_span: spanned.cursor_span,
+            });
         };
         match lex.next_token()? {
-            Token { kind: Kind::BraceL, .. } => {
+            Spanned { value: Token::BraceL, .. } => {
                 let (fields, insert) = named;
                 Ok(Self::parse_named(lex, fields, *insert)?)
             }
-            Token { kind: Kind::ParenL, .. } => {
+            Spanned { value: Token::ParenL, .. } => {
                 let (fields, insert) = unnamed;
                 Ok(Self::parse_unnamed(lex, fields, *insert)?)
             }
-            Token { string, range, .. } => Err(SynError::UnexpectedToken {
-                expected: KindSet::with_values([Kind::BraceL, Kind::ParenL]),
-                found: string.to_owned(),
-                range,
+            spanned => Err(SynError::UnexpectedToken {
+                expected: TokenSet::with_values([Token::BraceL, Token::ParenL]),
+                found: spanned.string().to_owned(),
+                cursor_span: spanned.cursor_span,
             }),
         }
     }

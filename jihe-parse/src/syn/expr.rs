@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use crate::{
-    Cursor, Lex,
-    lex::{Kind, KindSet, Token},
+    Cursor, Lex, Spanned,
+    lex::{Token, TokenSet},
     syn::{ExpectToken, Prependable, Syn, SynError},
 };
 
@@ -28,8 +28,8 @@ impl<'src> Syn<'src> for Expr<'src> {
         let accu = Self::unit(lex, true)?;
         loop {
             match lex.next_token()? {
-                Token {
-                    kind: Kind::BraceR | Kind::ParenR | Kind::Comma,
+                Spanned {
+                    value: Token::BraceR | Token::ParenR | Token::Comma,
                     ..
                 } => return Ok(accu),
                 token => lex.prepend(Ok(token)),
@@ -43,46 +43,53 @@ impl<'src> Syn<'src> for Expr<'src> {
 impl<'src> Expr<'src> {
     fn unit(lex: &mut Prependable<Lex<'src>>, is_start: bool) -> Result<Self, SynError> {
         match lex.next_token()? {
-            Token { kind: Kind::Num, string, range } => {
-                let (integer, decimal) = num(string, range)?;
+            Spanned {
+                value: Token::Num,
+                source,
+                byte_span,
+                cursor_span,
+            } => {
+                let (integer, decimal) = num(&source[byte_span], cursor_span)?;
                 Ok(Self::Num { integer, decimal })
             }
-            Token { kind: Kind::Ident, string, .. } => {
+            Spanned {
+                value: Token::Ident, source, byte_span, ..
+            } => {
                 let next = lex.next_token()?;
-                if next.kind == Kind::ParenL {
+                if next.value == Token::ParenL {
                     let args = args(lex)?;
-                    let _ = lex.next_kind(Kind::ParenR)?;
-                    Ok(Self::Fn(string, args))
+                    let _ = lex.expect_token(Token::ParenR)?;
+                    Ok(Self::Fn(&source[byte_span], args))
                 } else {
                     lex.prepend(Ok(next));
-                    Ok(Self::Param(string))
+                    Ok(Self::Param(&source[byte_span]))
                 }
             }
-            Token { kind: Kind::VarX, .. } => Ok(Self::VarX),
-            Token { kind: Kind::VarY, .. } => Ok(Self::VarY),
-            Token { kind: Kind::ParenL, .. } => {
+            Spanned { value: Token::VarX, .. } => Ok(Self::VarX),
+            Spanned { value: Token::VarY, .. } => Ok(Self::VarY),
+            Spanned { value: Token::ParenL, .. } => {
                 let inner = Self::parse(lex)?;
-                let _ = lex.next_kind(Kind::ParenR)?;
+                let _ = lex.expect_token(Token::ParenR)?;
                 Ok(Self::Paren(Box::new(inner)))
             }
-            Token { kind: Kind::Sub, .. } if is_start => {
+            Spanned { value: Token::Sub, .. } if is_start => {
                 let inner = Self::parse(lex)?;
                 Ok(Self::Neg(Box::new(inner)))
             }
-            Token { kind: Kind::Sub, range, .. } => {
-                Err(SynError::NegInsideExpr { cursor: range.start })
+            Spanned { value: Token::Sub, cursor_span, .. } => {
+                Err(SynError::NegInsideExpr { cursor: cursor_span.start })
             }
-            Token { string, range, .. } => Err(SynError::UnexpectedToken {
-                expected: KindSet::with_values([
-                    Kind::Num,
-                    Kind::Ident,
-                    Kind::VarX,
-                    Kind::VarY,
-                    Kind::ParenL,
-                    Kind::Sub,
+            Spanned { source, byte_span, cursor_span, .. } => Err(SynError::UnexpectedToken {
+                expected: TokenSet::with_values([
+                    Token::Num,
+                    Token::Ident,
+                    Token::VarX,
+                    Token::VarY,
+                    Token::ParenL,
+                    Token::Sub,
                 ]),
-                found: string.to_owned(),
-                range: range,
+                found: source[byte_span].to_owned(),
+                cursor_span,
             }),
         }
     }

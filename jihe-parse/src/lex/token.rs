@@ -1,20 +1,12 @@
 use crate::{
-    Cursor,
     intset::{self, IntSet},
     lex::automata::Automata,
 };
 
-use std::{ops::Range, sync::LazyLock};
-
-#[derive(Debug)]
-pub(crate) struct Token<'src> {
-    pub(crate) kind: Kind,
-    pub(crate) string: &'src str,
-    pub(crate) range: Range<Cursor>,
-}
+use std::sync::LazyLock;
 
 pub(crate) struct Pattern {
-    pub(super) kind: Kind,
+    pub(super) token: Token,
     pub(super) priority: u8,
     pub(super) automata: Automata,
 }
@@ -47,10 +39,10 @@ pub(super) enum Repeat {
 
 #[rustfmt::skip]
 macro_rules! pattern {
-    ($kind:expr, $prio:literal, $($ch:tt $rpt:tt),+) => {
+    ($token:expr, $prio:literal, $($ch:tt $rpt:tt),+) => {
         {
             Pattern {
-                kind: $kind,
+                token: $token,
                 priority: $prio,
                 automata: Automata::new(&[$((character!($ch), repeat!($rpt))),+]),
             }
@@ -74,29 +66,29 @@ macro_rules! repeat {
 }
 
 #[rustfmt::skip]
-macro_rules! enum_kind {
-    ($(($prio:literal)$kind:ident = [$($patt:tt)+])+) => {
+macro_rules! enum_token {
+    ($(($prio:literal)$token:ident = [$($patt:tt)+])+) => {
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
         #[repr(u8)]
-        pub enum Kind {
+        pub enum Token {
             #[default]
-            $($kind),+
+            $($token),+
         }
 
         pub(super) static PATTERNS: LazyLock<Vec<Pattern>> = LazyLock::new(|| vec![
-            $(pattern!(Kind::$kind, $prio, $($patt)+)),+
+            $(pattern!(Token::$token, $prio, $($patt)+)),+
         ]);
 
         pub(super) const PATTERN_COUNT: usize = {
             let count = $({ let _ = $prio; 1 } + )+ 0;
-            assert!(count < IntSet::CAPACITY, "Count of kind is to large to use intset");
+            assert!(count < IntSet::CAPACITY, "Count of token is to large to use intset");
             count as usize
         };
     };
 }
 
 #[rustfmt::skip]
-enum_kind! {
+enum_token! {
     (0)Num    = [(num)+, ('.')?, (num)*]
     (0)Ident  = [(uni)+, ('\'')*]
     (1)VarX   = [('x')!]
@@ -116,18 +108,18 @@ enum_kind! {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct KindSet(IntSet);
+pub struct TokenSet(IntSet);
 
-impl KindSet {
-    pub(crate) fn with_values<T: IntoIterator<Item = Kind>>(values: T) -> Self {
+impl TokenSet {
+    pub(crate) fn with_values<T: IntoIterator<Item = Token>>(values: T) -> Self {
         Self(IntSet::with_values(values.into_iter().map(|k| k as u8)))
     }
 }
 
 pub struct IntoIter(intset::IntoIter);
 
-impl IntoIterator for KindSet {
-    type Item = Kind;
+impl IntoIterator for TokenSet {
+    type Item = Token;
     type IntoIter = IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -136,12 +128,12 @@ impl IntoIterator for KindSet {
 }
 
 impl Iterator for IntoIter {
-    type Item = Kind;
+    type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(index) = self.0.next() {
             if let Some(pattern) = PATTERNS.get(index as usize) {
-                return Some(pattern.kind);
+                return Some(pattern.token);
             }
         }
         None

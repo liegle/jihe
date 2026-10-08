@@ -3,7 +3,7 @@
 use std::assert_matches;
 
 use super::*;
-use crate::lex::token::{Kind, Token};
+use crate::lex::token::Token;
 
 #[test]
 fn test_none() {
@@ -23,123 +23,143 @@ fn test_all() {
         Lex::new("325 \t 0.6 777. # This is comment\n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Num, string: "325", range }))
-            if matches!(range.start, Cursor { line: 0, col: 0 })
-            && matches!(range.end, Cursor { line: 0, col: 3 })
+        Some(Ok(Spanned { value: Token::Num, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "325"
+            && matches!(cursor_span.start, Cursor { line: 0, col: 0 })
+            && matches!(cursor_span.end, Cursor { line: 0, col: 3 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Num, string: "0.6", range }))
-            if matches!(range.start, Cursor { line: 0, col: 6 })
-            && matches!(range.end, Cursor { line: 0, col: 9 })
+        Some(Ok(Spanned { value: Token::Num, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "0.6"
+            && matches!(cursor_span.start, Cursor { line: 0, col: 6 })
+            && matches!(cursor_span.end, Cursor { line: 0, col: 9 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Num, string: "777.", range }))
-            if matches!(range.start, Cursor { line: 0, col: 10 })
-            && matches!(range.end, Cursor { line: 0, col: 14 })
+        Some(Ok(Spanned { value: Token::Num, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "777."
+            && matches!(cursor_span.start, Cursor { line: 0, col: 10 })
+            && matches!(cursor_span.end, Cursor { line: 0, col: 14 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Ident, string: "🍎", range }))
-            if matches!(range.start, Cursor { line: 1, col: 1 })
-            && matches!(range.end, Cursor { line: 1, col: 2 })
+        Some(Ok(Spanned { value: Token::Ident, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "🍎"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 1 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 2 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Ident, string: "xx", range }))
-            if matches!(range.start, Cursor { line: 1, col: 3 })
-            && matches!(range.end, Cursor { line: 1, col: 5 })
+        Some(Ok(Spanned { value: Token::Ident, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "xx"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 3 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 5 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Ident, string: "yy", range }))
-            if matches!(range.start, Cursor { line: 1, col: 6 })
-            && matches!(range.end, Cursor { line: 1, col: 8 })
+        Some(Ok(Spanned { value: Token::Ident, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "yy"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 6 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 8 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::VarX, string: "x", range }))
-            if matches!(range.start, Cursor { line: 1, col: 9 })
-            && matches!(range.end, Cursor { line: 1, col: 10 })
+        Some(Ok(Spanned { value: Token::VarX, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "x"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 9 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 10 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::VarY, string: "y", range }))
-            if matches!(range.start, Cursor { line: 1, col: 11 })
-            && matches!(range.end, Cursor { line: 1, col: 12 })
+        Some(Ok(Spanned { value: Token::VarY, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "y"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 11 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 12 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::BraceL, string: "{", range }))
-            if matches!(range.start, Cursor { line: 1, col: 13 })
-            && matches!(range.end, Cursor { line: 1, col: 14 })
+        Some(Ok(Spanned { value: Token::BraceL, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "{"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 13 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 14 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::ParenL, string: "(", range }))
-            if matches!(range.start, Cursor { line: 1, col: 15 })
-            && matches!(range.end, Cursor { line: 1, col: 16 })
+        Some(Ok(Spanned { value: Token::ParenL, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "("
+            && matches!(cursor_span.start, Cursor { line: 1, col: 15 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 16 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::ParenR, string: ")", range }))
-            if matches!(range.start, Cursor { line: 1, col: 16 })
-            && matches!(range.end, Cursor { line: 1, col: 17 })
+        Some(Ok(Spanned { value: Token::ParenR, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == ")"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 16 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 17 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::BraceR, string: "}", range }))
-            if matches!(range.start, Cursor { line: 1, col: 18 })
-            && matches!(range.end, Cursor { line: 1, col: 19 })
+        Some(Ok(Spanned { value: Token::BraceR, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "}"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 18 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 19})
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Pow, string: "^", range }))
-            if matches!(range.start, Cursor { line: 1, col: 22 })
-            && matches!(range.end, Cursor { line: 1, col: 23 })
+        Some(Ok(Spanned { value: Token::Pow, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "^"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 22 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 23 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Mul, string: "*", range }))
-            if matches!(range.start, Cursor { line: 1, col: 23 })
-            && matches!(range.end, Cursor { line: 1, col: 24 })
+        Some(Ok(Spanned { value: Token::Mul, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "*"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 23 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 24 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Div, string: "/", range }))
-            if matches!(range.start, Cursor { line: 1, col: 24 })
-            && matches!(range.end, Cursor { line: 1, col: 25 })
+        Some(Ok(Spanned { value: Token::Div, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "/"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 24 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 25 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Add, string: "+", range }))
-            if matches!(range.start, Cursor { line: 1, col: 26 })
-            && matches!(range.end, Cursor { line: 1, col: 27 })
+        Some(Ok(Spanned { value: Token::Add, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "+"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 26 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 27 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Sub, string: "-", range }))
-            if matches!(range.start, Cursor { line: 1, col: 28 })
-            && matches!(range.end, Cursor { line: 1, col: 29 })
+        Some(Ok(Spanned { value: Token::Sub, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "-"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 28 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 29 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Eq, string: "=", range }))
-            if matches!(range.start, Cursor { line: 1, col: 30 })
-            && matches!(range.end, Cursor { line: 1, col: 31 })
+        Some(Ok(Spanned { value: Token::Eq, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == "="
+            && matches!(cursor_span.start, Cursor { line: 1, col: 30 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 31 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Comma, string: ",", range }))
-            if matches!(range.start, Cursor { line: 1, col: 32 })
-            && matches!(range.end, Cursor { line: 1, col: 33 })
+        Some(Ok(Spanned { value: Token::Comma, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == ","
+            && matches!(cursor_span.start, Cursor { line: 1, col: 32 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 33 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok(Token { kind: Kind::Colon, string: ":", range }))
-            if matches!(range.start, Cursor { line: 1, col: 33 })
-            && matches!(range.end, Cursor { line: 1, col: 34 })
+        Some(Ok(Spanned { value: Token::Colon, byte_span, cursor_span, .. }))
+            if &lex.source[byte_span.clone()] == ":"
+            && matches!(cursor_span.start, Cursor { line: 1, col: 33 })
+            && matches!(cursor_span.end, Cursor { line: 1, col: 34 })
     );
     assert_matches!(lex.next(), None);
 }
