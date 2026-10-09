@@ -8,6 +8,10 @@ impl<I: Iterator> Prependable<I> {
         Self { pre: Vec::new(), iter }
     }
 
+    pub(super) fn inner(&self) -> &I {
+        &self.iter
+    }
+
     pub(super) fn prepend(&mut self, value: <I as Iterator>::Item) {
         self.pre.push(value);
     }

@@ -1,8 +1,10 @@
 use crate::{
-    Lex, Spanned, lex::{Token, TokenSet}, syn::{
+    Lex, Span, Spanned,
+    lex::{Token, TokenSet},
+    syn::{
         prepend::Prependable,
         tree::{Class, Statement},
-    }
+    },
 };
 pub(super) use {error::SynError, tree::Tree};
 
@@ -21,34 +23,34 @@ trait Syn<'src>: Sized {
 }
 
 trait ExpectToken<'src>: 'src {
-    fn next_token(&mut self) -> Result<Spanned<'src, Token>, SynError>;
-    fn expect_token(&mut self, token: Token) -> Result<Spanned<'src, Token>, SynError>;
-    fn next_if_token(&mut self, token: Token);
+    fn expect_token(&mut self) -> Result<Spanned<'src, Token>, SynError>;
+    fn expect_token_is(&mut self, token: Token) -> Result<Span<'src>, SynError>;
+    fn next_if_token_is(&mut self, token: Token);
 }
 
 impl<'src> ExpectToken<'src> for Prependable<Lex<'src>> {
-    fn next_token(&mut self) -> Result<Spanned<'src, Token>, SynError> {
+    fn expect_token(&mut self) -> Result<Spanned<'src, Token>, SynError> {
         match self.next() {
             Some(token) => token.map_err(SynError::LexError),
             None => Err(SynError::UnexpectedEof),
         }
     }
 
-    fn expect_token(&mut self, token: Token) -> Result<Spanned<'src, Token>, SynError> {
-        let spanned = self.next_token()?;
-        if spanned.value == token {
-            Ok(spanned)
+    fn expect_token_is(&mut self, token: Token) -> Result<Span<'src>, SynError> {
+        let (tok, span) = self.expect_token()?;
+        if tok == token {
+            Ok(span)
         } else {
             Err(SynError::UnexpectedToken {
                 expected: TokenSet::with_values([token]),
-                found: spanned.string().to_owned(),
-                cursor_span: spanned.cursor_span,
+                found: self.inner().source()[span.byte_span].to_owned(),
+                cursor_span: span.cursor_span,
             })
         }
     }
 
-    fn next_if_token(&mut self, token: Token) {
-        self.next_if(|next| matches!(next, Ok(Spanned { value: t, .. }) if token == *t));
+    fn next_if_token_is(&mut self, token: Token) {
+        self.next_if(|next| matches!(next, Ok((tok, ..)) if token == *tok));
     }
 }
 
@@ -66,8 +68,9 @@ impl<'src> Syn<'src> for Tree<'src> {
 
 impl<'src> Syn<'src> for Statement<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
-        let name = lex.expect_token(Token::Ident)?.string();
-        let _ = lex.expect_token(Token::Colon)?;
+        let name = lex.expect_token_is(Token::Ident)?.byte_span;
+        let name = &lex.inner().source()[name];
+        let _ = lex.expect_token_is(Token::Eq)?;
         let class = Class::parse(lex)?;
         Ok(Statement { name, class })
     }

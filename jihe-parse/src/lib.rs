@@ -1,5 +1,6 @@
 use std::{
     fmt::{self, Display, Formatter},
+    marker::PhantomData,
     ops::Range,
 };
 
@@ -13,35 +14,24 @@ mod intset;
 mod lex;
 mod syn;
 
-pub fn parse<'src>(source: &'src str) -> Result<jihe_shared::Content, ParseError> {
-    let lex = Lex::new(&source);
+pub fn parse(source: &str) -> Result<jihe_shared::Content, ParseError> {
+    let lex = Lex::new(source);
     let _tree = syn(lex)?;
     Ok(jihe_shared::Content::example())
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParseError {
-    #[error("Failed to create token because:{0}")]
+    #[error("Failed to create lexical token because:{0}")]
     LexError(#[from] LexError),
-    #[error("Failed to create syntax because:{0}")]
+    #[error("Failed to create syntax tree because:{0}")]
     SynError(#[from] SynError),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Cursor {
-    pub line: usize,
-    pub col: usize,
-}
-
-impl Cursor {
-    pub fn step(&mut self, is_line: bool) {
-        if is_line {
-            self.line += 1;
-            self.col = 0;
-        } else {
-            self.col += 1;
-        }
-    }
+    line: usize,
+    col: usize,
 }
 
 impl Display for Cursor {
@@ -51,15 +41,11 @@ impl Display for Cursor {
 }
 
 #[derive(Debug)]
-struct Spanned<'src, T> {
-    value: T,
-    source: &'src str,
+struct Span<'src> {
     byte_span: Range<usize>,
     cursor_span: Range<Cursor>,
+    // TODO: is this required?
+    _phantom: PhantomData<&'src ()>,
 }
 
-impl<'src, T> Spanned<'src, T> {
-    fn string(&self) -> &'src str {
-        &self.source[self.byte_span.clone()]
-    }
-}
+type Spanned<'src, T> = (T, Span<'src>);

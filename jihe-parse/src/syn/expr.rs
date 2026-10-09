@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use crate::{
-    Cursor, Lex, Spanned,
+    Cursor, Lex, Span, Spanned,
     lex::{Token, TokenSet},
     syn::{ExpectToken, Prependable, Syn, SynError},
 };
@@ -27,14 +27,11 @@ impl<'src> Syn<'src> for Expr<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
         let accu = Self::unit(lex, true)?;
         loop {
-            match lex.next_token()? {
-                Spanned {
-                    value: Token::BraceR | Token::ParenR | Token::Comma,
-                    ..
-                } => return Ok(accu),
+            match lex.expect_token()? {
+                (Token::BraceR | Token::ParenR | Token::Comma, ..) => return Ok(accu),
                 token => lex.prepend(Ok(token)),
             }
-            let mid = lex.next_token()?;
+            let mid = lex.expect_token()?;
             todo!()
         }
     }
@@ -42,44 +39,38 @@ impl<'src> Syn<'src> for Expr<'src> {
 
 impl<'src> Expr<'src> {
     fn unit(lex: &mut Prependable<Lex<'src>>, is_start: bool) -> Result<Self, SynError> {
-        match lex.next_token()? {
-            Spanned {
-                value: Token::Num,
-                source,
-                byte_span,
-                cursor_span,
-            } => {
-                let (integer, decimal) = num(&source[byte_span], cursor_span)?;
+        match lex.expect_token()? {
+            (Token::Num, Span { byte_span: byte, cursor_span: cursor, .. }) => {
+                let (integer, decimal) = num(&lex.inner().source()[byte], cursor)?;
                 Ok(Self::Num { integer, decimal })
             }
-            Spanned {
-                value: Token::Ident, source, byte_span, ..
-            } => {
-                let next = lex.next_token()?;
-                if next.value == Token::ParenL {
+            (Token::Ident, Span { byte_span: byte, .. }) => {
+                let next = lex.expect_token()?;
+                let ident = &lex.inner().source()[byte];
+                if next.0 == Token::ParenL {
                     let args = args(lex)?;
-                    let _ = lex.expect_token(Token::ParenR)?;
-                    Ok(Self::Fn(&source[byte_span], args))
+                    let _ = lex.expect_token_is(Token::ParenR)?;
+                    Ok(Self::Fn(ident, args))
                 } else {
                     lex.prepend(Ok(next));
-                    Ok(Self::Param(&source[byte_span]))
+                    Ok(Self::Param(ident))
                 }
             }
-            Spanned { value: Token::VarX, .. } => Ok(Self::VarX),
-            Spanned { value: Token::VarY, .. } => Ok(Self::VarY),
-            Spanned { value: Token::ParenL, .. } => {
+            (Token::VarX, ..) => Ok(Self::VarX),
+            (Token::VarY, ..) => Ok(Self::VarY),
+            (Token::ParenL, ..) => {
                 let inner = Self::parse(lex)?;
-                let _ = lex.expect_token(Token::ParenR)?;
+                let _ = lex.expect_token_is(Token::ParenR)?;
                 Ok(Self::Paren(Box::new(inner)))
             }
-            Spanned { value: Token::Sub, .. } if is_start => {
+            (Token::Sub, ..) if is_start => {
                 let inner = Self::parse(lex)?;
                 Ok(Self::Neg(Box::new(inner)))
             }
-            Spanned { value: Token::Sub, cursor_span, .. } => {
+            (Token::Sub, Span { cursor_span, .. }) => {
                 Err(SynError::NegInsideExpr { cursor: cursor_span.start })
             }
-            Spanned { source, byte_span, cursor_span, .. } => Err(SynError::UnexpectedToken {
+            (_, Span { byte_span, cursor_span, .. }) => Err(SynError::UnexpectedToken {
                 expected: TokenSet::with_values([
                     Token::Num,
                     Token::Ident,
@@ -88,7 +79,7 @@ impl<'src> Expr<'src> {
                     Token::ParenL,
                     Token::Sub,
                 ]),
-                found: source[byte_span].to_owned(),
+                found: lex.inner().source()[byte_span].to_owned(),
                 cursor_span,
             }),
         }

@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    Lex, Spanned, SynError,
+    Lex, Span, SynError,
     lex::{Token, TokenSet},
     syn::{ExpectToken, Prependable, Syn, expr::Expr},
 };
@@ -176,37 +176,38 @@ impl<'src> Class<'src> {
             if is_first {
                 is_first = false;
             } else {
-                let _ = lex.expect_token(Token::Comma)?;
+                let _ = lex.expect_token_is(Token::Comma)?;
             }
-            let spanned = lex.expect_token(Token::Ident)?;
-            let Some(field) = fields.get_mut(spanned.string()) else {
+            let Span { byte_span, cursor_span, .. } = lex.expect_token_is(Token::Ident)?;
+            let name = &lex.inner().source()[byte_span];
+            let Some(field) = fields.get_mut(name) else {
                 return Err(SynError::UndefinedStatementClass {
-                    found: spanned.string().to_owned(),
-                    cursor_span: spanned.cursor_span,
+                    found: name.to_owned(),
+                    cursor_span,
                 });
             };
-            let _ = lex.expect_token(Token::Colon)?;
+            let _ = lex.expect_token_is(Token::Colon)?;
             field.slot = match field.slot {
                 Slot::None | Slot::Default(_) => {
                     let expr = Expr::parse(lex)?;
                     if !field.check.check(&expr) {
                         return Err(SynError::UnexpectedStatementFieldType {
                             expected: field.check,
-                            cursor: spanned.cursor_span.start,
+                            cursor: cursor_span.start,
                         });
                     }
                     Slot::Parsed(expr)
                 }
                 Slot::Parsed(_) => {
                     return Err(SynError::DuplicatedStatementField {
-                        name: spanned.string().to_owned(),
-                        cursor_span: spanned.cursor_span,
+                        name: name.to_owned(),
+                        cursor_span,
                     });
                 }
             }
         }
-        lex.next_if_token(Token::Comma);
-        let end = lex.expect_token(Token::BraceR)?.cursor_span.end;
+        lex.next_if_token_is(Token::Comma);
+        let end = lex.expect_token_is(Token::BraceR)?.cursor_span.end;
         insert(fields).map_err(|name| SynError::StatementFieldLost { name, end })
     }
 
@@ -221,12 +222,12 @@ impl<'src> Class<'src> {
             if is_first {
                 is_first = false;
             } else {
-                let _ = lex.expect_token(Token::Comma)?;
+                let _ = lex.expect_token_is(Token::Comma)?;
             }
-            match lex.next_token()? {
-                Spanned { value: Token::ParenR, .. } => break,
+            match lex.expect_token()? {
+                (Token::ParenR, ..) => break,
                 spanned => {
-                    let start = spanned.cursor_span.start;
+                    let start = spanned.1.cursor_span.start;
                     lex.prepend(Ok(spanned));
                     let expr = Expr::parse(lex)?;
                     if !field.check.check(&expr) {
@@ -239,34 +240,32 @@ impl<'src> Class<'src> {
                 }
             }
         }
-        lex.next_if_token(Token::Comma);
-        let end = lex.expect_token(Token::ParenR)?.cursor_span.end;
+        lex.next_if_token_is(Token::Comma);
+        let end = lex.expect_token_is(Token::ParenR)?.cursor_span.end;
         insert(fields).map_err(|name| SynError::StatementFieldLost { name, end })
     }
 }
 
 impl<'src> Syn<'src> for Class<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
-        let spanned = lex.expect_token(Token::Ident)?;
-        let Some(Pair { named, unnamed }) = CONSTRUCTORS.get(spanned.string()) else {
-            return Err(SynError::UndefinedStatementClass {
-                found: spanned.string().to_owned(),
-                cursor_span: spanned.cursor_span,
-            });
+        let Span { byte_span, cursor_span, .. } = lex.expect_token_is(Token::Ident)?;
+        let class = &lex.inner().source()[byte_span];
+        let Some(Pair { named, unnamed }) = CONSTRUCTORS.get(class) else {
+            return Err(SynError::UndefinedStatementClass { found: class.to_owned(), cursor_span });
         };
-        match lex.next_token()? {
-            Spanned { value: Token::BraceL, .. } => {
+        match lex.expect_token()? {
+            (Token::BraceL, ..) => {
                 let (fields, insert) = named;
                 Ok(Self::parse_named(lex, fields, *insert)?)
             }
-            Spanned { value: Token::ParenL, .. } => {
+            (Token::ParenL, ..) => {
                 let (fields, insert) = unnamed;
                 Ok(Self::parse_unnamed(lex, fields, *insert)?)
             }
-            spanned => Err(SynError::UnexpectedToken {
+            (_, Span { byte_span, cursor_span, .. }) => Err(SynError::UnexpectedToken {
                 expected: TokenSet::with_values([Token::BraceL, Token::ParenL]),
-                found: spanned.string().to_owned(),
-                cursor_span: spanned.cursor_span,
+                found: lex.inner().source()[byte_span].to_owned(),
+                cursor_span,
             }),
         }
     }

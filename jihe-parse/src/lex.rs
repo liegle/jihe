@@ -1,10 +1,10 @@
-use std::{iter::Peekable, str::Chars};
+use std::{iter::Peekable, marker::PhantomData, str::Chars};
 
 pub(super) use crate::lex::{
     error::LexError,
     token::{Token, TokenSet},
 };
-use crate::{Cursor, Spanned, lex::machine::Machine};
+use crate::{Cursor, Span, Spanned, lex::machine::Machine};
 
 mod automata;
 mod error;
@@ -32,6 +32,10 @@ impl<'src> Lex<'src> {
         }
     }
 
+    pub(super) fn source(&self) -> &'src str {
+        self.source
+    }
+
     fn consume_ignored(&mut self) {
         let mut comment = false;
         while let Some(c) = self.chars.peek().copied() {
@@ -43,7 +47,12 @@ impl<'src> Lex<'src> {
                 _ => break,
             };
             self.byte_ptr += c.len_utf8();
-            self.cursor_ptr.step(c == '\n');
+            if c == '\n' {
+                self.cursor_ptr.line += 1;
+                self.cursor_ptr.col = 0;
+            } else {
+                self.cursor_ptr.col += 1;
+            };
             let _ = self.chars.next();
         }
     }
@@ -72,7 +81,7 @@ impl<'src> Iterator for Lex<'src> {
             } else {
                 machine = next_machine;
                 self.byte_ptr += c.len_utf8();
-                self.cursor_ptr.step(false);
+                self.cursor_ptr.col += 1;
                 self.chars.next();
             }
         }
@@ -87,12 +96,14 @@ impl<'src> Iterator for Lex<'src> {
                     found: c,
                     cursor: self.cursor_ptr,
                 })),
-                [token] => Some(Ok(Spanned{
-                    value: *token,
-                    source: self.source,
-                    byte_span: byte_begin..self.byte_ptr,
-                    cursor_span: cursor_begin..self.cursor_ptr,
-                })),
+                [token] => Some(Ok((
+                    *token,
+                    Span {
+                        byte_span: byte_begin..self.byte_ptr,
+                        cursor_span: cursor_begin..self.cursor_ptr,
+                        _phantom: PhantomData,
+                    },
+                ))),
                 _ => Some(Err(LexError::MultipleMatching {
                     matched,
                     range: cursor_begin..self.cursor_ptr,

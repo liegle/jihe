@@ -48,10 +48,8 @@ impl Display for SynError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::LexError(e) => e.fmt(f),
-            Self::UnexpectedEof => {
-                write!(f, "Source file ended")
-            }
-            Self::UnexpectedToken { expected, found, cursor_span: range } => {
+            Self::UnexpectedEof => write!(f, "Source file ended"),
+            Self::UnexpectedToken { expected, found, cursor_span } => {
                 write!(f, "Expected ")?;
                 let mut is_begin = true;
                 for e in expected.into_iter() {
@@ -62,7 +60,11 @@ impl Display for SynError {
                         write!(f, "or {e:?}")?;
                     }
                 }
-                write!(f, ", found \"{found}\" at {}..{}", range.start, range.end)
+                write!(
+                    f,
+                    ", found \"{found}\" at {}..{}",
+                    cursor_span.start, cursor_span.end
+                )
             }
             Self::UndefinedStatementClass { found, cursor_span } => {
                 write!(
@@ -71,15 +73,15 @@ impl Display for SynError {
                     cursor_span.start, cursor_span.end
                 )
             }
-            Self::DuplicatedStatementField { name, cursor_span: range } => {
+            Self::DuplicatedStatementField { name, cursor_span } => {
                 write!(
                     f,
                     "Field {name} has been defined twice at {}..{}",
-                    range.start, range.end
+                    cursor_span.start, cursor_span.end
                 )
             }
-            Self::StatementFieldLost { name, end: cursor } => {
-                write!(f, "Field {name} is not defined before {cursor}")
+            Self::StatementFieldLost { name, end } => {
+                write!(f, "Field {name} is not defined before {end}")
             }
             Self::UnexpectedStatementFieldType { expected, cursor } => {
                 write!(f, "Field at {cursor} should be {expected}")
