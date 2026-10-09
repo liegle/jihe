@@ -65,14 +65,14 @@ fn test_all() {
     );
     assert_matches!(
         lex.next(),
-        Some(Ok((Token::VarX, Span { byte_span, cursor_span, .. })))
+        Some(Ok((Token::Ident, Span { byte_span, cursor_span, .. })))
             if &lex.source[byte_span.clone()] == "x"
             && matches!(cursor_span.start, Cursor { line: 1, col: 9 })
             && matches!(cursor_span.end, Cursor { line: 1, col: 10 })
     );
     assert_matches!(
         lex.next(),
-        Some(Ok((Token::VarY, Span { byte_span, cursor_span, .. })))
+        Some(Ok((Token::Ident, Span { byte_span, cursor_span, .. })))
             if &lex.source[byte_span.clone()] == "y"
             && matches!(cursor_span.start, Cursor { line: 1, col: 11 })
             && matches!(cursor_span.end, Cursor { line: 1, col: 12 })

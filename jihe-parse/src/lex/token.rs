@@ -91,8 +91,6 @@ macro_rules! enum_token {
 enum_token! {
     (0)Num    = [(num)+, ('.')?, (num)*]
     (0)Ident  = [(uni)+, ('\'')*]
-    (1)VarX   = [('x')!]
-    (1)VarY   = [('y')!]
     (0)BraceL = [('{')!]
     (0)BraceR = [('}')!]
     (0)ParenL = [('(')!]

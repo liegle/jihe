@@ -7,7 +7,10 @@ use std::{
 use crate::{
     Lex, Span, Spanned, SynError,
     lex::{Token, TokenSet},
-    syn::{ExpectToken, Prependable, Syn, expr::Expr},
+    syn::{
+        ExpectToken, Prependable, Syn,
+        expr::{Binary, Expr, Primary, Unary},
+    },
 };
 
 pub(crate) struct Tree<'src> {
@@ -65,9 +68,14 @@ impl Check {
     fn check(&self, expr: &Expr) -> bool {
         match self {
             Self::None => true,
-            Self::Fn => matches!(expr, Expr::Fn(..)),
-            Self::Eq => matches!(expr, Expr::Eq(..)),
-            Self::Def => matches!(expr, Expr::Eq(l, _) if matches!(**l, Expr::Fn(..))),
+            Self::Fn => matches!(expr, Expr::Unary(Unary::Fn(..), ..)),
+            Self::Eq => matches!(expr, Expr::Binary(Binary::Eq, _, _)),
+            Self::Def => {
+                matches!(
+                    expr,
+                    Expr::Binary(Binary::Eq, l, _) if matches!(**l, Expr::Unary(Unary::Fn(..), ..))
+                )
+            }
         }
     }
 }
@@ -287,22 +295,33 @@ impl<'src> Syn<'src> for Class<'src> {
 
 macro_rules! num {
     ($i:literal) => {
-        Expr::Num(stringify!($i))
+        Expr::Primary(Primary::Num(stringify!($i)))
     };
 }
 
 macro_rules! color {
     ($r:literal, $g:literal, $b:literal) => {
-        Expr::Fn("color", vec![num!($r), num!($g), num!($b)])
+        Expr::Unary(
+            Unary::Fn("color"),
+            Box::new(Expr::Binary(
+                Binary::Comma,
+                Box::new(num!($r)),
+                Box::new(Expr::Binary(
+                    Binary::Comma,
+                    Box::new(num!($g)),
+                    Box::new(num!($b)),
+                )),
+            )),
+        )
     };
 }
 
 enum_class! {
-    Param {
+    Slide {
         from: expr,
         to: expr
     },
-    Var {
+    Bind {
         expr: expr
     },
     Fn {
