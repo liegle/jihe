@@ -13,13 +13,13 @@ mod expr;
 mod prepend;
 mod tree;
 
-pub(super) fn syn<'src>(lex: Lex<'src>) -> Result<Tree<'src>, SynError> {
+pub(super) fn syn<'src>(lex: Lex<'src>) -> Result<Spanned<'src, Tree<'src>>, SynError> {
     let mut lex = Prependable::from_iter(lex);
     Tree::parse(&mut lex)
 }
 
 trait Syn<'src>: Sized {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError>;
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError>;
 }
 
 trait ExpectToken<'src>: 'src {
@@ -55,23 +55,41 @@ impl<'src> ExpectToken<'src> for Prependable<Lex<'src>> {
 }
 
 impl<'src> Syn<'src> for Tree<'src> {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
+        let mut start = None;
+        let mut end = None;
+
         let mut statements = Vec::new();
         while let Some(token) = lex.next() {
             lex.prepend(token);
-            statements.push(Statement::parse(lex)?);
+            let (statement, span) = Statement::parse(lex)?;
+            statements.push(statement);
+            if let None = start {
+                start = Some((span.byte_span.start, span.cursor_span.start));
+            }
+            end = Some((span.byte_span.end, span.cursor_span.end));
         }
 
-        Ok(Tree { statements })
+        let span = if let (Some(start), Some(end)) = (start, end) {
+            Span {
+                byte_span: start.0..end.0,
+                cursor_span: start.1..end.1,
+                ..Default::default()
+            }
+        } else {
+            Default::default()
+        };
+
+        Ok((Tree { statements }, span))
     }
 }
 
 impl<'src> Syn<'src> for Statement<'src> {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
-        let name = lex.expect_token_is(Token::Ident)?.byte_span;
-        let name = &lex.inner().source()[name];
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
+        let start = lex.expect_token_is(Token::Ident)?;
+        let name = &lex.inner().source()[start.byte_span.clone()];
         let _ = lex.expect_token_is(Token::Eq)?;
-        let class = Class::parse(lex)?;
-        Ok(Statement { name, class })
+        let (class, end) = Class::parse(lex)?;
+        Ok((Statement { name, class }, Span::join(&start, &end)))
     }
 }

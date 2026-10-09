@@ -25,20 +25,14 @@ pub enum SynError {
     },
     StatementFieldLost {
         name: &'static str,
-        end: Cursor,
+        cursor_span: Range<Cursor>,
     },
     UnexpectedStatementFieldType {
         expected: Check,
-        cursor: Cursor,
+        cursor_span: Range<Cursor>,
     },
     NegInsideExpr {
         cursor: Cursor,
-    },
-    NumOverflow {
-        range: Range<Cursor>,
-    },
-    NumInvalid {
-        range: Range<Cursor>,
     },
 }
 
@@ -80,23 +74,25 @@ impl Display for SynError {
                     cursor_span.start, cursor_span.end
                 )
             }
-            Self::StatementFieldLost { name, end } => {
-                write!(f, "Field {name} is not defined before {end}")
+            Self::StatementFieldLost { name, cursor_span } => {
+                write!(
+                    f,
+                    "Field {name} is not defined before  {}..{}",
+                    cursor_span.start, cursor_span.end
+                )
             }
-            Self::UnexpectedStatementFieldType { expected, cursor } => {
-                write!(f, "Field at {cursor} should be {expected}")
+            Self::UnexpectedStatementFieldType { expected, cursor_span } => {
+                write!(
+                    f,
+                    "Field at {}..{} should be {expected}",
+                    cursor_span.start, cursor_span.end
+                )
             }
             Self::NegInsideExpr { cursor } => {
                 write!(
                     f,
                     "Negative at {cursor} inside expression should be surrounded by '(' & ')'"
                 )
-            }
-            Self::NumOverflow { range } => {
-                write!(f, "Num at {}..{} overflows", range.start, range.end)
-            }
-            Self::NumInvalid { range } => {
-                write!(f, "Num at {}..{} invalid", range.start, range.end)
             }
         }
     }

@@ -1,4 +1,4 @@
-use std::{iter::Peekable, marker::PhantomData, str::Chars};
+use std::{iter::Peekable, str::Chars};
 
 pub(super) use crate::lex::{
     error::LexError,
@@ -101,7 +101,7 @@ impl<'src> Iterator for Lex<'src> {
                     Span {
                         byte_span: byte_begin..self.byte_ptr,
                         cursor_span: cursor_begin..self.cursor_ptr,
-                        _phantom: PhantomData,
+                        ..Default::default()
                     },
                 ))),
                 _ => Some(Err(LexError::MultipleMatching {

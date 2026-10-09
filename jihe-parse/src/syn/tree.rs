@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    Lex, Span, SynError,
+    Lex, Span, Spanned, SynError,
     lex::{Token, TokenSet},
     syn::{ExpectToken, Prependable, Syn, expr::Expr},
 };
@@ -167,9 +167,10 @@ macro_rules! enum_class {
 impl<'src> Class<'src> {
     fn parse_named(
         lex: &mut Prependable<Lex<'src>>,
+        start: &Span<'src>,
         fields: &HashMap<&'static str, Field<'static>>,
         insert: fn(HashMap<&'static str, Field<'src>>) -> Result<Class<'src>, &'static str>,
-    ) -> Result<Class<'src>, SynError> {
+    ) -> Result<Spanned<'src, Class<'src>>, SynError> {
         let mut fields = fields.clone();
         let mut is_first = true;
         for _ in 0..fields.len() {
@@ -189,11 +190,11 @@ impl<'src> Class<'src> {
             let _ = lex.expect_token_is(Token::Colon)?;
             field.slot = match field.slot {
                 Slot::None | Slot::Default(_) => {
-                    let expr = Expr::parse(lex)?;
+                    let (expr, span) = Expr::parse(lex)?;
                     if !field.check.check(&expr) {
                         return Err(SynError::UnexpectedStatementFieldType {
                             expected: field.check,
-                            cursor: cursor_span.start,
+                            cursor_span: span.cursor_span,
                         });
                     }
                     Slot::Parsed(expr)
@@ -207,15 +208,21 @@ impl<'src> Class<'src> {
             }
         }
         lex.next_if_token_is(Token::Comma);
-        let end = lex.expect_token_is(Token::BraceR)?.cursor_span.end;
-        insert(fields).map_err(|name| SynError::StatementFieldLost { name, end })
+        let end = lex.expect_token_is(Token::BraceR)?;
+        insert(fields)
+            .map_err(|name| SynError::StatementFieldLost {
+                name,
+                cursor_span: end.cursor_span.clone(),
+            })
+            .map(|class| (class, Span::join(start, &end)))
     }
 
     fn parse_unnamed(
         lex: &mut Prependable<Lex<'src>>,
+        start: &Span<'src>,
         fields: &Vec<Field<'static>>,
         insert: fn(Vec<Field<'src>>) -> Result<Class<'src>, &'static str>,
-    ) -> Result<Class<'src>, SynError> {
+    ) -> Result<Spanned<'src, Class<'src>>, SynError> {
         let mut fields = fields.clone();
         let mut is_first = true;
         for field in &mut fields {
@@ -227,13 +234,12 @@ impl<'src> Class<'src> {
             match lex.expect_token()? {
                 (Token::ParenR, ..) => break,
                 spanned => {
-                    let start = spanned.1.cursor_span.start;
                     lex.prepend(Ok(spanned));
-                    let expr = Expr::parse(lex)?;
+                    let (expr, span) = Expr::parse(lex)?;
                     if !field.check.check(&expr) {
                         return Err(SynError::UnexpectedStatementFieldType {
                             expected: field.check,
-                            cursor: start,
+                            cursor_span: span.cursor_span,
                         });
                     }
                     field.slot = Slot::Parsed(expr)
@@ -241,26 +247,34 @@ impl<'src> Class<'src> {
             }
         }
         lex.next_if_token_is(Token::Comma);
-        let end = lex.expect_token_is(Token::ParenR)?.cursor_span.end;
-        insert(fields).map_err(|name| SynError::StatementFieldLost { name, end })
+        let end = lex.expect_token_is(Token::ParenR)?;
+        insert(fields)
+            .map_err(|name| SynError::StatementFieldLost {
+                name,
+                cursor_span: end.cursor_span.clone(),
+            })
+            .map(|class| (class, Span::join(start, &end)))
     }
 }
 
 impl<'src> Syn<'src> for Class<'src> {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Self, SynError> {
-        let Span { byte_span, cursor_span, .. } = lex.expect_token_is(Token::Ident)?;
-        let class = &lex.inner().source()[byte_span];
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
+        let start = lex.expect_token_is(Token::Ident)?;
+        let class = &lex.inner().source()[start.byte_span.clone()];
         let Some(Pair { named, unnamed }) = CONSTRUCTORS.get(class) else {
-            return Err(SynError::UndefinedStatementClass { found: class.to_owned(), cursor_span });
+            return Err(SynError::UndefinedStatementClass {
+                found: class.to_owned(),
+                cursor_span: start.cursor_span,
+            });
         };
         match lex.expect_token()? {
             (Token::BraceL, ..) => {
                 let (fields, insert) = named;
-                Ok(Self::parse_named(lex, fields, *insert)?)
+                Ok(Self::parse_named(lex, &start, fields, *insert)?)
             }
             (Token::ParenL, ..) => {
                 let (fields, insert) = unnamed;
-                Ok(Self::parse_unnamed(lex, fields, *insert)?)
+                Ok(Self::parse_unnamed(lex, &start, fields, *insert)?)
             }
             (_, Span { byte_span, cursor_span, .. }) => Err(SynError::UnexpectedToken {
                 expected: TokenSet::with_values([Token::BraceL, Token::ParenL]),
@@ -273,7 +287,7 @@ impl<'src> Syn<'src> for Class<'src> {
 
 macro_rules! num {
     ($i:literal) => {
-        Expr::Num { integer: $i, decimal: 0 }
+        Expr::Num(stringify!($i))
     };
 }
 
