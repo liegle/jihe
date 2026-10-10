@@ -65,6 +65,7 @@ macro_rules! repeat {
     (*) => { Repeat::ZeroOrMore };
 }
 
+// TODO: impl Display
 #[rustfmt::skip]
 macro_rules! enum_token {
     ($(($prio:literal)$token:ident = [$($patt:tt)+])+) => {
