@@ -26,7 +26,8 @@ pub(crate) enum Unary<'src> {
     Neg,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
+#[repr(u8)]
 pub(crate) enum Binary {
     Pow,
     Mul,
@@ -36,6 +37,17 @@ pub(crate) enum Binary {
     Eq,
     Comma,
 }
+
+// TODO: to proc macro
+const BINARY_PRIORITY: &[u8] = &[
+    4, // Pow
+    3, // Mul
+    3, // Div
+    2, // Add
+    2, // Sub
+    1, // Eq
+    0, // Comma
+];
 
 impl<'src> Syn<'src> for Expr<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
@@ -72,7 +84,7 @@ impl<'src> Syn<'src> for Expr<'src> {
                     append_binary(spanned, lex, &mut stack, binary, expr)?
                 }
             };
-            rewind_stack(&mut curr, &mut stack);
+            rewind_stack(&mut stack, &mut curr);
         }
     }
 }
@@ -205,15 +217,14 @@ fn append_binary<'src>(
     lex: &mut Prependable<Lex<'src>>,
     stack: &mut Vec<Frame<'src>>,
     binary: Binary,
-    expr: Expr<'src>,
+    mut expr: Expr<'src>,
 ) -> Result<State<'src>, SynError> {
     let string = &lex.inner().source()[byte_span];
     match token {
-        Token::Num => Ok(State::Ok(merge_binary(
-            binary,
-            expr,
-            Expr::Primary(Primary::Num(string)),
-        ))),
+        Token::Num => {
+            merge_binary(binary, &mut expr, Expr::Primary(Primary::Num(string)));
+            Ok(State::Ok(expr))
+        }
         Token::Ident => {
             let next = lex.expect_token()?;
             if let (Token::ParenL, _) = &next {
@@ -221,11 +232,8 @@ fn append_binary<'src>(
                 Ok(State::Unary(Unary::Fn(string)))
             } else {
                 lex.prepend(Ok(next));
-                Ok(State::Ok(merge_binary(
-                    binary,
-                    expr,
-                    Expr::Primary(Primary::Var(string)),
-                )))
+                merge_binary(binary, &mut expr, Expr::Primary(Primary::Var(string)));
+                Ok(State::Ok(expr))
             }
         }
         Token::ParenL => {
@@ -241,10 +249,18 @@ fn append_binary<'src>(
     }
 }
 
-fn merge_binary<'src>(binary: Binary, l: Expr<'src>, r: Expr<'src>) -> Expr<'src> {
-    todo!()
+fn merge_binary<'src>(binary: Binary, mut expr: &mut Expr<'src>, next: Expr<'src>) {
+    let prio = BINARY_PRIORITY[binary as usize];
+
+    while matches!(expr, Expr::Binary(b, _, r) if BINARY_PRIORITY[*b as usize] < prio) {
+        // it's been check twice but I don't know to do it in once😭
+        if let Expr::Binary(.., r) = expr {
+            expr = r.as_mut();
+        }
+    }
+    *expr = Expr::Binary(binary, Box::new(expr.clone()), Box::new(next));
 }
 
-fn rewind_stack<'src>(curr: &mut State<'src>, stack: &mut Vec<Frame<'src>>) {
+fn rewind_stack<'src>(stack: &mut Vec<Frame<'src>>, curr: &mut State<'src>) {
     todo!()
 }
