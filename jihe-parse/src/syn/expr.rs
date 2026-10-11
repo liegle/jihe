@@ -42,82 +42,37 @@ impl<'src> Syn<'src> for Expr<'src> {
         let first = lex.expect_token()?;
         let start = (first.1.byte_span.start, first.1.cursor_span.start);
         lex.prepend(Ok(first));
+        let mut end = start;
 
-        let mut stack = Vec::<Frame<'src>>::new();
+        let mut stack = Vec::new();
         let mut curr = State::None;
         loop {
-            let (token, span) = lex.expect_token()?;
-            curr = match (curr, token) {
+            let spanned = lex.expect_token()?;
+            curr = match (curr, spanned.0) {
                 (State::Ok(expr), Token::BraceR | Token::ParenR | Token::Comma)
                     if stack.is_empty() =>
                 {
+                    lex.prepend(Ok(spanned));
                     let span = Span {
-                        byte_span: start.0..span.byte_span.end,
-                        cursor_span: start.1..span.cursor_span.end,
+                        byte_span: start.0..end.0,
+                        cursor_span: start.1..end.1,
                         ..Default::default()
                     };
                     return Ok((expr, span));
                 }
                 (state, _) => state,
             };
+            end = (spanned.1.byte_span.end, spanned.1.cursor_span.end);
 
-            let Span { byte_span, cursor_span, .. } = span;
-            let string = &lex.inner().source()[byte_span];
-            match curr {
-                State::None => curr = from_first_token(token, string, cursor_span, lex)?,
-                State::Ok(expr) => {
-                    curr = from_after_expr(expr, token, string, cursor_span, &mut stack)?
+            curr = match curr {
+                State::None => begin_expr(spanned, lex)?,
+                State::Ok(expr) => append_ok(spanned, lex, &mut stack, expr)?,
+                State::Unary(unary) => append_unary(spanned, lex, &mut stack, unary)?,
+                State::Binary(binary, expr) => {
+                    append_binary(spanned, lex, &mut stack, binary, expr)?
                 }
-                State::Frame(f @ Frame::Unary(Unary::Fn(..) | Unary::Paren)) => {
-                    stack.push(f);
-                    curr = from_first_token(token, string, cursor_span, lex)?;
-                }
-                State::Frame(Frame::Unary(Unary::Neg)) => {
-                    curr = from_after_neg(token, string, cursor_span, &mut stack, lex)?
-                }
-                State::Frame(Frame::Binary(binary, expr)) => match token {
-                    Token::Num => {
-                        curr = State::Ok(Expr::Binary(
-                            binary,
-                            Box::new(expr),
-                            Box::new(Expr::Primary(Primary::Num(string))),
-                        ));
-                    }
-                    Token::Ident => {
-                        let next = lex.expect_token()?;
-                        if let (Token::ParenL, _) = &next {
-                            stack.push(Frame::Binary(binary, expr));
-                            curr = State::Frame(Frame::Unary(Unary::Fn(string)));
-                        } else {
-                            lex.prepend(Ok(next));
-                            curr = State::Ok(Expr::Binary(
-                                binary,
-                                Box::new(expr),
-                                Box::new(Expr::Primary(Primary::Var(string))),
-                            ));
-                        }
-                    }
-                    Token::ParenL => {
-                        stack.push(Frame::Binary(binary, expr));
-                        curr = State::Frame(Frame::Unary(Unary::Paren));
-                    }
-                    Token::Sub => {
-                        return Err(SynError::NegInsideExpr { cursor: cursor_span.start });
-                    }
-                    _ => {
-                        return Err(SynError::UnexpectedToken {
-                            expected: TokenSet::with_values([
-                                Token::Num,
-                                Token::Ident,
-                                Token::ParenL,
-                            ]),
-                            found: string.to_owned(),
-                            cursor_span,
-                        });
-                    }
-                },
-            }
-            // TODO: rewind stack
+            };
+            rewind_stack(&mut curr, &mut stack);
         }
     }
 }
@@ -130,28 +85,28 @@ enum Frame<'src> {
 enum State<'src> {
     None,
     Ok(Expr<'src>),
-    Frame(Frame<'src>),
+    Unary(Unary<'src>),
+    Binary(Binary, Expr<'src>),
 }
 
-fn from_first_token<'src>(
-    token: Token,
-    string: &'src str,
-    cursor_span: Range<Cursor>,
+fn begin_expr<'src>(
+    (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
 ) -> Result<State<'src>, SynError> {
+    let string = &lex.inner().source()[byte_span];
     match token {
         Token::Num => Ok(State::Ok(Expr::Primary(Primary::Num(string)))),
         Token::Ident => {
             let next = lex.expect_token()?;
             if let (Token::ParenL, _) = &next {
-                Ok(State::Frame(Frame::Unary(Unary::Fn(string))))
+                Ok(State::Unary(Unary::Fn(string)))
             } else {
                 lex.prepend(Ok(next));
                 Ok(State::Ok(Expr::Primary(Primary::Var(string))))
             }
         }
-        Token::ParenL => Ok(State::Frame(Frame::Unary(Unary::Paren))),
-        Token::Sub => Ok(State::Frame(Frame::Unary(Unary::Neg))),
+        Token::ParenL => Ok(State::Unary(Unary::Paren)),
+        Token::Sub => Ok(State::Unary(Unary::Neg)),
         _ => Err(SynError::UnexpectedToken {
             expected: TokenSet::with_values([Token::Num, Token::Ident, Token::ParenL, Token::Sub]),
             found: string.to_owned(),
@@ -160,13 +115,13 @@ fn from_first_token<'src>(
     }
 }
 
-fn from_after_expr<'src>(
-    expr: Expr<'src>,
-    token: Token,
-    string: &'src str,
-    cursor_span: Range<Cursor>,
+fn append_ok<'src>(
+    (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
+    lex: &mut Prependable<Lex<'src>>,
     stack: &mut Vec<Frame<'src>>,
+    expr: Expr<'src>,
 ) -> Result<State<'src>, SynError> {
+    let string = &lex.inner().source()[byte_span];
     let binary = match token {
         Token::ParenR => match stack.pop().expect("End of expr should have been checked") {
             Frame::Unary(u @ (Unary::Fn(..) | Unary::Paren)) => {
@@ -199,16 +154,21 @@ fn from_after_expr<'src>(
             });
         }
     };
-    Ok(State::Frame(Frame::Binary(binary, expr)))
+    Ok(State::Binary(binary, expr))
 }
 
-fn from_after_neg<'src>(
-    token: Token,
-    string: &'src str,
-    cursor_span: Range<Cursor>,
-    stack: &mut Vec<Frame<'src>>,
+fn append_unary<'src>(
+    spanned: Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
+    stack: &mut Vec<Frame<'src>>,
+    unary: Unary<'src>,
 ) -> Result<State<'src>, SynError> {
+    if let f @ (Unary::Fn(..) | Unary::Paren) = unary {
+        stack.push(Frame::Unary(f));
+        return begin_expr(spanned, lex);
+    }
+    let (token, Span { byte_span, cursor_span, .. }) = spanned;
+    let string = &lex.inner().source()[byte_span];
     match token {
         Token::Num => Ok(State::Ok(Expr::Unary(
             Unary::Neg,
@@ -218,7 +178,7 @@ fn from_after_neg<'src>(
             let next = lex.expect_token()?;
             if let (Token::ParenL, _) = &next {
                 stack.push(Frame::Unary(Unary::Neg));
-                Ok(State::Frame(Frame::Unary(Unary::Fn(string))))
+                Ok(State::Unary(Unary::Fn(string)))
             } else {
                 lex.prepend(Ok(next));
                 Ok(State::Ok(Expr::Unary(
@@ -229,7 +189,7 @@ fn from_after_neg<'src>(
         }
         Token::ParenL => {
             stack.push(Frame::Unary(Unary::Neg));
-            Ok(State::Frame(Frame::Unary(Unary::Paren)))
+            Ok(State::Unary(Unary::Paren))
         }
         Token::Sub => Err(SynError::NegInsideExpr { cursor: cursor_span.start }),
         _ => Err(SynError::UnexpectedToken {
@@ -240,12 +200,51 @@ fn from_after_neg<'src>(
     }
 }
 
-fn from_after_op<'src>(
-    token: Token,
-    string: &'src str,
-    cursor_span: Range<Cursor>,
-    stack: &mut Vec<Frame<'src>>,
+fn append_binary<'src>(
+    (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
+    stack: &mut Vec<Frame<'src>>,
+    binary: Binary,
+    expr: Expr<'src>,
 ) -> Result<State<'src>, SynError> {
+    let string = &lex.inner().source()[byte_span];
+    match token {
+        Token::Num => Ok(State::Ok(merge_binary(
+            binary,
+            expr,
+            Expr::Primary(Primary::Num(string)),
+        ))),
+        Token::Ident => {
+            let next = lex.expect_token()?;
+            if let (Token::ParenL, _) = &next {
+                stack.push(Frame::Binary(binary, expr));
+                Ok(State::Unary(Unary::Fn(string)))
+            } else {
+                lex.prepend(Ok(next));
+                Ok(State::Ok(merge_binary(
+                    binary,
+                    expr,
+                    Expr::Primary(Primary::Var(string)),
+                )))
+            }
+        }
+        Token::ParenL => {
+            stack.push(Frame::Binary(binary, expr));
+            Ok(State::Unary(Unary::Paren))
+        }
+        Token::Sub => Err(SynError::NegInsideExpr { cursor: cursor_span.start }),
+        _ => Err(SynError::UnexpectedToken {
+            expected: TokenSet::with_values([Token::Num, Token::Ident, Token::ParenL]),
+            found: string.to_owned(),
+            cursor_span,
+        }),
+    }
+}
+
+fn merge_binary<'src>(binary: Binary, l: Expr<'src>, r: Expr<'src>) -> Expr<'src> {
+    todo!()
+}
+
+fn rewind_stack<'src>(curr: &mut State<'src>, stack: &mut Vec<Frame<'src>>) {
     todo!()
 }
