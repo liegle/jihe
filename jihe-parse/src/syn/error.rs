@@ -34,7 +34,7 @@ pub enum SynError {
     DismatchParenR {
         cursor: Cursor,
     },
-    NegInsideExpr {
+    UnaryInsideExpr {
         cursor: Cursor,
     },
 }
@@ -94,10 +94,10 @@ impl Display for SynError {
             Self::DismatchParenR { cursor } => {
                 write!(f, "Right parenthesis at {cursor} has no matching left one")
             }
-            Self::NegInsideExpr { cursor } => {
+            Self::UnaryInsideExpr { cursor } => {
                 write!(
                     f,
-                    "Negative at {cursor} inside expression should be surrounded by '(' & ')'"
+                    "Unary operator at {cursor} inside expression should be surrounded by '(' & ')'"
                 )
             }
         }

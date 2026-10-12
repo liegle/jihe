@@ -1,7 +1,5 @@
-use std::ops::Range;
-
 use crate::{
-    Cursor, Lex, Span, Spanned,
+    Lex, Span, Spanned,
     lex::{Token, TokenSet},
     syn::{ExpectToken, Prependable, Syn, SynError},
 };
@@ -9,8 +7,8 @@ use crate::{
 #[derive(Clone)]
 pub(crate) enum Expr<'src> {
     Primary(Primary<'src>),
-    Unary(Unary<'src>, Box<Expr<'src>>),
-    Binary(Binary, Box<Expr<'src>>, Box<Expr<'src>>),
+    Delimit(Delimit<'src>, Box<Expr<'src>>),
+    Operate(Operate<'src>),
 }
 
 #[derive(Clone)]
@@ -20,9 +18,20 @@ pub(crate) enum Primary<'src> {
 }
 
 #[derive(Clone)]
-pub(crate) enum Unary<'src> {
+pub(crate) enum Delimit<'src> {
     Fn(&'src str),
     Paren,
+}
+
+#[derive(Clone)]
+pub(crate) enum Operate<'src> {
+    Unary(Unary, Box<Expr<'src>>),
+    Binary(Binary, Box<Expr<'src>>, Box<Expr<'src>>),
+}
+
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub(crate) enum Unary {
     Neg,
 }
 
@@ -61,7 +70,7 @@ impl<'src> Syn<'src> for Expr<'src> {
         loop {
             let spanned = lex.expect_token()?;
             curr = match (curr, spanned.0) {
-                (State::Ok(expr), Token::BraceR | Token::ParenR | Token::Comma)
+                (State::Complete(expr), Token::BraceR | Token::ParenR | Token::Comma)
                     if stack.is_empty() =>
                 {
                     lex.prepend(Ok(spanned));
@@ -78,27 +87,33 @@ impl<'src> Syn<'src> for Expr<'src> {
 
             curr = match curr {
                 State::None => begin_expr(spanned, lex)?,
-                State::Ok(expr) => append_ok(spanned, lex, &mut stack, expr)?,
-                State::Unary(unary) => append_unary(spanned, lex, &mut stack, unary)?,
-                State::Binary(binary, expr) => {
-                    append_binary(spanned, lex, &mut stack, binary, expr)?
+                State::Complete(expr) => append_complete(spanned, lex, &mut stack, expr)?,
+                State::Delimit(delimit) => {
+                    stack.push(Frame::Delimit(delimit));
+                    begin_expr(spanned, lex)?
                 }
+                State::Operate(op) => append_operate(spanned, lex, &mut stack, op)?,
             };
-            rewind_stack(&mut stack, &mut curr);
+            curr = rewind_stack(&mut stack, curr);
         }
     }
 }
 
-enum Frame<'src> {
-    Unary(Unary<'src>),
+enum Op<'src> {
+    Unary(Unary),
     Binary(Binary, Expr<'src>),
+}
+
+enum Frame<'src> {
+    Delimit(Delimit<'src>),
+    Operate(Op<'src>),
 }
 
 enum State<'src> {
     None,
-    Ok(Expr<'src>),
-    Unary(Unary<'src>),
-    Binary(Binary, Expr<'src>),
+    Complete(Expr<'src>),
+    Delimit(Delimit<'src>),
+    Operate(Op<'src>),
 }
 
 fn begin_expr<'src>(
@@ -107,18 +122,18 @@ fn begin_expr<'src>(
 ) -> Result<State<'src>, SynError> {
     let string = &lex.inner().source()[byte_span];
     match token {
-        Token::Num => Ok(State::Ok(Expr::Primary(Primary::Num(string)))),
+        Token::Num => Ok(State::Complete(Expr::Primary(Primary::Num(string)))),
         Token::Ident => {
             let next = lex.expect_token()?;
             if let (Token::ParenL, _) = &next {
-                Ok(State::Unary(Unary::Fn(string)))
+                Ok(State::Delimit(Delimit::Fn(string)))
             } else {
                 lex.prepend(Ok(next));
-                Ok(State::Ok(Expr::Primary(Primary::Var(string))))
+                Ok(State::Complete(Expr::Primary(Primary::Var(string))))
             }
         }
-        Token::ParenL => Ok(State::Unary(Unary::Paren)),
-        Token::Sub => Ok(State::Unary(Unary::Neg)),
+        Token::ParenL => Ok(State::Delimit(Delimit::Paren)),
+        Token::Sub => Ok(State::Operate(Op::Unary(Unary::Neg))),
         _ => Err(SynError::UnexpectedToken {
             expected: TokenSet::with_values([Token::Num, Token::Ident, Token::ParenL, Token::Sub]),
             found: string.to_owned(),
@@ -127,7 +142,7 @@ fn begin_expr<'src>(
     }
 }
 
-fn append_ok<'src>(
+fn append_complete<'src>(
     (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
     stack: &mut Vec<Frame<'src>>,
@@ -135,9 +150,9 @@ fn append_ok<'src>(
 ) -> Result<State<'src>, SynError> {
     let string = &lex.inner().source()[byte_span];
     let binary = match token {
-        Token::ParenR => match stack.pop().expect("End of expr should have been checked") {
-            Frame::Unary(u @ (Unary::Fn(..) | Unary::Paren)) => {
-                return Ok(State::Ok(Expr::Unary(u, Box::new(expr))));
+        Token::ParenR => match stack.pop() {
+            Some(Frame::Delimit(d)) => {
+                return Ok(State::Complete(Expr::Delimit(d, Box::new(expr))));
             }
             _ => {
                 return Err(SynError::DismatchParenR { cursor: cursor_span.start });
@@ -166,44 +181,39 @@ fn append_ok<'src>(
             });
         }
     };
-    Ok(State::Binary(binary, expr))
+    Ok(State::Operate(Op::Binary(binary, expr)))
 }
 
-fn append_unary<'src>(
-    spanned: Spanned<'src, Token>,
+fn append_operate<'src>(
+    (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
     stack: &mut Vec<Frame<'src>>,
-    unary: Unary<'src>,
+    op: Op<'src>,
 ) -> Result<State<'src>, SynError> {
-    if let f @ (Unary::Fn(..) | Unary::Paren) = unary {
-        stack.push(Frame::Unary(f));
-        return begin_expr(spanned, lex);
-    }
-    let (token, Span { byte_span, cursor_span, .. }) = spanned;
     let string = &lex.inner().source()[byte_span];
     match token {
-        Token::Num => Ok(State::Ok(Expr::Unary(
-            Unary::Neg,
-            Box::new(Expr::Primary(Primary::Num(string))),
+        Token::Num => Ok(State::Complete(merge_operate(
+            op,
+            Expr::Primary(Primary::Num(string)),
         ))),
         Token::Ident => {
             let next = lex.expect_token()?;
             if let (Token::ParenL, _) = &next {
-                stack.push(Frame::Unary(Unary::Neg));
-                Ok(State::Unary(Unary::Fn(string)))
+                stack.push(Frame::Operate(op));
+                Ok(State::Delimit(Delimit::Fn(string)))
             } else {
                 lex.prepend(Ok(next));
-                Ok(State::Ok(Expr::Unary(
-                    Unary::Neg,
-                    Box::new(Expr::Primary(Primary::Var(string))),
+                Ok(State::Complete(merge_operate(
+                    op,
+                    Expr::Primary(Primary::Var(string)),
                 )))
             }
         }
         Token::ParenL => {
-            stack.push(Frame::Unary(Unary::Neg));
-            Ok(State::Unary(Unary::Paren))
+            stack.push(Frame::Operate(op));
+            Ok(State::Delimit(Delimit::Paren))
         }
-        Token::Sub => Err(SynError::NegInsideExpr { cursor: cursor_span.start }),
+        Token::Sub => Err(SynError::UnaryInsideExpr { cursor: cursor_span.start }),
         _ => Err(SynError::UnexpectedToken {
             expected: TokenSet::with_values([Token::Num, Token::Ident, Token::ParenL]),
             found: string.to_owned(),
@@ -212,55 +222,42 @@ fn append_unary<'src>(
     }
 }
 
-fn append_binary<'src>(
-    (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
-    lex: &mut Prependable<Lex<'src>>,
-    stack: &mut Vec<Frame<'src>>,
-    binary: Binary,
-    mut expr: Expr<'src>,
-) -> Result<State<'src>, SynError> {
-    let string = &lex.inner().source()[byte_span];
-    match token {
-        Token::Num => {
-            merge_binary(binary, &mut expr, Expr::Primary(Primary::Num(string)));
-            Ok(State::Ok(expr))
+fn merge_operate<'src>(op: Op<'src>, next: Expr<'src>) -> Expr<'src> {
+    match op {
+        Op::Unary(unary) => Expr::Operate(Operate::Unary(unary, Box::new(next))),
+        Op::Binary(binary, mut expr) => {
+            let prio = BINARY_PRIORITY[binary as usize];
+
+            let mut curr = &mut expr;
+            while matches!(
+                curr,
+                Expr::Operate(Operate::Binary(b, _, r)) if BINARY_PRIORITY[*b as usize] < prio
+            ) {
+                // it's been checked twice but I don't know how to do it in once😭
+                if let Expr::Operate(Operate::Binary(.., r)) = curr {
+                    curr = r.as_mut();
+                }
+            }
+            *curr = Expr::Operate(Operate::Binary(
+                binary,
+                Box::new(curr.clone()),
+                Box::new(next),
+            ));
+            expr
         }
-        Token::Ident => {
-            let next = lex.expect_token()?;
-            if let (Token::ParenL, _) = &next {
-                stack.push(Frame::Binary(binary, expr));
-                Ok(State::Unary(Unary::Fn(string)))
-            } else {
-                lex.prepend(Ok(next));
-                merge_binary(binary, &mut expr, Expr::Primary(Primary::Var(string)));
-                Ok(State::Ok(expr))
+    }
+}
+
+fn rewind_stack<'src>(stack: &mut Vec<Frame<'src>>, mut curr: State<'src>) -> State<'src> {
+    while let State::Complete(expr) = curr {
+        match stack.pop() {
+            None => return State::Complete(expr),
+            Some(Frame::Operate(operate)) => curr = State::Complete(merge_operate(operate, expr)),
+            Some(f) => {
+                stack.push(f);
+                return State::Complete(expr);
             }
         }
-        Token::ParenL => {
-            stack.push(Frame::Binary(binary, expr));
-            Ok(State::Unary(Unary::Paren))
-        }
-        Token::Sub => Err(SynError::NegInsideExpr { cursor: cursor_span.start }),
-        _ => Err(SynError::UnexpectedToken {
-            expected: TokenSet::with_values([Token::Num, Token::Ident, Token::ParenL]),
-            found: string.to_owned(),
-            cursor_span,
-        }),
     }
-}
-
-fn merge_binary<'src>(binary: Binary, mut expr: &mut Expr<'src>, next: Expr<'src>) {
-    let prio = BINARY_PRIORITY[binary as usize];
-
-    while matches!(expr, Expr::Binary(b, _, r) if BINARY_PRIORITY[*b as usize] < prio) {
-        // it's been check twice but I don't know to do it in once😭
-        if let Expr::Binary(.., r) = expr {
-            expr = r.as_mut();
-        }
-    }
-    *expr = Expr::Binary(binary, Box::new(expr.clone()), Box::new(next));
-}
-
-fn rewind_stack<'src>(stack: &mut Vec<Frame<'src>>, curr: &mut State<'src>) {
-    todo!()
+    curr
 }

@@ -9,7 +9,7 @@ use crate::{
     lex::{Token, TokenSet},
     syn::{
         ExpectToken, Prependable, Syn,
-        expr::{Binary, Expr, Primary, Unary},
+        expr::{Binary, Delimit, Expr, Operate, Primary},
     },
 };
 
@@ -68,12 +68,13 @@ impl Check {
     fn check(&self, expr: &Expr) -> bool {
         match self {
             Self::None => true,
-            Self::Fn => matches!(expr, Expr::Unary(Unary::Fn(..), ..)),
-            Self::Eq => matches!(expr, Expr::Binary(Binary::Eq, _, _)),
+            Self::Fn => matches!(expr, Expr::Delimit(Delimit::Fn(..), ..)),
+            Self::Eq => matches!(expr, Expr::Operate(Operate::Binary(Binary::Eq, _, _))),
             Self::Def => {
                 matches!(
                     expr,
-                    Expr::Binary(Binary::Eq, l, _) if matches!(**l, Expr::Unary(Unary::Fn(..), ..))
+                    Expr::Operate(Operate::Binary(Binary::Eq, l, _))
+                        if matches!(**l, Expr::Delimit(Delimit::Fn(..), ..))
                 )
             }
         }
@@ -301,21 +302,24 @@ macro_rules! num {
 
 macro_rules! color {
     ($r:literal, $g:literal, $b:literal) => {
-        Expr::Unary(
-            Unary::Fn("color"),
-            Box::new(Expr::Binary(
+        Expr::Delimit(
+            Delimit::Fn("color"),
+            Box::new(Expr::Operate(Operate::Binary(
                 Binary::Comma,
                 Box::new(num!($r)),
-                Box::new(Expr::Binary(
+                Box::new(Expr::Operate(Operate::Binary(
                     Binary::Comma,
                     Box::new(num!($g)),
                     Box::new(num!($b)),
-                )),
-            )),
+                ))),
+            ))),
         )
     };
 }
 
+// TODO: maybe move these definitions to next step of parsing instead of in syn
+// Only leave Statement::Named(HashMap) and Statement::Unnamed(Vec) here
+// Or maybe not?
 enum_class! {
     Slide {
         from: expr,
