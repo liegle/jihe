@@ -8,7 +8,8 @@ use crate::{
 pub(crate) enum Expr<'src> {
     Primary(Primary<'src>),
     Delimit(Delimit<'src>, Box<Expr<'src>>),
-    Operate(Operate<'src>),
+    Unary(Unary, Box<Expr<'src>>),
+    Binary(Binary, Box<Expr<'src>>, Box<Expr<'src>>),
 }
 
 #[derive(Clone, Debug)]
@@ -21,12 +22,6 @@ pub(crate) enum Primary<'src> {
 pub(crate) enum Delimit<'src> {
     Fn(&'src str),
     Paren,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum Operate<'src> {
-    Unary(Unary, Box<Expr<'src>>),
-    Binary(Binary, Box<Expr<'src>>, Box<Expr<'src>>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -225,25 +220,21 @@ fn append_operate<'src>(
 
 fn merge_operate<'src>(op: Op<'src>, next: Expr<'src>) -> Expr<'src> {
     match op {
-        Op::Unary(unary) => Expr::Operate(Operate::Unary(unary, Box::new(next))),
+        Op::Unary(unary) => Expr::Unary(unary, Box::new(next)),
         Op::Binary(binary, mut expr) => {
             let prio = BINARY_PRIORITY[binary as usize];
 
             let mut curr = &mut expr;
             while matches!(
                 curr,
-                Expr::Operate(Operate::Binary(b, _, r)) if BINARY_PRIORITY[*b as usize] < prio
+                Expr::Binary(b, _, r) if BINARY_PRIORITY[*b as usize] < prio
             ) {
                 // it's been checked twice but I don't know how to do it in once😭
-                if let Expr::Operate(Operate::Binary(.., r)) = curr {
+                if let Expr::Binary(.., r) = curr {
                     curr = r.as_mut();
                 }
             }
-            *curr = Expr::Operate(Operate::Binary(
-                binary,
-                Box::new(curr.clone()),
-                Box::new(next),
-            ));
+            *curr = Expr::Binary(binary, Box::new(curr.clone()), Box::new(next));
             expr
         }
     }
@@ -324,11 +315,7 @@ mod test {
     fn test_unary() {
         let mut lex = Prependable::from_iter(Lex::new("-0.2,"));
         let expr = Expr::parse(&mut lex);
-        let Ok((
-            Expr::Operate(Operate::Unary(Unary::Neg, inner)),
-            Span { byte_span, cursor_span, .. },
-        )) = expr
-        else {
+        let Ok((Expr::Unary(Unary::Neg, inner), Span { byte_span, cursor_span, .. })) = expr else {
             panic!("test_unary failed, left: {:?}", expr);
         };
         assert_eq!(&lex.inner().source()[byte_span.clone()], "-0.2");
@@ -341,10 +328,7 @@ mod test {
     fn test_binary() {
         let mut lex = Prependable::from_iter(Lex::new("l+  \nr,"));
         let expr = Expr::parse(&mut lex);
-        let Ok((
-            Expr::Operate(Operate::Binary(Binary::Add, l, r)),
-            Span { byte_span, cursor_span, .. },
-        )) = expr
+        let Ok((Expr::Binary(Binary::Add, l, r), Span { byte_span, cursor_span, .. })) = expr
         else {
             panic!("test_binary failed, left: {:?}", expr);
         };
@@ -360,12 +344,8 @@ mod test {
         let mut lex =
             Prependable::from_iter(Lex::new("abs(x - 3) + (-y * func(x / 2, y, 10)) ^ x = 8,"));
         let expr = Expr::parse(&mut lex);
-        let Ok((
-            Expr::Operate(Operate::Binary(Binary::Eq, l, r)),
-            Span { byte_span, cursor_span, .. },
-        )) = expr
-        else {
-            panic!("test_all failed, left: {:?}", expr);
+        let Ok((Expr::Binary(Binary::Eq, l, r), Span { byte_span, cursor_span, .. })) = expr else {
+            panic!("test_all failed 1, left: {:?}", expr);
         };
         assert_eq!(
             &lex.inner().source()[byte_span.clone()],
@@ -374,46 +354,44 @@ mod test {
         assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
         assert_matches!(cursor_span.end, Cursor { line: 0, col: 46 });
         assert_matches!(r.as_ref(), Expr::Primary(Primary::Num("8")));
-        let Expr::Operate(Operate::Binary(Binary::Add, ll, rr)) = l.as_ref() else {
-            panic!("test_all failed, left: {:?}", l);
+        let Expr::Binary(Binary::Add, ll, rr) = l.as_ref() else {
+            panic!("test_all failed 2, left: {:?}", l);
         };
         let Expr::Delimit(Delimit::Fn("abs"), i) = ll.as_ref() else {
-            panic!("test_all failed, left: {:?}", ll);
+            panic!("test_all failed 3, left: {:?}", ll);
         };
-        let Expr::Operate(Operate::Binary(Binary::Sub, lll, rrr)) = i.as_ref() else {
-            panic!("test_all failed, left: {:?}", i);
+        let Expr::Binary(Binary::Sub, lll, rrr) = i.as_ref() else {
+            panic!("test_all failed 4, left: {:?}", i);
         };
         assert_matches!(lll.as_ref(), Expr::Primary(Primary::Var("x")));
         assert_matches!(rrr.as_ref(), Expr::Primary(Primary::Num("3")));
-        let Expr::Operate(Operate::Binary(Binary::Pow, llll, rrrr)) = rr.as_ref() else {
-            panic!("test_all failed, left: {:?}", rr);
+        let Expr::Binary(Binary::Pow, llll, rrrr) = rr.as_ref() else {
+            panic!("test_all failed 5, left: {:?}", rr);
         };
         assert_matches!(rrrr.as_ref(), Expr::Primary(Primary::Var("x")));
         let Expr::Delimit(Delimit::Paren, ii) = llll.as_ref() else {
-            panic!("test_all failed, left: {:?}", llll);
+            panic!("test_all failed 6, left: {:?}", llll);
         };
-        let Expr::Operate(Operate::Binary(Binary::Mul, lllll, rrrrr)) = ii.as_ref() else {
-            panic!("test_all failed, left: {:?}", ii);
+        let Expr::Binary(Binary::Mul, lllll, rrrrr) = ii.as_ref() else {
+            panic!("test_all failed 7, left: {:?}", ii);
         };
-        let Expr::Operate(Operate::Unary(Unary::Neg, iii)) = lllll.as_ref() else {
-            panic!("test_all failed, left: {:?}", lllll);
+        let Expr::Unary(Unary::Neg, iii) = lllll.as_ref() else {
+            panic!("test_all failed 8, left: {:?}", lllll);
         };
         assert_matches!(iii.as_ref(), Expr::Primary(Primary::Var("y")));
         let Expr::Delimit(Delimit::Fn("func"), iiii) = rrrrr.as_ref() else {
-            panic!("test_all failed, left: {:?}", rrrrr);
+            panic!("test_all failed 9, left: {:?}", rrrrr);
         };
-        let Expr::Operate(Operate::Binary(Binary::Comma, llllll, rrrrrr)) = iiii.as_ref() else {
-            panic!("test_all failed, left: {:?}", iiii);
+        let Expr::Binary(Binary::Comma, llllll, rrrrrr) = iiii.as_ref() else {
+            panic!("test_all failed 10, left: {:?}", iiii);
         };
         assert_matches!(rrrrrr.as_ref(), Expr::Primary(Primary::Num("10")));
-        let Expr::Operate(Operate::Binary(Binary::Comma, lllllll, rrrrrrr)) = llllll.as_ref()
-        else {
-            panic!("test_all failed, left: {:?}", llllll);
+        let Expr::Binary(Binary::Comma, lllllll, rrrrrrr) = llllll.as_ref() else {
+            panic!("test_all failed 11, left: {:?}", llllll);
         };
         assert_matches!(rrrrrrr.as_ref(), Expr::Primary(Primary::Var("y")));
-        let Expr::Operate(Operate::Binary(Binary::Div, llllllll, rrrrrrrr)) = lllllll.as_ref()
-        else {
-            panic!("test_all failed, left: {:?}", lllllll);
+        let Expr::Binary(Binary::Div, llllllll, rrrrrrrr) = lllllll.as_ref() else {
+            panic!("test_all failed 12, left: {:?}", lllllll);
         };
         assert_matches!(llllllll.as_ref(), Expr::Primary(Primary::Var("x")));
         assert_matches!(rrrrrrrr.as_ref(), Expr::Primary(Primary::Num("2")));

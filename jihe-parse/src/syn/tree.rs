@@ -9,7 +9,7 @@ use crate::{
     lex::{Token, TokenSet},
     syn::{
         ExpectToken, Prependable, Syn,
-        expr::{Binary, Delimit, Expr, Operate, Primary},
+        expr::{Binary, Delimit, Expr, Primary},
     },
 };
 
@@ -69,11 +69,11 @@ impl Check {
         match self {
             Self::None => true,
             Self::Fn => matches!(expr, Expr::Delimit(Delimit::Fn(..), ..)),
-            Self::Eq => matches!(expr, Expr::Operate(Operate::Binary(Binary::Eq, _, _))),
+            Self::Eq => matches!(expr, Expr::Binary(Binary::Eq, _, _)),
             Self::Def => {
                 matches!(
                     expr,
-                    Expr::Operate(Operate::Binary(Binary::Eq, l, _))
+                    Expr::Binary(Binary::Eq, l, _)
                         if matches!(**l, Expr::Delimit(Delimit::Fn(..), ..))
                 )
             }
@@ -304,15 +304,15 @@ macro_rules! color {
     ($r:literal, $g:literal, $b:literal) => {
         Expr::Delimit(
             Delimit::Fn("color"),
-            Box::new(Expr::Operate(Operate::Binary(
+            Box::new(Expr::Binary(
                 Binary::Comma,
                 Box::new(num!($r)),
-                Box::new(Expr::Operate(Operate::Binary(
+                Box::new(Expr::Binary(
                     Binary::Comma,
                     Box::new(num!($g)),
                     Box::new(num!($b)),
-                ))),
-            ))),
+                )),
+            )),
         )
     };
 }
