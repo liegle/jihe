@@ -44,3 +44,48 @@ impl<I: Iterator> Iterator for Prependable<I> {
 
     // TODO: maybe reimpl fns like Peekable does?
 }
+
+#[cfg(test)]
+mod test {
+    use std::assert_matches;
+
+    use super::*;
+
+    #[test]
+    fn test_basic() {
+        let mut p = Prependable::from_iter(0..5);
+        assert_matches!(p.next(), Some(0));
+        assert_matches!(p.next(), Some(1));
+        assert_matches!(p.next(), Some(2));
+        assert_matches!(p.next(), Some(3));
+        assert_matches!(p.next(), Some(4));
+        assert_matches!(p.next(), None);
+    }
+
+    #[test]
+    fn test_prepend() {
+        let mut p = Prependable::from_iter(0..5);
+        assert_matches!(p.next(), Some(0));
+        assert_matches!(p.next(), Some(1));
+
+        p.prepend(100);
+        p.prepend(200);
+        p.prepend(300);
+        assert_matches!(p.next(), Some(300));
+        assert_matches!(p.next(), Some(200));
+        assert_matches!(p.next(), Some(100));
+        assert_matches!(p.next(), Some(2));
+        assert_matches!(p.next(), Some(3));
+        assert_matches!(p.next(), Some(4));
+        assert_matches!(p.next(), None);
+    }
+
+    #[test]
+    fn test_next_if() {
+        let mut p = Prependable::from_iter(0..5);
+        assert_matches!(p.next_if(|v| *v > 0), None);
+        assert_matches!(p.next_if(|v| *v < 0), None);
+        assert_matches!(p.next_if(|v| *v == 0), Some(0));
+        assert_matches!(p.next_if(|v| *v == 1), Some(1));
+    }
+}
