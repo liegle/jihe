@@ -1,3 +1,5 @@
+use std::mem;
+
 use crate::{
     Lex, Span, Spanned,
     lex::{Token, TokenSet},
@@ -234,7 +236,11 @@ fn merge_operate<'src>(op: Op<'src>, next: Expr<'src>) -> Expr<'src> {
                     curr = r.as_mut();
                 }
             }
-            *curr = Expr::Binary(binary, Box::new(curr.clone()), Box::new(next));
+            const DUMMY: Expr<'static> = Expr::Primary(Primary::Num("0"));
+
+            let old = mem::replace(curr, DUMMY);
+            *curr = Expr::Binary(binary, Box::new(old), Box::new(next));
+
             expr
         }
     }
