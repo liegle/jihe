@@ -4,7 +4,7 @@ use std::{
     ops::Range,
 };
 
-use crate::{Cursor, LexError, lex::TokenSet, syn::tree::Check};
+use crate::{Cursor, LexError, lex::TokenSet};
 
 #[derive(Debug)]
 pub enum SynError {
@@ -25,10 +25,6 @@ pub enum SynError {
     },
     StatementFieldLost {
         name: &'static str,
-        cursor_span: Range<Cursor>,
-    },
-    UnexpectedStatementFieldType {
-        expected: Check,
         cursor_span: Range<Cursor>,
     },
     UnaryInsideExpr {
@@ -78,13 +74,6 @@ impl Display for SynError {
                 write!(
                     f,
                     "Field {name} is not defined before  {}..{}",
-                    cursor_span.start, cursor_span.end
-                )
-            }
-            Self::UnexpectedStatementFieldType { expected, cursor_span } => {
-                write!(
-                    f,
-                    "Field at {}..{} should be {expected}",
                     cursor_span.start, cursor_span.end
                 )
             }

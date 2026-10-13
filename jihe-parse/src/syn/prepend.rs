@@ -36,10 +36,7 @@ impl<I: Iterator> Iterator for Prependable<I> {
     type Item = <I as Iterator>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.pre.len() {
-            0 => self.iter.next(),
-            _ => self.pre.pop(),
-        }
+        self.pre.pop().or_else(|| self.iter.next())
     }
 
     // TODO: maybe reimpl fns like Peekable does?

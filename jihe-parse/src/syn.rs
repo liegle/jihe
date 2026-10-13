@@ -3,7 +3,7 @@ use crate::{
     lex::{Token, TokenSet},
     syn::{
         prepend::Prependable,
-        tree::{Class, Statement},
+        tree::{Fields, Statement},
     },
 };
 pub(super) use {error::SynError, tree::Tree};
@@ -25,7 +25,6 @@ trait Syn<'src>: Sized {
 trait ExpectToken<'src>: 'src {
     fn expect_token(&mut self) -> Result<Spanned<'src, Token>, SynError>;
     fn expect_token_is(&mut self, token: Token) -> Result<Span<'src>, SynError>;
-    fn next_if_token_is(&mut self, token: Token);
 }
 
 impl<'src> ExpectToken<'src> for Prependable<Lex<'src>> {
@@ -47,10 +46,6 @@ impl<'src> ExpectToken<'src> for Prependable<Lex<'src>> {
                 cursor_span: span.cursor_span,
             })
         }
-    }
-
-    fn next_if_token_is(&mut self, token: Token) {
-        self.next_if(|next| matches!(next, Ok((tok, ..)) if token == *tok));
     }
 }
 
@@ -89,7 +84,11 @@ impl<'src> Syn<'src> for Statement<'src> {
         let start = lex.expect_token_is(Token::Ident)?;
         let name = &lex.inner().source()[start.byte_span.clone()];
         let _ = lex.expect_token_is(Token::Eq)?;
-        let (class, end) = Class::parse(lex)?;
-        Ok((Statement { name, class }, Span::join(&start, &end)))
+        let class = &lex.inner().source()[lex.expect_token_is(Token::Ident)?.byte_span];
+        let (args, end) = Fields::parse(lex)?;
+        Ok((
+            Statement { name, class, fields: args },
+            Span::join(&start, &end),
+        ))
     }
 }
