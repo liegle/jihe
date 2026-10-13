@@ -97,21 +97,21 @@ impl<'src> Syn<'src> for Expr<'src> {
     }
 }
 
-enum Op<'src> {
+enum Operate<'src> {
     Unary(Unary),
     Binary(Binary, Expr<'src>),
 }
 
 enum Frame<'src> {
     Delimit(Delimit<'src>),
-    Operate(Op<'src>),
+    Operate(Operate<'src>),
 }
 
 enum State<'src> {
     None,
     Complete(Expr<'src>),
     Delimit(Delimit<'src>),
-    Operate(Op<'src>),
+    Operate(Operate<'src>),
 }
 
 fn begin_expr<'src>(
@@ -131,7 +131,7 @@ fn begin_expr<'src>(
             }
         }
         Token::ParenL => Ok(State::Delimit(Delimit::Paren)),
-        Token::Sub => Ok(State::Operate(Op::Unary(Unary::Neg))),
+        Token::Sub => Ok(State::Operate(Operate::Unary(Unary::Neg))),
         _ => Err(SynError::UnexpectedToken {
             expected: TokenSet::with_values([Token::Num, Token::Ident, Token::ParenL, Token::Sub]),
             found: string.to_owned(),
@@ -149,11 +149,12 @@ fn append_complete<'src>(
     let string = &lex.inner().source()[byte_span];
     let binary = match token {
         Token::ParenR => match stack.pop() {
+            None => unreachable!("Expr::parse() should have returned but did not"),
             Some(Frame::Delimit(d)) => {
                 return Ok(State::Complete(Expr::Delimit(d, Box::new(expr))));
             }
-            _ => {
-                return Err(SynError::DismatchParenR { cursor: cursor_span.start });
+            Some(Frame::Operate(..)) => {
+                unreachable!("Frame::Operate should have been poped but was not")
             }
         },
         Token::Pow => Binary::Pow,
@@ -179,14 +180,14 @@ fn append_complete<'src>(
             });
         }
     };
-    Ok(State::Operate(Op::Binary(binary, expr)))
+    Ok(State::Operate(Operate::Binary(binary, expr)))
 }
 
 fn append_operate<'src>(
     (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
     stack: &mut Vec<Frame<'src>>,
-    op: Op<'src>,
+    op: Operate<'src>,
 ) -> Result<State<'src>, SynError> {
     let string = &lex.inner().source()[byte_span];
     match token {
@@ -220,10 +221,10 @@ fn append_operate<'src>(
     }
 }
 
-fn merge_operate<'src>(op: Op<'src>, next: Expr<'src>) -> Expr<'src> {
+fn merge_operate<'src>(op: Operate<'src>, next: Expr<'src>) -> Expr<'src> {
     match op {
-        Op::Unary(unary) => Expr::Unary(unary, Box::new(next)),
-        Op::Binary(binary, mut expr) => {
+        Operate::Unary(unary) => Expr::Unary(unary, Box::new(next)),
+        Operate::Binary(binary, mut expr) => {
             let prio = BINARY_PRIORITY[binary as usize];
 
             let mut curr = &mut expr;
@@ -401,5 +402,14 @@ mod test {
         };
         assert_matches!(llllllll.as_ref(), Expr::Primary(Primary::Var("x")));
         assert_matches!(rrrrrrrr.as_ref(), Expr::Primary(Primary::Num("2")));
+    }
+
+    #[test]
+    fn test_unary_inside_expr() {
+        let mut lex = Prependable::from_iter(Lex::new("1 + -1,"));
+        assert_matches!(
+            Expr::parse(&mut lex),
+            Err(SynError::UnaryInsideExpr { cursor: Cursor { line: 0, col: 4 } })
+        );
     }
 }

@@ -31,9 +31,6 @@ pub enum SynError {
         expected: Check,
         cursor_span: Range<Cursor>,
     },
-    DismatchParenR {
-        cursor: Cursor,
-    },
     UnaryInsideExpr {
         cursor: Cursor,
     },
@@ -90,9 +87,6 @@ impl Display for SynError {
                     "Field at {}..{} should be {expected}",
                     cursor_span.start, cursor_span.end
                 )
-            }
-            Self::DismatchParenR { cursor } => {
-                write!(f, "Right parenthesis at {cursor} has no matching left one")
             }
             Self::UnaryInsideExpr { cursor } => {
                 write!(
