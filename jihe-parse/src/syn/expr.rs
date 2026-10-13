@@ -84,13 +84,13 @@ impl<'src> Syn<'src> for Expr<'src> {
             end = (spanned.1.byte_span.end, spanned.1.cursor_span.end);
 
             curr = match curr {
-                State::None => begin_expr(spanned, lex)?,
-                State::Complete(expr) => append_complete(spanned, lex, &mut stack, expr)?,
+                State::None => begin_expr(lex, spanned)?,
+                State::Complete(expr) => append_complete(lex, spanned, &mut stack, expr)?,
                 State::Delimit(delimit) => {
                     stack.push(Frame::Delimit(delimit));
-                    begin_expr(spanned, lex)?
+                    begin_expr(lex, spanned)?
                 }
-                State::Operate(op) => append_operate(spanned, lex, &mut stack, op)?,
+                State::Operate(op) => append_operate(lex, spanned, &mut stack, op)?,
             };
             curr = rewind_stack(&mut stack, curr);
         }
@@ -115,109 +115,99 @@ enum State<'src> {
 }
 
 fn begin_expr<'src>(
-    (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
+    spanned: Spanned<'src, Token>,
 ) -> Result<State<'src>, SynError> {
-    let string = &lex.inner().source()[byte_span];
-    match token {
-        Token::Num => Ok(State::Complete(Expr::Primary(Primary::Num(string)))),
-        Token::Ident => {
-            let next = lex.expect_token()?;
-            if let (Token::ParenL, _) = &next {
-                Ok(State::Delimit(Delimit::Fn(string)))
-            } else {
-                lex.prepend(Ok(next));
-                Ok(State::Complete(Expr::Primary(Primary::Var(string))))
+    handle_token! {
+        (lex, spanned) => {
+            (Token::Num, Span { byte_span, .. }) => {
+                Ok(State::Complete(Expr::Primary(Primary::Num(&lex.inner().source()[byte_span]))))
+            }
+            (Token::Ident, Span { byte_span, .. }) => {
+                let next = lex.expect_token()?;
+                if let (Token::ParenL, _) = &next {
+                    Ok(State::Delimit(Delimit::Fn(&lex.inner().source()[byte_span])))
+                } else {
+                    lex.prepend(Ok(next));
+                    Ok(State::Complete(Expr::Primary(Primary::Var(&lex.inner().source()[byte_span]))))
+                }
+            }
+            (Token::ParenL, _span) => {
+                Ok(State::Delimit(Delimit::Paren))
+            }
+            (Token::Sub, _span) => {
+                Ok(State::Operate(Operate::Unary(Unary::Neg)))
             }
         }
-        Token::ParenL => Ok(State::Delimit(Delimit::Paren)),
-        Token::Sub => Ok(State::Operate(Operate::Unary(Unary::Neg))),
-        _ => Err(SynError::UnexpectedToken {
-            expected: TokenSet::with_values([Token::Num, Token::Ident, Token::ParenL, Token::Sub]),
-            found: string.to_owned(),
-            cursor_span,
-        }),
     }
 }
 
 fn append_complete<'src>(
-    (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
+    spanned: Spanned<'src, Token>,
     stack: &mut Vec<Frame<'src>>,
     expr: Expr<'src>,
 ) -> Result<State<'src>, SynError> {
-    let string = &lex.inner().source()[byte_span];
-    let binary = match token {
-        Token::ParenR => match stack.pop() {
-            None => unreachable!("Expr::parse() should have returned but did not"),
-            Some(Frame::Delimit(d)) => {
-                return Ok(State::Complete(Expr::Delimit(d, Box::new(expr))));
+    let binary = handle_token! {
+        (lex, spanned) => {
+            (Token::ParenR, _span) => {
+                match stack.pop() {
+                    None => unreachable!("Expr::parse() should have returned but did not"),
+                    Some(Frame::Delimit(d)) => {
+                        return Ok(State::Complete(Expr::Delimit(d, Box::new(expr))));
+                    }
+                    Some(Frame::Operate(..)) => {
+                        unreachable!("Frame::Operate should have been poped but was not")
+                    }
+                }
             }
-            Some(Frame::Operate(..)) => {
-                unreachable!("Frame::Operate should have been poped but was not")
-            }
-        },
-        Token::Pow => Binary::Pow,
-        Token::Mul => Binary::Mul,
-        Token::Div => Binary::Div,
-        Token::Add => Binary::Add,
-        Token::Sub => Binary::Sub,
-        Token::Eq => Binary::Eq,
-        Token::Comma => Binary::Comma,
-        _ => {
-            return Err(SynError::UnexpectedToken {
-                expected: TokenSet::with_values([
-                    Token::Pow,
-                    Token::Mul,
-                    Token::Div,
-                    Token::Add,
-                    Token::Sub,
-                    Token::Eq,
-                    Token::Comma,
-                ]),
-                found: string.to_owned(),
-                cursor_span,
-            });
+            (Token::Pow, _span) => { Binary::Pow }
+            (Token::Mul, _span) => { Binary::Mul }
+            (Token::Div, _span) => { Binary::Div }
+            (Token::Add, _span) => { Binary::Add }
+            (Token::Sub, _span) => { Binary::Sub }
+            (Token::Eq, _span) => { Binary::Eq }
+            (Token::Comma, _span) => { Binary::Comma }
         }
     };
     Ok(State::Operate(Operate::Binary(binary, expr)))
 }
 
 fn append_operate<'src>(
-    (token, Span { byte_span, cursor_span, .. }): Spanned<'src, Token>,
     lex: &mut Prependable<Lex<'src>>,
+    spanned: Spanned<'src, Token>,
     stack: &mut Vec<Frame<'src>>,
     op: Operate<'src>,
 ) -> Result<State<'src>, SynError> {
-    let string = &lex.inner().source()[byte_span];
-    match token {
-        Token::Num => Ok(State::Complete(merge_operate(
-            op,
-            Expr::Primary(Primary::Num(string)),
-        ))),
-        Token::Ident => {
-            let next = lex.expect_token()?;
-            if let (Token::ParenL, _) = &next {
-                stack.push(Frame::Operate(op));
-                Ok(State::Delimit(Delimit::Fn(string)))
-            } else {
-                lex.prepend(Ok(next));
+    handle_token! {
+        (lex, spanned) => {
+            (Token::Num, Span { byte_span, .. }) => {
                 Ok(State::Complete(merge_operate(
                     op,
-                    Expr::Primary(Primary::Var(string)),
+                    Expr::Primary(Primary::Num(&lex.inner().source()[byte_span])),
                 )))
             }
+            (Token::Ident, Span { byte_span, .. }) => {
+                let next = lex.expect_token()?;
+                if let (Token::ParenL, _) = &next {
+                    stack.push(Frame::Operate(op));
+                    Ok(State::Delimit(Delimit::Fn(&lex.inner().source()[byte_span])))
+                } else {
+                    lex.prepend(Ok(next));
+                    Ok(State::Complete(merge_operate(
+                        op,
+                        Expr::Primary(Primary::Var(&lex.inner().source()[byte_span])),
+                    )))
+                }
+            }
+            (Token::ParenL, Span { .. }) => {
+                stack.push(Frame::Operate(op));
+                Ok(State::Delimit(Delimit::Paren))
+            }
+            (Token::Sub, Span { cursor_span, .. }) => {
+                Err(SynError::UnaryInsideExpr { cursor: cursor_span.start })
+            }
         }
-        Token::ParenL => {
-            stack.push(Frame::Operate(op));
-            Ok(State::Delimit(Delimit::Paren))
-        }
-        Token::Sub => Err(SynError::UnaryInsideExpr { cursor: cursor_span.start }),
-        _ => Err(SynError::UnexpectedToken {
-            expected: TokenSet::with_values([Token::Num, Token::Ident, Token::ParenL]),
-            found: string.to_owned(),
-            cursor_span,
-        }),
     }
 }
 

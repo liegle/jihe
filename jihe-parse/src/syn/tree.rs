@@ -23,14 +23,11 @@ pub(crate) enum Fields<'src> {
 
 impl<'src> Syn<'src> for Fields<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
-        match lex.expect_token()? {
-            (Token::BraceL, start) => Ok(Self::parse_named(lex, &start)?),
-            (Token::ParenL, start) => Ok(Self::parse_unnamed(lex, &start)?),
-            (_, Span { byte_span, cursor_span, .. }) => Err(SynError::UnexpectedToken {
-                expected: TokenSet::with_values([Token::BraceL, Token::ParenL]),
-                found: lex.inner().source()[byte_span].to_owned(),
-                cursor_span,
-            }),
+        handle_token! {
+            (lex, lex.expect_token()?) => {
+                (Token::BraceL, start) => { Ok(Self::parse_named(lex, &start)?) }
+                (Token::ParenL, start) => { Ok(Self::parse_unnamed(lex, &start)?) }
+            }
         }
     }
 }
@@ -52,28 +49,19 @@ impl<'src> Fields<'src> {
             };
             let _ = lex.expect_token_is(Token::Colon)?;
             entry.insert(Expr::parse(lex)?.0); // TODO: is span really needed to be returned?
-            match lex.expect_token()? {
-                (Token::BraceR, end) => break end,
-                (Token::Comma, _) => match lex.expect_token()? {
-                    (Token::BraceR, end) => break end,
+            handle_token! {
+                (lex, lex.expect_token()?) => {
+                    (Token::BraceR, end) => { break end }
+                    (Token::Comma, _span) => {}
+                }
+            }
+            handle_token! {
+                (lex, lex.expect_token()?) => {
+                    (Token::BraceR, end) => { break end }
                     (Token::Ident, next) => {
                         byte_span = next.byte_span;
                         cursor_span = next.cursor_span;
                     }
-                    (_, Span { byte_span, cursor_span, .. }) => {
-                        return Err(SynError::UnexpectedToken {
-                            expected: TokenSet::with_values([Token::BraceR, Token::Ident]),
-                            found: lex.inner().source()[byte_span].to_owned(),
-                            cursor_span,
-                        });
-                    }
-                },
-                (_, Span { byte_span, cursor_span, .. }) => {
-                    return Err(SynError::UnexpectedToken {
-                        expected: TokenSet::with_values([Token::BraceR, Token::Comma]),
-                        found: lex.inner().source()[byte_span].to_owned(),
-                        cursor_span,
-                    });
                 }
             }
         };
@@ -87,19 +75,15 @@ impl<'src> Fields<'src> {
         let mut fields = Vec::new();
         let end = loop {
             fields.push(Expr::parse(lex)?.0); // TODO: is span really needed to be returned?
+            handle_token! {
+                (lex, lex.expect_token()?) => {
+                    (Token::ParenR, end) => { break end }
+                    (Token::Comma, _span) => {}
+                }
+            }
             match lex.expect_token()? {
                 (Token::ParenR, end) => break end,
-                (Token::Comma, _) => match lex.expect_token()? {
-                    (Token::ParenR, end) => break end,
-                    spanned => lex.prepend(Ok(spanned)),
-                },
-                (_, Span { byte_span, cursor_span, .. }) => {
-                    return Err(SynError::UnexpectedToken {
-                        expected: TokenSet::with_values([Token::BraceR, Token::Comma]),
-                        found: lex.inner().source()[byte_span].to_owned(),
-                        cursor_span,
-                    });
-                }
+                spanned => lex.prepend(Ok(spanned)),
             }
         };
         Ok((Self::Unnamed(fields), Span::join(start, &end)))

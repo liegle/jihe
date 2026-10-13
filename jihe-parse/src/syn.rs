@@ -8,6 +8,21 @@ use crate::{
 };
 pub(super) use {error::SynError, tree::Tree};
 
+macro_rules! handle_token {
+    {($lex:ident,$expect:expr)=>{$((Token::$token:tt,$span:pat)=>$handle:block)+}} => {
+        match $expect {
+            $((Token::$token, $span) => $handle)+
+            (_, Span { byte_span, cursor_span, .. }) => {
+                return Err(SynError::UnexpectedToken {
+                    expected: TokenSet::with_values([$(Token::$token),+]),
+                    found: $lex.inner().source()[byte_span].to_owned(),
+                    cursor_span,
+                });
+            }
+        }
+    };
+}
+
 mod error;
 mod expr;
 mod prepend;
@@ -85,10 +100,7 @@ impl<'src> Syn<'src> for Statement<'src> {
         let name = &lex.inner().source()[start.byte_span.clone()];
         let _ = lex.expect_token_is(Token::Eq)?;
         let class = &lex.inner().source()[lex.expect_token_is(Token::Ident)?.byte_span];
-        let (args, end) = Fields::parse(lex)?;
-        Ok((
-            Statement { name, class, fields: args },
-            Span::join(&start, &end),
-        ))
+        let (fields, end) = Fields::parse(lex)?;
+        Ok((Statement { name, class, fields }, Span::join(&start, &end)))
     }
 }
