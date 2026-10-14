@@ -15,16 +15,8 @@ pub enum SynError {
         found: String,
         cursor_span: Range<Cursor>,
     },
-    UndefinedStatementClass {
-        found: String,
-        cursor_span: Range<Cursor>,
-    },
     DuplicatedStatementField {
         name: String,
-        cursor_span: Range<Cursor>,
-    },
-    StatementFieldLost {
-        name: &'static str,
         cursor_span: Range<Cursor>,
     },
     UnaryInsideExpr {
@@ -56,24 +48,10 @@ impl Display for SynError {
                     cursor_span.start, cursor_span.end
                 )
             }
-            Self::UndefinedStatementClass { found, cursor_span } => {
-                write!(
-                    f,
-                    "Specified kind not defined: {found} at {}..{}",
-                    cursor_span.start, cursor_span.end
-                )
-            }
             Self::DuplicatedStatementField { name, cursor_span } => {
                 write!(
                     f,
                     "Field {name} has been defined twice at {}..{}",
-                    cursor_span.start, cursor_span.end
-                )
-            }
-            Self::StatementFieldLost { name, cursor_span } => {
-                write!(
-                    f,
-                    "Field {name} is not defined before  {}..{}",
                     cursor_span.start, cursor_span.end
                 )
             }

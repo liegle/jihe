@@ -1,12 +1,10 @@
 use crate::{
     Lex, Span, Spanned,
     lex::{Token, TokenSet},
-    syn::{
-        prepend::Prependable,
-        tree::{Fields, Statement},
-    },
+    syn::{prepend::Prependable, tree::Statement},
 };
-pub(super) use {error::SynError, tree::Tree};
+
+pub(super) use error::SynError;
 
 macro_rules! handle_token {
     {($lex:ident,$expect:expr)=>{$((Token::$token:tt,$span:pat)=>$handle:block)+}} => {
@@ -28,12 +26,28 @@ mod expr;
 mod prepend;
 mod tree;
 
-pub(super) fn syn<'src>(lex: Lex<'src>) -> Result<Spanned<'src, Tree<'src>>, SynError> {
-    let mut lex = Prependable::from_iter(lex);
-    Tree::parse(&mut lex)
+pub(super) struct Syn<'src> {
+    lex: Prependable<Lex<'src>>,
 }
 
-trait Syn<'src>: Sized {
+impl<'src> Syn<'src> {
+    pub(super) fn new(lex: Lex<'src>) -> Self {
+        Self { lex: Prependable::from_iter(lex) }
+    }
+}
+
+impl<'src> Iterator for Syn<'src> {
+    type Item = Result<Spanned<'src, Statement<'src>>, SynError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.lex.next().map(|token| {
+            self.lex.prepend(token);
+            Statement::parse(&mut self.lex)
+        })
+    }
+}
+
+trait Parse<'src>: Sized {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError>;
 }
 
@@ -61,46 +75,5 @@ impl<'src> ExpectToken<'src> for Prependable<Lex<'src>> {
                 cursor_span: span.cursor_span,
             })
         }
-    }
-}
-
-impl<'src> Syn<'src> for Tree<'src> {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
-        let mut start = None;
-        let mut end = None;
-
-        let mut statements = Vec::new();
-        while let Some(token) = lex.next() {
-            lex.prepend(token);
-            let (statement, span) = Statement::parse(lex)?;
-            statements.push(statement);
-            if let None = start {
-                start = Some((span.byte_span.start, span.cursor_span.start));
-            }
-            end = Some((span.byte_span.end, span.cursor_span.end));
-        }
-
-        let span = if let (Some(start), Some(end)) = (start, end) {
-            Span {
-                byte_span: start.0..end.0,
-                cursor_span: start.1..end.1,
-                ..Default::default()
-            }
-        } else {
-            Default::default()
-        };
-
-        Ok((Tree { statements }, span))
-    }
-}
-
-impl<'src> Syn<'src> for Statement<'src> {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
-        let start = lex.expect_token_is(Token::Ident)?;
-        let name = &lex.inner().source()[start.byte_span.clone()];
-        let _ = lex.expect_token_is(Token::Eq)?;
-        let class = &lex.inner().source()[lex.expect_token_is(Token::Ident)?.byte_span];
-        let (fields, end) = Fields::parse(lex)?;
-        Ok((Statement { name, class, fields }, Span::join(&start, &end)))
     }
 }

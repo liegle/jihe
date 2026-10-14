@@ -3,7 +3,7 @@ use std::mem;
 use crate::{
     Lex, Span, Spanned,
     lex::{Token, TokenSet},
-    syn::{ExpectToken, Prependable, Syn, SynError},
+    syn::{ExpectToken, Parse, Prependable, SynError},
 };
 
 #[derive(Clone, Debug)]
@@ -56,7 +56,7 @@ enum_binary! {
     Comma => 0
 }
 
-impl<'src> Syn<'src> for Expr<'src> {
+impl<'src> Parse<'src> for Expr<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
         let first = lex.expect_token()?;
         let start = (first.1.byte_span.start, first.1.cursor_span.start);

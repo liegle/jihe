@@ -3,12 +3,8 @@ use std::collections::{HashMap, hash_map::Entry};
 use crate::{
     Lex, Span, Spanned, SynError,
     lex::{Token, TokenSet},
-    syn::{ExpectToken, Prependable, Syn, expr::Expr},
+    syn::{ExpectToken, Parse, Prependable, expr::Expr},
 };
-
-pub(crate) struct Tree<'src> {
-    pub(super) statements: Vec<Statement<'src>>,
-}
 
 pub(crate) struct Statement<'src> {
     pub(super) name: &'src str,
@@ -16,12 +12,23 @@ pub(crate) struct Statement<'src> {
     pub(super) fields: Fields<'src>,
 }
 
+impl<'src> Parse<'src> for Statement<'src> {
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
+        let start = lex.expect_token_is(Token::Ident)?;
+        let name = &lex.inner().source()[start.byte_span.clone()];
+        let _ = lex.expect_token_is(Token::Eq)?;
+        let class = &lex.inner().source()[lex.expect_token_is(Token::Ident)?.byte_span];
+        let (fields, end) = Fields::parse(lex)?;
+        Ok((Statement { name, class, fields }, Span::join(&start, &end)))
+    }
+}
+
 pub(crate) enum Fields<'src> {
     Named(HashMap<&'src str, Expr<'src>>),
     Unnamed(Vec<Expr<'src>>),
 }
 
-impl<'src> Syn<'src> for Fields<'src> {
+impl<'src> Parse<'src> for Fields<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
         handle_token! {
             (lex, lex.expect_token()?) => {

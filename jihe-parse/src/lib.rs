@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     lex::{Lex, LexError},
-    syn::{SynError, syn},
+    syn::{Syn, SynError},
 };
 
 mod array;
@@ -16,7 +16,7 @@ mod syn;
 
 pub fn parse(source: &str) -> Result<jihe_shared::Content, ParseError> {
     let lex = Lex::new(source);
-    let _tree = syn(lex)?;
+    let _syn = Syn::new(lex);
     Ok(jihe_shared::Content::example())
 }
 
