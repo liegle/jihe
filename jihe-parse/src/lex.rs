@@ -14,8 +14,6 @@ mod set;
 mod test;
 mod token;
 
-pub(super) type LexItem<'src> = Result<Spanned<'src, Token>, LexError>;
-
 pub(super) struct Lex<'src> {
     source: &'src str,
     chars: Peekable<Chars<'src>>,
@@ -60,7 +58,7 @@ impl<'src> Lex<'src> {
 }
 
 impl<'src> Iterator for Lex<'src> {
-    type Item = LexItem<'src>;
+    type Item = Result<Spanned<'src, Token>, LexError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.consume_ignored();

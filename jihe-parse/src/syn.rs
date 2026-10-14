@@ -1,14 +1,22 @@
 use crate::{
     Lex, Span, Spanned,
     lex::{Token, TokenSet},
-    syn::{prepend::Prependable, tree::Statement},
+    syn::{prepend::Prependable, tree::Tree},
 };
 
 pub(super) use error::SynError;
 
+mod error;
+mod prepend;
+
 macro_rules! handle_token {
-    {($lex:ident,$expect:expr)=>{$((Token::$token:tt,$span:pat)=>$handle:block)+}} => {
-        match $expect {
+    (
+        $target:expr => {
+            $((Token::$token:tt, $span:pat) => $handle:block)+
+            _ => UnexpectedToken @ $lex:ident
+        }
+    ) => {
+        match $target {
             $((Token::$token, $span) => $handle)+
             (_, Span { byte_span, cursor_span, .. }) => {
                 return Err(SynError::UnexpectedToken {
@@ -21,9 +29,7 @@ macro_rules! handle_token {
     };
 }
 
-mod error;
-mod expr;
-mod prepend;
+mod node;
 mod tree;
 
 pub(super) struct Syn<'src> {
@@ -37,12 +43,12 @@ impl<'src> Syn<'src> {
 }
 
 impl<'src> Iterator for Syn<'src> {
-    type Item = Result<Spanned<'src, Statement<'src>>, SynError>;
+    type Item = Result<Spanned<'src, Tree<'src>>, SynError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.lex.next().map(|token| {
             self.lex.prepend(token);
-            Statement::parse(&mut self.lex)
+            Tree::parse(&mut self.lex)
         })
     }
 }
