@@ -1,12 +1,10 @@
 // TODO: to proc macro
 use std::collections::{HashMap, HashSet};
 
-use crate::{
-    intset::IntSet,
-    lex::{
-        automata::graph::{Determinstic, Nondeterminstic},
-        token::{Character, Repeat},
-    },
+use crate::lex::{
+    automata::graph::{Determinstic, Nondeterminstic},
+    set::IntSet,
+    token::{Character, Repeat},
 };
 
 mod graph;

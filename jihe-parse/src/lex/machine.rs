@@ -1,11 +1,9 @@
 use std::{cmp::Ordering, collections::HashSet};
 
-use crate::{
-    array::DynArray,
-    lex::{
-        automata::Stage,
-        token::{Character, PATTERN_COUNT, PATTERNS, Pattern, Token},
-    },
+use crate::lex::{
+    TokenSet,
+    automata::Stage,
+    token::{Character, PATTERN_COUNT, PATTERNS, Pattern},
 };
 
 #[derive(Clone)]
@@ -35,9 +33,9 @@ impl Machine {
         next
     }
 
-    pub(super) fn end(&self) -> DynArray<Token, PATTERN_COUNT> {
+    pub(super) fn end(&self) -> TokenSet {
         let mut greatest_priority = 0;
-        let mut matched = DynArray::new();
+        let mut matched = TokenSet::new();
         for (stage, pattern) in self.stages.iter().zip(PATTERNS.iter()) {
             let Pattern { token: kind, priority, automata } = pattern;
             if !automata.is_exit(*stage) {
@@ -47,10 +45,10 @@ impl Machine {
                 Ordering::Greater => {
                     greatest_priority = *priority;
                     matched.clear();
-                    matched.push(*kind);
+                    matched.insert(*kind);
                 }
                 Ordering::Equal => {
-                    matched.push(*kind);
+                    matched.insert(*kind);
                 }
                 _ => {}
             }

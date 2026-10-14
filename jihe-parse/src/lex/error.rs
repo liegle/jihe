@@ -7,8 +7,7 @@ use std::{
 
 use crate::{
     Cursor,
-    array::DynArray,
-    lex::token::{Character, PATTERN_COUNT, Token},
+    lex::{TokenSet, token::Character},
 };
 
 #[derive(Debug)]
@@ -23,7 +22,7 @@ pub enum LexError {
         cursor: Cursor,
     },
     MultipleMatching {
-        matched: DynArray<Token, PATTERN_COUNT>,
+        matched: TokenSet,
         range: Range<Cursor>,
     },
 }
@@ -59,7 +58,7 @@ impl Display for LexError {
                     range.start, range.end,
                 )?;
                 let mut is_begin = true;
-                for k in &matched[..] {
+                for k in matched.into_iter() {
                     if is_begin {
                         write!(f, "{k:?}")?;
                         is_begin = false;

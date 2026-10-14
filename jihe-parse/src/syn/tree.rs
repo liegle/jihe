@@ -32,67 +32,55 @@ impl<'src> Parse<'src> for Fields<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
         handle_token! {
             (lex, lex.expect_token()?) => {
-                (Token::BraceL, start) => { Ok(Self::parse_named(lex, &start)?) }
-                (Token::ParenL, start) => { Ok(Self::parse_unnamed(lex, &start)?) }
+                (Token::BraceL, start) => {
+                    let mut fields = HashMap::new();
+                    let Span { mut byte_span, mut cursor_span, .. } = lex.expect_token_is(Token::Ident)?;
+                    let end = loop {
+                        let name = &lex.inner().source()[byte_span];
+                        let Entry::Vacant(entry) = fields.entry(name) else {
+                            return Err(SynError::DuplicatedStatementField {
+                                name: name.to_owned(),
+                                cursor_span,
+                            });
+                        };
+                        let _ = lex.expect_token_is(Token::Colon)?;
+                        entry.insert(Expr::parse(lex)?.0); // TODO: is span really needed to be returned?
+                        handle_token! {
+                            (lex, lex.expect_token()?) => {
+                                (Token::BraceR, end) => { break end }
+                                (Token::Comma, _span) => {}
+                            }
+                        }
+                        handle_token! {
+                            (lex, lex.expect_token()?) => {
+                                (Token::BraceR, end) => { break end }
+                                (Token::Ident, next) => {
+                                    byte_span = next.byte_span;
+                                    cursor_span = next.cursor_span;
+                                }
+                            }
+                        }
+                    };
+                    Ok((Self::Named(fields), Span::join(&start, &end)))
+                }
+                (Token::ParenL, start) => {
+                    let mut fields = Vec::new();
+                    let end = loop {
+                        fields.push(Expr::parse(lex)?.0); // TODO: is span really needed to be returned?
+                        handle_token! {
+                            (lex, lex.expect_token()?) => {
+                                (Token::ParenR, end) => { break end }
+                                (Token::Comma, _span) => {}
+                            }
+                        }
+                        match lex.expect_token()? {
+                            (Token::ParenR, end) => break end,
+                            spanned => lex.prepend(Ok(spanned)),
+                        }
+                    };
+                    Ok((Self::Unnamed(fields), Span::join(&start, &end)))
+                }
             }
         }
-    }
-}
-
-impl<'src> Fields<'src> {
-    fn parse_named(
-        lex: &mut Prependable<Lex<'src>>,
-        start: &Span<'src>,
-    ) -> Result<Spanned<'src, Self>, SynError> {
-        let mut fields = HashMap::new();
-        let Span { mut byte_span, mut cursor_span, .. } = lex.expect_token_is(Token::Ident)?;
-        let end = loop {
-            let name = &lex.inner().source()[byte_span];
-            let Entry::Vacant(entry) = fields.entry(name) else {
-                return Err(SynError::DuplicatedStatementField {
-                    name: name.to_owned(),
-                    cursor_span,
-                });
-            };
-            let _ = lex.expect_token_is(Token::Colon)?;
-            entry.insert(Expr::parse(lex)?.0); // TODO: is span really needed to be returned?
-            handle_token! {
-                (lex, lex.expect_token()?) => {
-                    (Token::BraceR, end) => { break end }
-                    (Token::Comma, _span) => {}
-                }
-            }
-            handle_token! {
-                (lex, lex.expect_token()?) => {
-                    (Token::BraceR, end) => { break end }
-                    (Token::Ident, next) => {
-                        byte_span = next.byte_span;
-                        cursor_span = next.cursor_span;
-                    }
-                }
-            }
-        };
-        Ok((Self::Named(fields), Span::join(start, &end)))
-    }
-
-    fn parse_unnamed(
-        lex: &mut Prependable<Lex<'src>>,
-        start: &Span<'src>,
-    ) -> Result<Spanned<'src, Self>, SynError> {
-        let mut fields = Vec::new();
-        let end = loop {
-            fields.push(Expr::parse(lex)?.0); // TODO: is span really needed to be returned?
-            handle_token! {
-                (lex, lex.expect_token()?) => {
-                    (Token::ParenR, end) => { break end }
-                    (Token::Comma, _span) => {}
-                }
-            }
-            match lex.expect_token()? {
-                (Token::ParenR, end) => break end,
-                spanned => lex.prepend(Ok(spanned)),
-            }
-        };
-        Ok((Self::Unnamed(fields), Span::join(start, &end)))
     }
 }

@@ -27,6 +27,10 @@ impl IntSet {
         self.0 == 0
     }
 
+    pub(super) fn clear(&mut self) {
+        self.0 = 0;
+    }
+
     pub(super) fn insert(&mut self, value: u8) -> Option<bool> {
         if value >= Self::CAPACITY {
             None
@@ -110,6 +114,8 @@ mod test {
         assert_matches!(set.insert(31), Some(false));
         assert_matches!(set.insert(0), Some(true));
         assert_matches!(set.contains(0), Some(true));
+        set.clear();
+        assert_matches!(set.contains(0), Some(false));
     }
 
     #[test]

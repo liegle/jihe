@@ -9,8 +9,6 @@ use crate::{
     syn::{Syn, SynError},
 };
 
-mod array;
-mod intset;
 mod lex;
 mod syn;
 

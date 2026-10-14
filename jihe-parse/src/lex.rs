@@ -9,6 +9,7 @@ use crate::{Cursor, Span, Spanned, lex::machine::Machine};
 mod automata;
 mod error;
 mod machine;
+mod set;
 #[cfg(test)]
 mod test;
 mod token;
@@ -90,25 +91,28 @@ impl<'src> Iterator for Lex<'src> {
             // v v v v x x x x ...
             //   curr^ ^peek
             let matched = machine.end();
-            match &matched[..] {
-                [] => Some(Err(LexError::UnexpectedMid {
+            let mut iter = matched.into_iter();
+            let Some(token) = iter.next() else {
+                return Some(Err(LexError::UnexpectedMid {
                     expected: machine.gather_expected(),
                     found: c,
                     cursor: self.cursor_ptr,
-                })),
-                [token] => Some(Ok((
-                    *token,
-                    Span {
-                        byte_span: byte_begin..self.byte_ptr,
-                        cursor_span: cursor_begin..self.cursor_ptr,
-                        ..Default::default()
-                    },
-                ))),
-                _ => Some(Err(LexError::MultipleMatching {
+                }));
+            };
+            let None = iter.next() else {
+                return Some(Err(LexError::MultipleMatching {
                     matched,
                     range: cursor_begin..self.cursor_ptr,
-                })),
-            }
+                }));
+            };
+            Some(Ok((
+                token,
+                Span {
+                    byte_span: byte_begin..self.byte_ptr,
+                    cursor_span: cursor_begin..self.cursor_ptr,
+                    ..Default::default()
+                },
+            )))
         } else {
             //     o last
             // v v v _ _

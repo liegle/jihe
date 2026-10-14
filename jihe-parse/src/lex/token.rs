@@ -1,6 +1,6 @@
-use crate::{
-    intset::{self, IntSet},
-    lex::automata::Automata,
+use crate::lex::{
+    automata::Automata,
+    set::{self, IntSet},
 };
 
 use std::sync::LazyLock;
@@ -110,12 +110,24 @@ enum_token! {
 pub struct TokenSet(IntSet);
 
 impl TokenSet {
+    pub(super) fn new() -> Self {
+        Self(IntSet::new())
+    }
+
     pub(crate) fn with_values<T: IntoIterator<Item = Token>>(values: T) -> Self {
         Self(IntSet::with_values(values.into_iter().map(|k| k as u8)))
     }
+
+    pub(super) fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    pub(super) fn insert(&mut self, token: Token) -> Option<bool> {
+        self.0.insert(token as u8)
+    }
 }
 
-pub struct IntoIter(intset::IntoIter);
+pub struct IntoIter(set::IntoIter);
 
 impl IntoIterator for TokenSet {
     type Item = Token;
