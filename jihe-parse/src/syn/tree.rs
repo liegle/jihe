@@ -6,10 +6,11 @@ use crate::{
     syn::{ExpectToken, Parse, Prependable, node::Node},
 };
 
+#[derive(Debug)]
 pub(crate) struct Tree<'src> {
-    pub(super) name: &'src str,
-    pub(super) class: &'src str,
-    pub(super) fields: Fields<'src>,
+    pub(crate) name: &'src str,
+    pub(crate) class: &'src str,
+    pub(crate) fields: Fields<'src>,
 }
 
 impl<'src> Parse<'src> for Tree<'src> {
@@ -23,6 +24,7 @@ impl<'src> Parse<'src> for Tree<'src> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum Fields<'src> {
     Named(HashMap<&'src str, Node<'src>>),
     Unnamed(Vec<Node<'src>>),
@@ -86,5 +88,78 @@ impl<'src> Parse<'src> for Fields<'src> {
                 _ => UnexpectedToken @ lex
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        Cursor,
+        syn::node::{Binary, Primary},
+    };
+
+    use std::assert_matches;
+
+    use super::*;
+
+    #[test]
+    fn test_named() {
+        let mut lex =
+            Prependable::from_iter(Lex::new("len = Fn { def: (x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }"));
+        let spanned = Tree::parse(&mut lex);
+        let Ok((tree, Span { byte_span, cursor_span, .. })) = spanned else {
+            panic!("test_named failed 1, left: {spanned:?}");
+        };
+        assert_eq!(
+            &lex.inner().source()[byte_span],
+            "len = Fn { def: (x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }"
+        );
+        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
+        assert_matches!(cursor_span.end, Cursor { line: 0, col: 48 });
+        assert_eq!(tree.name, "len");
+        assert_eq!(tree.class, "Fn");
+        let Fields::Named(fields) = tree.fields else {
+            panic!("test_named failed 2, left: {:?}", tree.fields);
+        };
+        assert_eq!(fields.len(), 1);
+        let node = fields.get("def");
+        let Some(node) = node else {
+            panic!("test_named failed 3, left: {node:?}");
+        };
+        let Node::Binary(Binary::Eq, ..) = node else {
+            panic!("test_named failed 4, left: {node:?}");
+        };
+    }
+
+    #[test]
+    fn test_unnamed() {
+        let mut lex = Prependable::from_iter(Lex::new("alpha = Slide(0, 5)"));
+        let spanned = Tree::parse(&mut lex);
+        let Ok((tree, Span { byte_span, cursor_span, .. })) = spanned else {
+            panic!("test_unnamed failed 1, left: {spanned:?}");
+        };
+        assert_eq!(&lex.inner().source()[byte_span], "alpha = Slide(0, 5)");
+        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
+        assert_matches!(cursor_span.end, Cursor { line: 0, col: 19 });
+        assert_eq!(tree.name, "alpha");
+        assert_eq!(tree.class, "Slide");
+        let Fields::Unnamed(fields) = tree.fields else {
+            panic!("test_unnamed failed 2, left: {:?}", tree.fields);
+        };
+        assert_eq!(fields.len(), 2);
+        let node = fields.get(0);
+        let Some(node) = node else {
+            panic!("test_unnamed failed 3, left: {node:?}");
+        };
+        let Node::Primary(Primary::Num("0")) = node else {
+            panic!("test_unnamed failed 4, left: {node:?}");
+        };
+        let node = fields.get(1);
+        let Some(node) = node else {
+            panic!("test_unnamed failed 5, left: {node:?}");
+        };
+        let Node::Primary(Primary::Num("5")) = node else {
+            panic!("test_unnamed failed 6, left: {node:?}");
+        };
     }
 }
