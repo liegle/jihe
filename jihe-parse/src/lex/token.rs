@@ -3,7 +3,10 @@ use crate::lex::{
     set::{self, IntSet},
 };
 
-use std::sync::LazyLock;
+use std::{
+    fmt::{self, Display, Formatter},
+    sync::LazyLock,
+};
 
 pub(crate) struct Pattern {
     pub(super) token: Token,
@@ -25,6 +28,16 @@ impl From<char> for Character {
             'a'..='z' | 'A'..='Z' => Character::Unicode,
             c if !c.is_ascii() => Character::Unicode,
             c => Character::Single(c),
+        }
+    }
+}
+
+impl Display for Character {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Single(c) => write!(f, "{}", c),
+            Self::Number => write!(f, "number"),
+            Self::Unicode => write!(f, "english letters or other unicode characters"),
         }
     }
 }
@@ -65,10 +78,9 @@ macro_rules! repeat {
     (*) => { Repeat::ZeroOrMore };
 }
 
-// TODO: impl Display
 #[rustfmt::skip]
 macro_rules! enum_token {
-    ($(($prio:literal)$token:ident = [$($patt:tt)+])+) => {
+    ($(($prio:literal)$token:ident = [$($patt:tt)+] @ $disp:literal)+) => {
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
         #[repr(u8)]
         pub enum Token {
@@ -85,25 +97,33 @@ macro_rules! enum_token {
             assert!(count < IntSet::CAPACITY, "Count of token is to large to use intset");
             count as usize
         };
+
+        impl Display for Token {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                match self {
+                    $(Self::$token => write!(f, "{}", $disp)),+
+                }
+            }
+        }
     };
 }
 
 #[rustfmt::skip]
 enum_token! {
-    (0)Num    = [(num)+, ('.')?, (num)*]
-    (0)Ident  = [(uni)+, ('\'')*]
-    (0)BraceL = [('{')!]
-    (0)BraceR = [('}')!]
-    (0)ParenL = [('(')!]
-    (0)ParenR = [(')')!]
-    (0)Pow    = [('^')!]
-    (0)Mul    = [('*')!]
-    (0)Div    = [('/')!]
-    (0)Add    = [('+')!]
-    (0)Sub    = [('-')!]
-    (0)Eq     = [('=')!]
-    (0)Comma  = [(',')!]
-    (0)Colon  = [(':')!]
+    (0)Num    = [(num)+, ('.')?, (num)*] @ "number"
+    (0)Ident  = [(uni)+, ('\'')*] @ "identifier"
+    (0)BraceL = [('{')!] @ '{'
+    (0)BraceR = [('}')!] @ '}'
+    (0)ParenL = [('(')!] @ '('
+    (0)ParenR = [(')')!] @ ')'
+    (0)Pow    = [('^')!] @ '^'
+    (0)Mul    = [('*')!] @ '*'
+    (0)Div    = [('/')!] @ '/'
+    (0)Add    = [('+')!] @ '+'
+    (0)Sub    = [('-')!] @ '-'
+    (0)Eq     = [('=')!] @ '='
+    (0)Comma  = [(',')!] @ ','
+    (0)Colon  = [(':')!] @ ':'
 }
 
 #[derive(Clone, Copy, Debug)]

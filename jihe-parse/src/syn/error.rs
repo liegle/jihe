@@ -36,10 +36,10 @@ impl Display for SynError {
                 let mut is_begin = true;
                 for e in expected.into_iter() {
                     if is_begin {
-                        write!(f, "{e:?}")?;
+                        write!(f, "{e}")?;
                         is_begin = false;
                     } else {
-                        write!(f, "or {e:?}")?;
+                        write!(f, "or {e}")?;
                     }
                 }
                 write!(

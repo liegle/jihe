@@ -43,10 +43,10 @@ impl Display for LexError {
                 let mut is_begin = true;
                 for e in expected {
                     if is_begin {
-                        write!(f, "{e:?}")?;
+                        write!(f, "{e}")?;
                         is_begin = false;
                     } else {
-                        write!(f, "or {e:?}")?;
+                        write!(f, "or {e}")?;
                     }
                 }
                 write!(f, ", found '{found}' at {cursor}")
@@ -58,12 +58,12 @@ impl Display for LexError {
                     range.start, range.end,
                 )?;
                 let mut is_begin = true;
-                for k in matched.into_iter() {
+                for t in matched.into_iter() {
                     if is_begin {
-                        write!(f, "{k:?}")?;
+                        write!(f, "{t}")?;
                         is_begin = false;
                     } else {
-                        write!(f, ", {k:?}")?;
+                        write!(f, ", {t}")?;
                     }
                 }
                 write!(f, "], this usually means a wrong design in token priority")
