@@ -26,8 +26,8 @@ impl<'src> Parse<'src> for Tree<'src> {
 
 #[derive(Debug)]
 pub(crate) enum Fields<'src> {
-    Named(HashMap<&'src str, Node<'src>>),
-    Unnamed(Vec<Node<'src>>),
+    Named(HashMap<&'src str, Spanned<'src, Node<'src>>>),
+    Unnamed(Vec<Spanned<'src, Node<'src>>>),
 }
 
 impl<'src> Parse<'src> for Fields<'src> {
@@ -38,7 +38,7 @@ impl<'src> Parse<'src> for Fields<'src> {
                     let mut fields = HashMap::new();
                     let Span { mut byte_span, mut cursor_span, .. } = lex.expect_token_is(Token::Ident)?;
                     let end = loop {
-                        let name = &lex.inner().source()[byte_span];
+                        let name = &lex.inner().source()[byte_span.clone()];
                         let Entry::Vacant(entry) = fields.entry(name) else {
                             return Err(SynError::DuplicatedStatementField {
                                 name: name.to_owned(),
@@ -46,7 +46,12 @@ impl<'src> Parse<'src> for Fields<'src> {
                             });
                         };
                         let _ = lex.expect_token_is(Token::Colon)?;
-                        entry.insert(Node::parse(lex)?.0); // TODO: is span really needed to be returned?
+                        let (node, end) = Node::parse(lex)?;
+                        entry.insert((node, Span {
+                            byte_span: byte_span.start..end.byte_span.end,
+                            cursor_span: cursor_span.start..end.cursor_span.end,
+                            ..Default::default()
+                        }));
                         handle_token! {
                             lex.expect_token()? => {
                                 (Token::BraceR, end) => { break end }
@@ -70,7 +75,7 @@ impl<'src> Parse<'src> for Fields<'src> {
                 (Token::ParenL, start) => {
                     let mut fields = Vec::new();
                     let end = loop {
-                        fields.push(Node::parse(lex)?.0); // TODO: is span really needed to be returned?
+                        fields.push(Node::parse(lex)?);
                         handle_token! {
                             lex.expect_token()? => {
                                 (Token::ParenR, end) => { break end }
@@ -126,7 +131,7 @@ mod test {
         let Some(node) = node else {
             panic!("test_named failed 3, left: {node:?}");
         };
-        let Node::Binary(Binary::Eq, ..) = node else {
+        let Node::Binary(Binary::Eq, ..) = node.0 else {
             panic!("test_named failed 4, left: {node:?}");
         };
     }
@@ -151,14 +156,14 @@ mod test {
         let Some(node) = node else {
             panic!("test_unnamed failed 3, left: {node:?}");
         };
-        let Node::Primary(Primary::Num("0")) = node else {
+        let Node::Primary(Primary::Num("0")) = node.0 else {
             panic!("test_unnamed failed 4, left: {node:?}");
         };
         let node = fields.get(1);
         let Some(node) = node else {
             panic!("test_unnamed failed 5, left: {node:?}");
         };
-        let Node::Primary(Primary::Num("5")) = node else {
+        let Node::Primary(Primary::Num("5")) = node.0 else {
             panic!("test_unnamed failed 6, left: {node:?}");
         };
     }
