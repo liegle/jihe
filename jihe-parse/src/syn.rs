@@ -1,10 +1,14 @@
+pub(super) use crate::syn::{
+    error::SynError,
+    node::{Binary, Delimit, Node, Primary, Unary},
+    tree::{Fields, Tree},
+};
+
 use crate::{
     Lex, Span, Spanned,
     lex::{Token, TokenSet},
-    syn::{prepend::Prependable, tree::Tree},
+    syn::prepend::Prependable,
 };
-
-pub(super) use error::SynError;
 
 mod error;
 mod prepend;
