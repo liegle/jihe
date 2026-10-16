@@ -4,7 +4,10 @@ use std::{
     ops::Range,
 };
 
-use crate::{Cursor, LexError, lex::TokenSet};
+use crate::{
+    Cursor, LexError,
+    lex::{Token, TokenSet},
+};
 
 #[derive(Debug)]
 pub enum SynError {
@@ -20,6 +23,10 @@ pub enum SynError {
         cursor_span: Range<Cursor>,
     },
     UnaryInsideExpr {
+        cursor: Cursor,
+    },
+    DismatchDelimit {
+        expected: Token,
         cursor: Cursor,
     },
 }
@@ -60,6 +67,9 @@ impl Display for SynError {
                     f,
                     "Unary operator at {cursor} inside expression should be surrounded by '(' & ')'"
                 )
+            }
+            Self::DismatchDelimit { expected, cursor } => {
+                write!(f, "Delimit dismatches at {cursor}, expected is {expected}")
             }
         }
     }

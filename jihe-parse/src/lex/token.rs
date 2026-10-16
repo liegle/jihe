@@ -112,10 +112,6 @@ macro_rules! enum_token {
 enum_token! {
     (0)Num    = [(num)+, ('.')?, (num)*] @ "number"
     (0)Ident  = [(uni)+, ('\'')*] @ "identifier"
-    (0)BraceL = [('{')!] @ '{'
-    (0)BraceR = [('}')!] @ '}'
-    (0)ParenL = [('(')!] @ '('
-    (0)ParenR = [(')')!] @ ')'
     (0)Pow    = [('^')!] @ '^'
     (0)Mul    = [('*')!] @ '*'
     (0)Div    = [('/')!] @ '/'
@@ -124,6 +120,13 @@ enum_token! {
     (0)Eq     = [('=')!] @ '='
     (0)Comma  = [(',')!] @ ','
     (0)Colon  = [(':')!] @ ':'
+    (0)BraceL = [('{')!] @ '{'
+    (0)BraceR = [('}')!] @ '}'
+    (0)ParenL = [('(')!] @ '('
+    (0)ParenR = [(')')!] @ ')'
+    (0)SlashF = [('/')!, ('/')!] @ "//"
+    (0)SlashB = [('\\')!, ('\\')!] @ "\\\\"
+    (0)Bar    = [('|')!] @ '|'
 }
 
 #[derive(Clone, Copy, Debug)]

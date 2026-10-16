@@ -1,7 +1,7 @@
 use std::mem;
 
 use crate::{
-    Lex, Span, Spanned,
+    Cursor, Lex, Span, Spanned,
     lex::{Token, TokenSet},
     syn::{ExpectToken, Parse, Prependable, SynError},
 };
@@ -11,9 +11,9 @@ use crate::{
 #[derive(Clone, Debug)]
 pub(crate) enum Node<'src> {
     Primary(Primary<'src>),
-    Delimit(Delimit<'src>, Box<Node<'src>>),
     Unary(Unary, Box<Node<'src>>),
     Binary(Binary, Box<Node<'src>>, Box<Node<'src>>),
+    Delimit(Delimit<'src>, Box<Node<'src>>),
 }
 
 #[derive(Clone, Debug)]
@@ -26,6 +26,9 @@ pub(crate) enum Primary<'src> {
 pub(crate) enum Delimit<'src> {
     Fn(&'src str),
     Paren,
+    Floor,
+    Ceil,
+    Abs,
 }
 
 macro_rules! enum_unary {
@@ -100,11 +103,11 @@ impl<'src> Parse<'src> for Node<'src> {
             curr = match curr {
                 State::None => begin_expr(lex, spanned)?,
                 State::Complete(node) => append_complete(lex, spanned, &mut stack, node)?,
+                State::Operate(operate) => append_operate(lex, spanned, &mut stack, operate)?,
                 State::Delimit(delimit) => {
                     stack.push(Frame::Delimit(delimit));
                     begin_expr(lex, spanned)?
                 }
-                State::Operate(op) => append_operate(lex, spanned, &mut stack, op)?,
             };
             curr = rewind_stack(&mut stack, curr);
         }
@@ -117,21 +120,24 @@ enum Operate<'src> {
 }
 
 enum Frame<'src> {
-    Delimit(Delimit<'src>),
     Operate(Operate<'src>),
+    Delimit(Delimit<'src>),
 }
 
 enum State<'src> {
     None,
     Complete(Node<'src>),
-    Delimit(Delimit<'src>),
     Operate(Operate<'src>),
+    Delimit(Delimit<'src>),
 }
 
 fn begin_expr<'src>(
     lex: &mut Prependable<Lex<'src>>,
     spanned: Spanned<'src, Token>,
 ) -> Result<State<'src>, SynError> {
+    fn delimit<'src>(delimit: Delimit<'src>) -> Result<State<'src>, SynError> {
+        Ok(State::Delimit(delimit))
+    }
     handle_token! {
         spanned => {
             (Token::Num, Span { byte_span, .. }) => {
@@ -146,12 +152,11 @@ fn begin_expr<'src>(
                     Ok(State::Complete(Node::Primary(Primary::Var(&lex.inner().source()[byte_span]))))
                 }
             }
-            (Token::ParenL, _) => {
-                Ok(State::Delimit(Delimit::Paren))
-            }
-            (Token::Sub, _) => {
-                Ok(State::Operate(Operate::Unary(Unary::Neg)))
-            }
+            (Token::Sub, _) => { Ok(State::Operate(Operate::Unary(Unary::Neg))) }
+            (Token::ParenL, _) => { delimit(Delimit::Paren) }
+            (Token::SlashF, _) => { delimit(Delimit::Ceil) }
+            (Token::SlashB, _) => { delimit(Delimit::Floor) }
+            (Token::Bar, _) => { delimit(Delimit::Abs) }
             _ => UnexpectedToken @ lex
         }
     }
@@ -163,73 +168,110 @@ fn append_complete<'src>(
     stack: &mut Vec<Frame<'src>>,
     node: Node<'src>,
 ) -> Result<State<'src>, SynError> {
-    let binary = handle_token! {
-        spanned => {
-            (Token::ParenR, _) => {
-                match stack.pop() {
-                    None => unreachable!("Expr::parse() should have returned but did not"),
-                    Some(Frame::Delimit(d)) => {
-                        return Ok(State::Complete(Node::Delimit(d, Box::new(node))));
-                    }
-                    Some(Frame::Operate(..)) => {
-                        unreachable!("Frame::Operate should have been poped but was not")
-                    }
+    fn binary<'src>(binary: Binary, node: Node<'src>) -> Result<State<'src>, SynError> {
+        Ok(State::Operate(Operate::Binary(binary, node)))
+    }
+    fn delimit<'src>(
+        token: Token,
+        stack: &mut Vec<Frame<'src>>,
+        node: Node<'src>,
+        cursor: Cursor,
+    ) -> Result<State<'src>, SynError> {
+        match stack.pop() {
+            None => unreachable!("Expr::parse() should have returned but did not"),
+            Some(Frame::Operate(..)) => {
+                unreachable!("Frame::Operate should have been poped but was not")
+            }
+            Some(Frame::Delimit(delimit)) => {
+                let expected = match delimit {
+                    Delimit::Fn(..) | Delimit::Paren => Token::ParenR,
+                    Delimit::Floor => Token::SlashF,
+                    Delimit::Ceil => Token::SlashB,
+                    Delimit::Abs => Token::Bar,
+                };
+                if token == expected {
+                    Ok(State::Complete(Node::Delimit(delimit, Box::new(node))))
+                } else {
+                    Err(SynError::DismatchDelimit { expected, cursor })
                 }
             }
-            (Token::Pow, _) => { Binary::Pow }
-            (Token::Mul, _) => { Binary::Mul }
-            (Token::Div, _) => { Binary::Div }
-            (Token::Add, _) => { Binary::Add }
-            (Token::Sub, _) => { Binary::Sub }
-            (Token::Eq, _) => { Binary::Eq }
-            (Token::Comma, _) => { Binary::Comma }
-            _ => UnexpectedToken @ lex
         }
-    };
-    Ok(State::Operate(Operate::Binary(binary, node)))
-}
-
-fn append_operate<'src>(
-    lex: &mut Prependable<Lex<'src>>,
-    spanned: Spanned<'src, Token>,
-    stack: &mut Vec<Frame<'src>>,
-    op: Operate<'src>,
-) -> Result<State<'src>, SynError> {
+    }
     handle_token! {
         spanned => {
-            (Token::Num, Span { byte_span, .. }) => {
-                Ok(State::Complete(merge_operate(
-                    op,
-                    Node::Primary(Primary::Num(&lex.inner().source()[byte_span])),
-                )))
+            (Token::Pow, _) => { binary(Binary::Pow, node) }
+            (Token::Mul, _) => { binary(Binary::Mul, node) }
+            (Token::Div, _) => { binary(Binary::Div, node) }
+            (Token::Add, _) => { binary(Binary::Add, node) }
+            (Token::Sub, _) => { binary(Binary::Sub, node) }
+            (Token::Eq, _) => { binary(Binary::Eq, node) }
+            (Token::Comma, _) => { binary(Binary::Comma, node) }
+            (Token::ParenR, Span { cursor_span, .. }) => {
+                delimit(Token::ParenR, stack, node, cursor_span.start)
             }
-            (Token::Ident, Span { byte_span, .. }) => {
-                let next = lex.expect_token()?;
-                if let (Token::ParenL, _) = &next {
-                    stack.push(Frame::Operate(op));
-                    Ok(State::Delimit(Delimit::Fn(&lex.inner().source()[byte_span])))
-                } else {
-                    lex.prepend(Ok(next));
-                    Ok(State::Complete(merge_operate(
-                        op,
-                        Node::Primary(Primary::Var(&lex.inner().source()[byte_span])),
-                    )))
-                }
+            (Token::SlashF, Span { cursor_span, .. }) => {
+                delimit(Token::SlashF, stack, node, cursor_span.start)
             }
-            (Token::ParenL, Span { .. }) => {
-                stack.push(Frame::Operate(op));
-                Ok(State::Delimit(Delimit::Paren))
+            (Token::SlashB, Span { cursor_span, .. }) => {
+                delimit(Token::SlashB, stack, node, cursor_span.start)
             }
-            (Token::Sub, Span { cursor_span, .. }) => {
-                Err(SynError::UnaryInsideExpr { cursor: cursor_span.start })
+            (Token::Bar, Span { cursor_span, .. }) => {
+                delimit(Token::Bar, stack, node, cursor_span.start)
             }
             _ => UnexpectedToken @ lex
         }
     }
 }
 
-fn merge_operate<'src>(op: Operate<'src>, next: Node<'src>) -> Node<'src> {
-    match op {
+fn append_operate<'src>(
+    lex: &mut Prependable<Lex<'src>>,
+    spanned: Spanned<'src, Token>,
+    stack: &mut Vec<Frame<'src>>,
+    operate: Operate<'src>,
+) -> Result<State<'src>, SynError> {
+    fn delimit<'src>(
+        delimit: Delimit<'src>,
+        stack: &mut Vec<Frame<'src>>,
+        operate: Operate<'src>,
+    ) -> Result<State<'src>, SynError> {
+        stack.push(Frame::Operate(operate));
+        Ok(State::Delimit(delimit))
+    }
+    handle_token! {
+        spanned => {
+            (Token::Num, Span { byte_span, .. }) => {
+                Ok(State::Complete(merge_operate(
+                    operate,
+                    Node::Primary(Primary::Num(&lex.inner().source()[byte_span])),
+                )))
+            }
+            (Token::Ident, Span { byte_span, .. }) => {
+                let next = lex.expect_token()?;
+                if let (Token::ParenL, _) = &next {
+                    stack.push(Frame::Operate(operate));
+                    Ok(State::Delimit(Delimit::Fn(&lex.inner().source()[byte_span])))
+                } else {
+                    lex.prepend(Ok(next));
+                    Ok(State::Complete(merge_operate(
+                        operate,
+                        Node::Primary(Primary::Var(&lex.inner().source()[byte_span])),
+                    )))
+                }
+            }
+            (Token::Sub, Span { cursor_span, .. }) => {
+                return Err(SynError::UnaryInsideExpr { cursor: cursor_span.start })
+            }
+            (Token::ParenL, _) => { delimit(Delimit::Paren, stack, operate) }
+            (Token::SlashF, _) => { delimit(Delimit::Ceil, stack, operate) }
+            (Token::SlashB, _) => { delimit(Delimit::Floor, stack, operate) }
+            (Token::Bar, _) => { delimit(Delimit::Abs, stack, operate) }
+            _ => UnexpectedToken @ lex
+        }
+    }
+}
+
+fn merge_operate<'src>(operate: Operate<'src>, next: Node<'src>) -> Node<'src> {
+    match operate {
         Operate::Unary(unary) => Node::Unary(unary, Box::new(next)),
         Operate::Binary(binary, mut node) => {
             let prio = BINARY_PRIORITY[binary as usize];
@@ -263,7 +305,7 @@ fn rewind_stack<'src>(stack: &mut Vec<Frame<'src>>, mut curr: State<'src>) -> St
         match stack.pop() {
             None => return State::Complete(node),
             Some(Frame::Operate(operate)) => curr = State::Complete(merge_operate(operate, node)),
-            Some(f) => {
+            Some(f @ Frame::Delimit(..)) => {
                 stack.push(f);
                 return State::Complete(node);
             }
@@ -304,32 +346,6 @@ mod test {
     }
 
     #[test]
-    fn test_delimit() {
-        let mut lex = Prependable::from_iter(Lex::new("x(233),"));
-        let node = Node::parse(&mut lex);
-        let Ok((Node::Delimit(Delimit::Fn("x"), inner), Span { byte_span, cursor_span, .. })) =
-            node
-        else {
-            panic!("test_delimit failed 1, left: {:?}", node);
-        };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "x(233)");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 6 });
-        assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
-
-        let mut lex = Prependable::from_iter(Lex::new("(233),"));
-        let node = Node::parse(&mut lex);
-        let Ok((Node::Delimit(Delimit::Paren, inner), Span { byte_span, cursor_span, .. })) = node
-        else {
-            panic!("test_delimit failed 2, left: {:?}", node);
-        };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "(233)");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 5 });
-        assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
-    }
-
-    #[test]
     fn test_unary() {
         let mut lex = Prependable::from_iter(Lex::new("-0.2,"));
         let node = Node::parse(&mut lex);
@@ -358,24 +374,72 @@ mod test {
     }
 
     #[test]
+    fn test_delimit() {
+        let mut lex = Prependable::from_iter(Lex::new("x(233),"));
+        let node = Node::parse(&mut lex);
+        let Ok((Node::Delimit(Delimit::Fn("x"), inner), Span { byte_span, cursor_span, .. })) =
+            node
+        else {
+            panic!("test_delimit failed 1, left: {:?}", node);
+        };
+        assert_eq!(&lex.inner().source()[byte_span.clone()], "x(233)");
+        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
+        assert_matches!(cursor_span.end, Cursor { line: 0, col: 6 });
+        assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
+
+        let mut lex = Prependable::from_iter(Lex::new("(233),"));
+        let node = Node::parse(&mut lex);
+        let Ok((Node::Delimit(Delimit::Paren, inner), Span { byte_span, cursor_span, .. })) = node
+        else {
+            panic!("test_delimit failed 2, left: {:?}", node);
+        };
+        assert_eq!(&lex.inner().source()[byte_span.clone()], "(233)");
+        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
+        assert_matches!(cursor_span.end, Cursor { line: 0, col: 5 });
+        assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
+
+        let mut lex = Prependable::from_iter(Lex::new("\\\\233//,"));
+        let node = Node::parse(&mut lex);
+        let Ok((Node::Delimit(Delimit::Floor, inner), Span { byte_span, cursor_span, .. })) = node
+        else {
+            panic!("test_delimit failed 3, left: {:?}", node);
+        };
+        assert_eq!(&lex.inner().source()[byte_span.clone()], "\\\\233//");
+        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
+        assert_matches!(cursor_span.end, Cursor { line: 0, col: 7 });
+        assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
+
+        let mut lex = Prependable::from_iter(Lex::new("//233\\\\,"));
+        let node = Node::parse(&mut lex);
+        let Ok((Node::Delimit(Delimit::Ceil, inner), Span { byte_span, cursor_span, .. })) = node
+        else {
+            panic!("test_delimit failed 4, left: {:?}", node);
+        };
+        assert_eq!(&lex.inner().source()[byte_span.clone()], "//233\\\\");
+        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
+        assert_matches!(cursor_span.end, Cursor { line: 0, col: 7 });
+        assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
+    }
+
+    #[test]
     fn test_all() {
         let mut lex =
-            Prependable::from_iter(Lex::new("abs(x - 3) + (-y * func(x / 2, y, 10)) ^ x = 8,"));
+            Prependable::from_iter(Lex::new("//x - 3\\\\ + (-y * func(x / 2, y, 10)) ^ x = 8,"));
         let node = Node::parse(&mut lex);
         let Ok((Node::Binary(Binary::Eq, l, r), Span { byte_span, cursor_span, .. })) = node else {
             panic!("test_all failed 1, left: {:?}", node);
         };
         assert_eq!(
             &lex.inner().source()[byte_span.clone()],
-            "abs(x - 3) + (-y * func(x / 2, y, 10)) ^ x = 8"
+            "//x - 3\\\\ + (-y * func(x / 2, y, 10)) ^ x = 8"
         );
         assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 46 });
+        assert_matches!(cursor_span.end, Cursor { line: 0, col: 45 });
         assert_matches!(r.as_ref(), Node::Primary(Primary::Num("8")));
         let Node::Binary(Binary::Add, ll, rr) = l.as_ref() else {
             panic!("test_all failed 2, left: {:?}", l);
         };
-        let Node::Delimit(Delimit::Fn("abs"), i) = ll.as_ref() else {
+        let Node::Delimit(Delimit::Ceil, i) = ll.as_ref() else {
             panic!("test_all failed 3, left: {:?}", ll);
         };
         let Node::Binary(Binary::Sub, lll, rrr) = i.as_ref() else {
