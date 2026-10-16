@@ -109,18 +109,19 @@ mod test {
 
     #[test]
     fn test_named() {
-        let mut lex =
-            Prependable::from_iter(Lex::new("len = Fn { def: (x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }"));
+        let mut lex = Prependable::from_iter(Lex::new(
+            "len = Fn { def: fn(x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }",
+        ));
         let spanned = Tree::parse(&mut lex);
         let Ok((tree, Span { byte_span, cursor_span, .. })) = spanned else {
             panic!("test_named failed 1, left: {spanned:?}");
         };
         assert_eq!(
             &lex.inner().source()[byte_span],
-            "len = Fn { def: (x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }"
+            "len = Fn { def: fn(x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }"
         );
         assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 48 });
+        assert_matches!(cursor_span.end, Cursor { line: 0, col: 50 });
         assert_eq!(tree.name, "len");
         assert_eq!(tree.class, "Fn");
         let Fields::Named(fields) = tree.fields else {

@@ -27,6 +27,12 @@ pub enum SynError {
     },
     DismatchDelimit {
         expected: Token,
+        cursor_span: Range<Cursor>,
+    },
+    CommaInDelimit {
+        cursor: Cursor,
+    },
+    FunctionHasNoArg {
         cursor: Cursor,
     },
 }
@@ -68,8 +74,18 @@ impl Display for SynError {
                     "Unary operator at {cursor} inside expression should be surrounded by '(' & ')'"
                 )
             }
-            Self::DismatchDelimit { expected, cursor } => {
-                write!(f, "Delimit dismatches at {cursor}, expected is {expected}")
+            Self::DismatchDelimit { expected, cursor_span } => {
+                write!(
+                    f,
+                    "Delimit dismatches at {}..{}, expected is {expected}",
+                    cursor_span.start, cursor_span.end
+                )
+            }
+            Self::CommaInDelimit { cursor } => {
+                write!(f, "Comma found in delimit at {cursor}")
+            }
+            Self::FunctionHasNoArg { cursor } => {
+                write!(f, "Function ended at {cursor} must have args")
             }
         }
     }

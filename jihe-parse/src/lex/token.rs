@@ -4,7 +4,7 @@ use crate::lex::{
 };
 
 use std::{
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter, write},
     sync::LazyLock,
 };
 
@@ -129,7 +129,7 @@ enum_token! {
     (0)Bar    = [('|')!] @ '|'
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct TokenSet(IntSet);
 
 impl TokenSet {
@@ -147,6 +147,22 @@ impl TokenSet {
 
     pub(super) fn insert(&mut self, token: Token) -> Option<bool> {
         self.0.insert(token as u8)
+    }
+}
+
+impl Debug for TokenSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "TokenSet {{ ")?;
+        let mut is_begin = true;
+        for t in self.into_iter() {
+            if is_begin {
+                write!(f, "{t:?}")?;
+                is_begin = false;
+            } else {
+                write!(f, ", {t:?}")?;
+            }
+        }
+        write!(f, " }}")
     }
 }
 
