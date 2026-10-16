@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use std::assert_matches;
+use std::{assert_matches, ops::Range};
 
 use super::*;
 use crate::lex::token::Token;
@@ -17,150 +17,49 @@ fn test_whitespaces() {
     assert_matches!(lex.next(), None);
 }
 
+macro_rules! assert_token {
+    ($lex:ident,$token:tt@$ls:literal:$cs:literal..$le:literal:$ce:literal=$value:literal) => {
+        assert_matches!(
+            $lex.next(),
+            Some(Ok((Token::$token, Span {
+                byte_span,
+                cursor_span: Range {
+                    start: Cursor { line: $ls, col: $cs },
+                    end: Cursor { line: $le, col: $ce },
+                },
+                ..
+            }))) if &$lex.source[byte_span.clone()] == $value
+        );
+    };
+}
+
 #[test]
 fn test_all() {
     let mut lex =
-        Lex::new("325 \t 0.6 777. # This is comment\n 🍎 xx yy x y { () } \r ^*/ + - = ,:");
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Num, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "325"
-            && matches!(cursor_span.start, Cursor { line: 0, col: 0 })
-            && matches!(cursor_span.end, Cursor { line: 0, col: 3 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Num, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "0.6"
-            && matches!(cursor_span.start, Cursor { line: 0, col: 6 })
-            && matches!(cursor_span.end, Cursor { line: 0, col: 9 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Num, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "777."
-            && matches!(cursor_span.start, Cursor { line: 0, col: 10 })
-            && matches!(cursor_span.end, Cursor { line: 0, col: 14 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Ident, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "🍎"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 1 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 2 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Ident, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "xx"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 3 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 5 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Ident, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "yy"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 6 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 8 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Ident, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "x"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 9 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 10 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Ident, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "y"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 11 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 12 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::BraceL, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "{"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 13 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 14 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::ParenL, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "("
-            && matches!(cursor_span.start, Cursor { line: 1, col: 15 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 16 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::ParenR, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == ")"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 16 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 17 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::BraceR, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "}"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 18 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 19})
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Pow, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "^"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 22 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 23 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Mul, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "*"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 23 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 24 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Div, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "/"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 24 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 25 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Add, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "+"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 26 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 27 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Sub, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "-"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 28 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 29 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Eq, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == "="
-            && matches!(cursor_span.start, Cursor { line: 1, col: 30 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 31 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Comma, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == ","
-            && matches!(cursor_span.start, Cursor { line: 1, col: 32 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 33 })
-    );
-    assert_matches!(
-        lex.next(),
-        Some(Ok((Token::Colon, Span { byte_span, cursor_span, .. })))
-            if &lex.source[byte_span.clone()] == ":"
-            && matches!(cursor_span.start, Cursor { line: 1, col: 33 })
-            && matches!(cursor_span.end, Cursor { line: 1, col: 34 })
-    );
+        Lex::new("325 \t 0.6 777. # This is comment\n 🍎 xx yy x y { () } \r ^*/ + - = ,:|\\\\//");
+    assert_token!(lex, Num    @ 0:0..0:3   = "325");
+    assert_token!(lex, Num    @ 0:6..0:9   = "0.6");
+    assert_token!(lex, Num    @ 0:10..0:14 = "777.");
+    assert_token!(lex, Ident  @ 1:1..1:2   = "🍎");
+    assert_token!(lex, Ident  @ 1:3..1:5   = "xx");
+    assert_token!(lex, Ident  @ 1:6..1:8   = "yy");
+    assert_token!(lex, Ident  @ 1:9..1:10  = "x");
+    assert_token!(lex, Ident  @ 1:11..1:12 = "y");
+    assert_token!(lex, BraceL @ 1:13..1:14 = "{");
+    assert_token!(lex, ParenL @ 1:15..1:16 = "(");
+    assert_token!(lex, ParenR @ 1:16..1:17 = ")");
+    assert_token!(lex, BraceR @ 1:18..1:19 = "}");
+    assert_token!(lex, Pow    @ 1:22..1:23 = "^");
+    assert_token!(lex, Mul    @ 1:23..1:24 = "*");
+    assert_token!(lex, Div    @ 1:24..1:25 = "/");
+    assert_token!(lex, Add    @ 1:26..1:27 = "+");
+    assert_token!(lex, Sub    @ 1:28..1:29 = "-");
+    assert_token!(lex, Eq     @ 1:30..1:31 = "=");
+    assert_token!(lex, Comma  @ 1:32..1:33 = ",");
+    assert_token!(lex, Colon  @ 1:33..1:34 = ":");
+    assert_token!(lex, Bar    @ 1:34..1:35 = "|");
+    assert_token!(lex, SlashB @ 1:35..1:37 = "\\\\");
+    assert_token!(lex, SlashF @ 1:37..1:39 = "//");
     assert_matches!(lex.next(), None);
 }
 
