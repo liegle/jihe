@@ -158,27 +158,25 @@ fn begin_expr<'src>(
     fn delimit<'src>(delimit: Delimit) -> Result<State<'src>, SynError> {
         Ok(State::Delimit(delimit))
     }
-    handle_token! {
-        spanned => {
-            (Token::Num, Span { byte_span, .. }) => {
-                Ok(State::Complete(Node::Primary(Primary::Num(&lex.inner().source()[byte_span]))))
-            }
-            (Token::Ident, Span { byte_span, .. }) => {
-                let next = lex.expect_token()?;
-                if let (Token::ParenL, _) = &next {
-                    Ok(State::Function(Function::Name(&lex.inner().source()[byte_span])))
-                } else {
-                    lex.prepend(Ok(next));
-                    Ok(State::Complete(Node::Primary(Primary::Var(&lex.inner().source()[byte_span]))))
-                }
-            }
-            (Token::Sub, _) => { Ok(State::Operate(Operate::Unary(Unary::Neg))) }
-            (Token::ParenL, _) => { delimit(Delimit::Paren) }
-            (Token::SlashF, _) => { delimit(Delimit::Ceil) }
-            (Token::SlashB, _) => { delimit(Delimit::Floor) }
-            (Token::Bar, _) => { delimit(Delimit::Abs) }
-            _ => UnexpectedToken @ lex
+    handle_token! { spanned =>
+        (Token::Num, Span { byte_span, .. }) => {
+            Ok(State::Complete(Node::Primary(Primary::Num(&lex.inner().source()[byte_span]))))
         }
+        (Token::Ident, Span { byte_span, .. }) => {
+            let next = lex.expect_token()?;
+            if let (Token::ParenL, _) = &next {
+                Ok(State::Function(Function::Name(&lex.inner().source()[byte_span])))
+            } else {
+                lex.prepend(Ok(next));
+                Ok(State::Complete(Node::Primary(Primary::Var(&lex.inner().source()[byte_span]))))
+            }
+        }
+        (Token::Sub, _) => { Ok(State::Operate(Operate::Unary(Unary::Neg))) }
+        (Token::ParenL, _) => { delimit(Delimit::Paren) }
+        (Token::SlashF, _) => { delimit(Delimit::Ceil) }
+        (Token::SlashB, _) => { delimit(Delimit::Floor) }
+        (Token::Bar, _) => { delimit(Delimit::Abs) }
+        _ => UnexpectedToken @ lex
     }
 }
 
@@ -220,77 +218,75 @@ fn append_complete<'src>(
             }
         }
     }
-    handle_token! {
-        spanned => {
-            (Token::Pow, _) => { binary(Binary::Pow, node) }
-            (Token::Mul, _) => { binary(Binary::Mul, node) }
-            (Token::Div, _) => { binary(Binary::Div, node) }
-            (Token::Add, _) => { binary(Binary::Add, node) }
-            (Token::Sub, _) => { binary(Binary::Sub, node) }
-            (Token::Eq, _) => { binary(Binary::Eq, node) }
-            (Token::Comma, Span { cursor_span, .. }) => {
-                match stack.pop() {
-                    None => unreachable!("Expr::parse() should have returned but did not"),
-                    Some(Frame::Operate(..)) => {
-                        unreachable!("Frame::Operate should have been poped but was not")
-                    }
-                    Some(Frame::Delimit(..)) => {
-                        Err(SynError::CommaInDelimit { cursor: cursor_span.start })
-                    }
-                    Some(Frame::Function(function)) => {
-                        match function {
-                            Function::Name(name) => {
-                                Ok(State::Function(Function::Comma(name, vec![node])))
-                            }
-                            Function::Comma(name, mut args) => {
-                                args.push(node);
-                                Ok(State::Function(Function::Comma(name, args)))
-                            }
+    handle_token! { spanned =>
+        (Token::Pow, _) => { binary(Binary::Pow, node) }
+        (Token::Mul, _) => { binary(Binary::Mul, node) }
+        (Token::Div, _) => { binary(Binary::Div, node) }
+        (Token::Add, _) => { binary(Binary::Add, node) }
+        (Token::Sub, _) => { binary(Binary::Sub, node) }
+        (Token::Eq, _) => { binary(Binary::Eq, node) }
+        (Token::Comma, Span { cursor_span, .. }) => {
+            match stack.pop() {
+                None => unreachable!("Expr::parse() should have returned but did not"),
+                Some(Frame::Operate(..)) => {
+                    unreachable!("Frame::Operate should have been poped but was not")
+                }
+                Some(Frame::Delimit(..)) => {
+                    Err(SynError::CommaInDelimit { cursor: cursor_span.start })
+                }
+                Some(Frame::Function(function)) => {
+                    match function {
+                        Function::Name(name) => {
+                            Ok(State::Function(Function::Comma(name, vec![node])))
+                        }
+                        Function::Comma(name, mut args) => {
+                            args.push(node);
+                            Ok(State::Function(Function::Comma(name, args)))
                         }
                     }
                 }
             }
-            (Token::ParenR, Span { cursor_span, .. }) => {
-                match stack.pop() {
-                    None => unreachable!("Expr::parse() should have returned but did not"),
-                    Some(Frame::Operate(..)) => {
-                        unreachable!("Frame::Operate should have been poped but was not")
-                    }
-                    Some(Frame::Delimit(delimit)) => {
-                        let expected = match delimit {
-                            Delimit::Paren => {
-                                return Ok(State::Complete(Node::Delimit(delimit, Box::new(node))))
-                            }
-                            Delimit::Floor => Token::SlashF,
-                            Delimit::Ceil => Token::SlashB,
-                            Delimit::Abs => Token::Bar,
-                        };
-                        Err(SynError::DismatchDelimit { expected, cursor_span })
-                    }
-                    Some(Frame::Function(function)) => {
-                        match function {
-                            Function::Name(name) => {
-                                Ok(State::Complete(Node::Function(name, vec![node])))
-                            }
-                            Function::Comma(name, mut args) => {
-                                args.push(node);
-                                Ok(State::Complete(Node::Function(name, args)))
-                            }
-                        }
-                    }
-                }
-            }
-            (Token::SlashF, Span { cursor_span, .. }) => {
-                delimit(Token::SlashF, stack, node, cursor_span)
-            }
-            (Token::SlashB, Span { cursor_span, .. }) => {
-                delimit(Token::SlashB, stack, node, cursor_span)
-            }
-            (Token::Bar, Span { cursor_span, .. }) => {
-                delimit(Token::Bar, stack, node, cursor_span)
-            }
-            _ => UnexpectedToken @ lex
         }
+        (Token::ParenR, Span { cursor_span, .. }) => {
+            match stack.pop() {
+                None => unreachable!("Expr::parse() should have returned but did not"),
+                Some(Frame::Operate(..)) => {
+                    unreachable!("Frame::Operate should have been poped but was not")
+                }
+                Some(Frame::Delimit(delimit)) => {
+                    let expected = match delimit {
+                        Delimit::Paren => {
+                            return Ok(State::Complete(Node::Delimit(delimit, Box::new(node))))
+                        }
+                        Delimit::Floor => Token::SlashF,
+                        Delimit::Ceil => Token::SlashB,
+                        Delimit::Abs => Token::Bar,
+                    };
+                    Err(SynError::DismatchDelimit { expected, cursor_span })
+                }
+                Some(Frame::Function(function)) => {
+                    match function {
+                        Function::Name(name) => {
+                            Ok(State::Complete(Node::Function(name, vec![node])))
+                        }
+                        Function::Comma(name, mut args) => {
+                            args.push(node);
+                            Ok(State::Complete(Node::Function(name, args)))
+                        }
+                    }
+                }
+            }
+        }
+        (Token::SlashF, Span { cursor_span, .. }) => {
+            delimit(Token::SlashF, stack, node, cursor_span)
+        }
+        (Token::SlashB, Span { cursor_span, .. }) => {
+            delimit(Token::SlashB, stack, node, cursor_span)
+        }
+        (Token::Bar, Span { cursor_span, .. }) => {
+            delimit(Token::Bar, stack, node, cursor_span)
+        }
+        _ => UnexpectedToken @ lex
     }
 }
 
@@ -308,36 +304,34 @@ fn append_operate<'src>(
         stack.push(Frame::Operate(operate));
         Ok(State::Delimit(delimit))
     }
-    handle_token! {
-        spanned => {
-            (Token::Num, Span { byte_span, .. }) => {
+    handle_token! { spanned =>
+        (Token::Num, Span { byte_span, .. }) => {
+            Ok(State::Complete(merge_operate(
+                operate,
+                Node::Primary(Primary::Num(&lex.inner().source()[byte_span])),
+            )))
+        }
+        (Token::Ident, Span { byte_span, .. }) => {
+            let next = lex.expect_token()?;
+            if let (Token::ParenL, _) = &next {
+                stack.push(Frame::Operate(operate));
+                Ok(State::Function(Function::Name(&lex.inner().source()[byte_span])))
+            } else {
+                lex.prepend(Ok(next));
                 Ok(State::Complete(merge_operate(
                     operate,
-                    Node::Primary(Primary::Num(&lex.inner().source()[byte_span])),
+                    Node::Primary(Primary::Var(&lex.inner().source()[byte_span])),
                 )))
             }
-            (Token::Ident, Span { byte_span, .. }) => {
-                let next = lex.expect_token()?;
-                if let (Token::ParenL, _) = &next {
-                    stack.push(Frame::Operate(operate));
-                    Ok(State::Function(Function::Name(&lex.inner().source()[byte_span])))
-                } else {
-                    lex.prepend(Ok(next));
-                    Ok(State::Complete(merge_operate(
-                        operate,
-                        Node::Primary(Primary::Var(&lex.inner().source()[byte_span])),
-                    )))
-                }
-            }
-            (Token::Sub, Span { cursor_span, .. }) => {
-                return Err(SynError::UnaryInsideExpr { cursor: cursor_span.start })
-            }
-            (Token::ParenL, _) => { delimit(Delimit::Paren, stack, operate) }
-            (Token::SlashF, _) => { delimit(Delimit::Ceil, stack, operate) }
-            (Token::SlashB, _) => { delimit(Delimit::Floor, stack, operate) }
-            (Token::Bar, _) => { delimit(Delimit::Abs, stack, operate) }
-            _ => UnexpectedToken @ lex
         }
+        (Token::Sub, Span { cursor_span, .. }) => {
+            return Err(SynError::UnaryInsideExpr { cursor: cursor_span.start })
+        }
+        (Token::ParenL, _) => { delimit(Delimit::Paren, stack, operate) }
+        (Token::SlashF, _) => { delimit(Delimit::Ceil, stack, operate) }
+        (Token::SlashB, _) => { delimit(Delimit::Floor, stack, operate) }
+        (Token::Bar, _) => { delimit(Delimit::Abs, stack, operate) }
+        _ => UnexpectedToken @ lex
     }
 }
 

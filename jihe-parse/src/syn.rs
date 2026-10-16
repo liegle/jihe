@@ -14,12 +14,11 @@ mod error;
 mod prepend;
 
 macro_rules! handle_token {
-    (
-        $target:expr => {
+    {
+        $target:expr =>
             $((Token::$token:tt, $span:pat) => $handle:block)+
             _ => UnexpectedToken @ $lex:ident
-        }
-    ) => {
+    } => {
         match $target {
             $((Token::$token, $span) => $handle)+
             (_, Span { byte_span, cursor_span, .. }) => {
