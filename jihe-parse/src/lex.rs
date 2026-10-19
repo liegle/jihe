@@ -1,14 +1,12 @@
-use std::{iter::Peekable, str::Chars};
+use std::{collections::HashSet, iter::Peekable, str::Chars};
 
 pub(super) use crate::lex::{
     error::LexError,
     token::{Token, TokenSet},
 };
-use crate::{Cursor, Span, Spanned, lex::machine::Machine};
+use crate::{Cursor, Span, Spanned};
 
-mod automata;
 mod error;
-mod machine;
 mod set;
 #[cfg(test)]
 mod test;
@@ -17,6 +15,8 @@ mod token;
 pub(super) struct Lex<'src> {
     source: &'src str,
     chars: Peekable<Chars<'src>>,
+    byte_begin: usize,
+    cursor_begin: Cursor,
     byte_ptr: usize,
     cursor_ptr: Cursor,
 }
@@ -28,6 +28,8 @@ impl<'src> Lex<'src> {
             chars: source.chars().peekable(),
             byte_ptr: 0,
             cursor_ptr: Default::default(),
+            byte_begin: 0,
+            cursor_begin: Default::default(),
         }
     }
 
@@ -55,6 +57,55 @@ impl<'src> Lex<'src> {
             let _ = self.chars.next();
         }
     }
+
+    fn span(&mut self) -> Span<'src> {
+        Span {
+            byte_span: self.byte_begin..self.byte_ptr,
+            cursor_span: self.cursor_begin..self.cursor_ptr,
+            ..Default::default()
+        }
+    }
+
+    fn num(&mut self, mut dot: bool) -> Result<Spanned<'src, Token>, LexError> {
+        while let Some(c) = self.chars.next_if(|c| match c {
+            '0'..='9' => true,
+            '.' => {
+                if dot {
+                    false
+                } else {
+                    dot = true;
+                    true
+                }
+            }
+            _ => false,
+        }) {
+            self.byte_ptr += c.len_utf8();
+            self.cursor_ptr.col += 1;
+        }
+        Ok((Token::Num, self.span()))
+    }
+
+    fn ident(&mut self, mut prev: char) -> Result<Spanned<'src, Token>, LexError> {
+        let mut prev_cursor = self.cursor_ptr;
+        while let Some(c) = self.chars.next_if(|c| match c {
+            'a'..='z' | 'A'..='Z' | '_' => true,
+            c if !c.is_ascii() => true,
+            _ => false,
+        }) {
+            prev = c;
+            prev_cursor = self.cursor_ptr;
+            self.byte_ptr += c.len_utf8();
+            self.cursor_ptr.col += 1;
+        }
+        if prev == '_' {
+            return Err(LexError::UnderscoreAtEnd { cursor: prev_cursor });
+        }
+        while let Some(_) = self.chars.next_if_eq(&'\'') {
+            self.byte_ptr += '\''.len_utf8();
+            self.cursor_ptr.col += 1;
+        }
+        Ok((Token::Ident, self.span()))
+    }
 }
 
 impl<'src> Iterator for Lex<'src> {
@@ -62,60 +113,66 @@ impl<'src> Iterator for Lex<'src> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.consume_ignored();
+        self.byte_begin = self.byte_ptr;
+        self.cursor_begin = self.cursor_ptr;
 
-        let byte_begin = self.byte_ptr;
-        let cursor_begin = self.cursor_ptr;
-        let mut machine = Machine::new();
+        let Some(first) = self.chars.next() else {
+            return None;
+        };
+        self.byte_ptr += first.len_utf8();
+        self.cursor_ptr.col += 1;
 
-        while let Some(c) = self.chars.peek().copied() {
-            let next_machine = machine.step(c);
-            if next_machine.last_matched_char.is_none() {
-                if machine.last_matched_char.is_none() {
-                    return Some(Err(LexError::UnexpectedBegin {
-                        found: c,
-                        cursor: self.cursor_ptr,
-                    }));
+        match first {
+            '0'..='9' => Some(self.num(false)),
+            '.' => Some(self.num(true)),
+            c @ ('a'..='z' | 'A'..='Z') => Some(self.ident(c)),
+            c if !c.is_ascii() => Some(self.ident(c)),
+            '^' => Some(Ok((Token::Pow, self.span()))),
+            '*' => Some(Ok((Token::Mul, self.span()))),
+            '/' => match self.chars.next_if_eq(&'/') {
+                Some(c) => {
+                    self.byte_ptr += c.len_utf8();
+                    self.cursor_ptr.col += 1;
+                    Some(Ok((Token::SlashF, self.span())))
                 }
-                break;
-            } else {
-                machine = next_machine;
-                self.byte_ptr += c.len_utf8();
-                self.cursor_ptr.col += 1;
-                self.chars.next();
-            }
-        }
-
-        if let Some(c) = machine.last_matched_char {
-            // v v v v x x x x ...
-            //   curr^ ^peek
-            let matched = machine.end();
-            let mut iter = matched.into_iter();
-            let Some(token) = iter.next() else {
-                return Some(Err(LexError::UnexpectedMid {
-                    expected: machine.gather_expected(),
-                    found: c,
-                    cursor: self.cursor_ptr,
-                }));
-            };
-            let None = iter.next() else {
-                return Some(Err(LexError::MultipleMatching {
-                    matched,
-                    range: cursor_begin..self.cursor_ptr,
-                }));
-            };
-            Some(Ok((
-                token,
-                Span {
-                    byte_span: byte_begin..self.byte_ptr,
-                    cursor_span: cursor_begin..self.cursor_ptr,
-                    ..Default::default()
-                },
-            )))
-        } else {
-            //     o last
-            // v v v _ _
-            //   curr^ ^peek
-            None
+                _ => Some(Ok((Token::Div, self.span()))),
+            },
+            '+' => Some(Ok((Token::Add, self.span()))),
+            '-' => Some(Ok((Token::Sub, self.span()))),
+            '=' => Some(Ok((Token::Eq, self.span()))),
+            ',' => Some(Ok((Token::Comma, self.span()))),
+            ':' => Some(Ok((Token::Colon, self.span()))),
+            '{' => Some(Ok((Token::BraceL, self.span()))),
+            '}' => Some(Ok((Token::BraceR, self.span()))),
+            '(' => Some(Ok((Token::ParenL, self.span()))),
+            ')' => Some(Ok((Token::ParenR, self.span()))),
+            '|' => Some(Ok((Token::Bar, self.span()))),
+            '\\' => match self.chars.next() {
+                Some('\\') => {
+                    self.byte_ptr += '\\'.len_utf8();
+                    self.cursor_ptr.col += 1;
+                    Some(Ok((Token::SlashB, self.span())))
+                }
+                Some(found) => {
+                    let cursor = self.cursor_ptr;
+                    self.byte_ptr += found.len_utf8();
+                    self.cursor_ptr.col += 1;
+                    Some(Err(LexError::UnexpectedMid {
+                        expected: {
+                            let mut set = HashSet::new();
+                            set.insert('\\');
+                            set
+                        },
+                        found,
+                        cursor,
+                    }))
+                }
+                None => Some(Err(LexError::UnexpectedEof { cursor: self.cursor_ptr })),
+            },
+            c => Some(Err(LexError::UnexpectedBegin {
+                found: c,
+                cursor: self.cursor_begin,
+            })),
         }
     }
 }

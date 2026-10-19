@@ -2,13 +2,9 @@ use std::{
     collections::HashSet,
     error::Error,
     fmt::{self, Display, Formatter},
-    ops::Range,
 };
 
-use crate::{
-    Cursor,
-    lex::{TokenSet, token::Character},
-};
+use crate::Cursor;
 
 #[derive(Debug)]
 pub enum LexError {
@@ -17,13 +13,15 @@ pub enum LexError {
         cursor: Cursor,
     },
     UnexpectedMid {
-        expected: HashSet<Character>,
+        expected: HashSet<char>,
         found: char,
         cursor: Cursor,
     },
-    MultipleMatching {
-        matched: TokenSet,
-        range: Range<Cursor>,
+    UnexpectedEof {
+        cursor: Cursor,
+    },
+    UnderscoreAtEnd {
+        cursor: Cursor,
     },
 }
 
@@ -51,22 +49,14 @@ impl Display for LexError {
                 }
                 write!(f, ", found '{found}' at {cursor}")
             }
-            Self::MultipleMatching { matched, range } => {
+            Self::UnexpectedEof { cursor } => {
+                write!(f, "Unexpected end of file at {cursor}")
+            }
+            Self::UnderscoreAtEnd { cursor } => {
                 write!(
                     f,
-                    "String from {} to {} can match more than one token kind: [",
-                    range.start, range.end,
-                )?;
-                let mut is_begin = true;
-                for t in matched.into_iter() {
-                    if is_begin {
-                        write!(f, "{t}")?;
-                        is_begin = false;
-                    } else {
-                        write!(f, ", {t}")?;
-                    }
-                }
-                write!(f, "], this usually means a wrong design in token priority")
+                    "Underscore should not appear at end of identifier {cursor}"
+                )
             }
         }
     }

@@ -64,13 +64,57 @@ fn test_all() {
 }
 
 #[test]
-fn test_unexcepted_begin() {
+fn test_unexpected_begin() {
     let mut lex = Lex::new("  \n \t @");
     assert_matches!(
         lex.next(),
         Some(Err(LexError::UnexpectedBegin {
             found: '@',
             cursor: Cursor { line: 1, col: 3 }
+        }))
+    );
+
+    let mut lex = Lex::new("_ident_with_underscore'");
+    assert_matches!(
+        lex.next(),
+        Some(Err(LexError::UnexpectedBegin {
+            found: '_',
+            cursor: Cursor { line: 0, col: 0 }
+        }))
+    );
+}
+
+#[test]
+fn test_unexpected_mid() {
+    let mut lex = Lex::new("\\a");
+    assert_matches!(
+        lex.next(),
+        Some(Err(LexError::UnexpectedMid {
+            expected: _,
+            found: 'a',
+            cursor: Cursor { line: 0, col: 1 }
+        }))
+    );
+}
+
+#[test]
+fn test_unexpected_eof() {
+    let mut lex = Lex::new("\\");
+    assert_matches!(
+        lex.next(),
+        Some(Err(LexError::UnexpectedEof {
+            cursor: Cursor { line: 0, col: 1 }
+        }))
+    );
+}
+
+#[test]
+fn test_underscore_at_end() {
+    let mut lex = Lex::new("ident_''");
+    assert_matches!(
+        lex.next(),
+        Some(Err(LexError::UnderscoreAtEnd {
+            cursor: Cursor { line: 0, col: 5 }
         }))
     );
 }
