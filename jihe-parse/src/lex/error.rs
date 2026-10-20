@@ -1,62 +1,75 @@
-use std::{
-    collections::HashSet,
-    error::Error,
-    fmt::{self, Display, Formatter},
-};
+use std::ops::Range;
 
-use crate::Cursor;
+use crate::Report;
 
 #[derive(Debug)]
 pub enum LexError {
     UnexpectedBegin {
         found: char,
-        cursor: Cursor,
+        span: Range<usize>,
     },
     UnexpectedMid {
-        expected: HashSet<char>,
+        expected: char,
         found: char,
-        cursor: Cursor,
+        span: Range<usize>,
     },
     UnexpectedEof {
-        cursor: Cursor,
+        expected: char,
+        span: Range<usize>,
     },
     UnderscoreAtEnd {
-        cursor: Cursor,
+        span: Range<usize>,
     },
 }
 
-impl Error for LexError {}
-
-impl Display for LexError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl Report for LexError {
+    fn report(self) -> ariadne::Report<'static> {
         match self {
-            Self::UnexpectedBegin { found, cursor } => {
-                write!(
-                    f,
-                    "Char '{found}' at {cursor} is not a beginning of any known token kind",
-                )
+            Self::UnexpectedBegin { found, span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                    .with_message("Lex error: Unexpected token begin")
+                    .with_label(
+                        ariadne::Label::new(span)
+                            .with_color(ariadne::Color::Red)
+                            .with_message(format!(
+                                "Char '{}' is not a beginning of any known token kind",
+                                ariadne::Fmt::fg(found, ariadne::Color::Red)
+                            )),
+                    )
+                    .finish()
             }
-            Self::UnexpectedMid { expected, found, cursor } => {
-                write!(f, "Expected ")?;
-                let mut is_begin = true;
-                for e in expected {
-                    if is_begin {
-                        write!(f, "{e}")?;
-                        is_begin = false;
-                    } else {
-                        write!(f, "or {e}")?;
-                    }
-                }
-                write!(f, ", found '{found}' at {cursor}")
+            Self::UnexpectedMid { expected, found, span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                    .with_message("Lex error: Unexpected token mid")
+                    .with_label(
+                        ariadne::Label::new(span)
+                            .with_color(ariadne::Color::Red)
+                            .with_message(format!(
+                                "Char '{}' is expected to be '{}' here",
+                                ariadne::Fmt::fg(found, ariadne::Color::Red),
+                                ariadne::Fmt::fg(expected, ariadne::Color::Green)
+                            )),
+                    )
+                    .finish()
             }
-            Self::UnexpectedEof { cursor } => {
-                write!(f, "Unexpected end of file at {cursor}")
+            Self::UnexpectedEof { expected, span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                    .with_message("Lex error: Unexpected end of file")
+                    .with_label(ariadne::Label::new(span).with_message(format!(
+                        "Its expected to be an additional '{}' here",
+                        ariadne::Fmt::fg(expected, ariadne::Color::Green)
+                    )))
+                    .finish()
             }
-            Self::UnderscoreAtEnd { cursor } => {
-                write!(
-                    f,
-                    "Underscore should not appear at end of identifier {cursor}"
-                )
+            Self::UnderscoreAtEnd { span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                    .with_message("Lex error: Underscore at end of ident")
+                    .with_label(
+                        ariadne::Label::new(span)
+                            .with_color(ariadne::Color::Red)
+                            .with_message("Underscore should not appear at end of identifier"),
+                    )
+                    .finish()
             }
         }
     }

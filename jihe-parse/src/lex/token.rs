@@ -72,6 +72,21 @@ impl Debug for TokenSet {
     }
 }
 
+impl Display for TokenSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut is_begin = true;
+        for t in self.into_iter() {
+            if is_begin {
+                write!(f, "{t:?}")?;
+                is_begin = false;
+            } else {
+                write!(f, "or {t:?}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 pub struct IntoIter(set::IntoIter);
 
 impl IntoIterator for TokenSet {

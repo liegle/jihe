@@ -21,11 +21,11 @@ macro_rules! handle_token {
     } => {
         match $target {
             $((Token::$token, $span) => $handle)+
-            (_, Span { byte_span, cursor_span, .. }) => {
+            (_, Span { byte_span, .. }) => {
                 return Err(SynError::UnexpectedToken {
                     expected: TokenSet::with_values([$(Token::$token),+]),
-                    found: $lex.inner().source()[byte_span].to_owned(),
-                    cursor_span,
+                    found: $lex.inner().source()[byte_span.clone()].to_owned(),
+                    span: byte_span,
                 });
             }
         }
@@ -80,8 +80,8 @@ impl<'src> ExpectToken<'src> for Prependable<Lex<'src>> {
         } else {
             Err(SynError::UnexpectedToken {
                 expected: TokenSet::with_values([token]),
-                found: self.inner().source()[span.byte_span].to_owned(),
-                cursor_span: span.cursor_span,
+                found: self.inner().source()[span.byte_span.clone()].to_owned(),
+                span: span.byte_span,
             })
         }
     }

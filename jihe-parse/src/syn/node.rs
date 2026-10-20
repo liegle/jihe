@@ -109,8 +109,8 @@ impl<'src> Parse<'src> for Node<'src> {
                     begin_expr(lex, spanned)?
                 }
                 State::Function(function) => match (function, spanned) {
-                    (Function::Name(..), (Token::ParenR, Span { cursor_span, .. })) => {
-                        return Err(SynError::FunctionHasNoArg { cursor: cursor_span.start });
+                    (Function::Name(name), (Token::ParenR, Span { cursor_span, .. })) => {
+                        State::Complete(Node::Function(name, Vec::new()))
                     }
                     // Trailing comma
                     (Function::Comma(name, args), (Token::ParenR, _)) => {
@@ -193,7 +193,7 @@ fn append_complete<'src>(
         token: Token,
         stack: &mut Vec<Frame<'src>>,
         node: Node<'src>,
-        cursor_span: Range<Cursor>,
+        byte_span: Range<usize>,
     ) -> Result<State<'src>, SynError> {
         match stack.pop() {
             None => unreachable!("Expr::parse() should have returned but did not"),
@@ -210,12 +210,14 @@ fn append_complete<'src>(
                 if token == expected {
                     Ok(State::Complete(Node::Delimit(delimit, Box::new(node))))
                 } else {
-                    Err(SynError::DismatchDelimit { expected, cursor_span })
+                    Err(SynError::DismatchDelimit { expected, found: token, span: byte_span })
                 }
             }
-            Some(Frame::Function(..)) => {
-                Err(SynError::DismatchDelimit { expected: Token::ParenR, cursor_span })
-            }
+            Some(Frame::Function(..)) => Err(SynError::DismatchDelimit {
+                expected: Token::ParenR,
+                found: token,
+                span: byte_span,
+            }),
         }
     }
     handle_token! { spanned =>
@@ -225,14 +227,14 @@ fn append_complete<'src>(
         (Token::Add, _) => { binary(Binary::Add, node) }
         (Token::Sub, _) => { binary(Binary::Sub, node) }
         (Token::Eq, _) => { binary(Binary::Eq, node) }
-        (Token::Comma, Span { cursor_span, .. }) => {
+        (Token::Comma, Span { byte_span, .. }) => {
             match stack.pop() {
                 None => unreachable!("Expr::parse() should have returned but did not"),
                 Some(Frame::Operate(..)) => {
                     unreachable!("Frame::Operate should have been poped but was not")
                 }
                 Some(Frame::Delimit(..)) => {
-                    Err(SynError::CommaInDelimit { cursor: cursor_span.start })
+                    Err(SynError::CommaAsBinary { byte: byte_span.start })
                 }
                 Some(Frame::Function(function)) => {
                     match function {
@@ -247,7 +249,7 @@ fn append_complete<'src>(
                 }
             }
         }
-        (Token::ParenR, Span { cursor_span, .. }) => {
+        (Token::ParenR, Span { byte_span, .. }) => {
             match stack.pop() {
                 None => unreachable!("Expr::parse() should have returned but did not"),
                 Some(Frame::Operate(..)) => {
@@ -262,7 +264,7 @@ fn append_complete<'src>(
                         Delimit::Ceil => Token::SlashB,
                         Delimit::Abs => Token::Bar,
                     };
-                    Err(SynError::DismatchDelimit { expected, cursor_span })
+                    Err(SynError::DismatchDelimit { expected, found: Token::ParenR, span: byte_span })
                 }
                 Some(Frame::Function(function)) => {
                     match function {
@@ -277,14 +279,14 @@ fn append_complete<'src>(
                 }
             }
         }
-        (Token::SlashF, Span { cursor_span, .. }) => {
-            delimit(Token::SlashF, stack, node, cursor_span)
+        (Token::SlashF, Span { byte_span, .. }) => {
+            delimit(Token::SlashF, stack, node, byte_span)
         }
-        (Token::SlashB, Span { cursor_span, .. }) => {
-            delimit(Token::SlashB, stack, node, cursor_span)
+        (Token::SlashB, Span { byte_span, .. }) => {
+            delimit(Token::SlashB, stack, node, byte_span)
         }
-        (Token::Bar, Span { cursor_span, .. }) => {
-            delimit(Token::Bar, stack, node, cursor_span)
+        (Token::Bar, Span { byte_span, .. }) => {
+            delimit(Token::Bar, stack, node, byte_span)
         }
         _ => UnexpectedToken @ lex
     }
@@ -324,8 +326,8 @@ fn append_operate<'src>(
                 )))
             }
         }
-        (Token::Sub, Span { cursor_span, .. }) => {
-            return Err(SynError::UnaryInsideExpr { cursor: cursor_span.start })
+        (Token::Sub, Span { byte_span, .. }) => {
+            return Err(SynError::UnaryInsideExpr { span: byte_span })
         }
         (Token::ParenL, _) => { delimit(Delimit::Paren, stack, operate) }
         (Token::SlashF, _) => { delimit(Delimit::Ceil, stack, operate) }
@@ -558,7 +560,7 @@ mod test {
         let mut lex = Prependable::from_iter(Lex::new("1 + -1,"));
         assert_matches!(
             Node::parse(&mut lex),
-            Err(SynError::UnaryInsideExpr { cursor: Cursor { line: 0, col: 4 } })
+            Err(SynError::UnaryInsideExpr { span: Range { start: 4, end: 5 } })
         );
     }
 
@@ -569,10 +571,8 @@ mod test {
             Node::parse(&mut lex),
             Err(SynError::DismatchDelimit {
                 expected: Token::SlashB,
-                cursor_span: Range {
-                    start: Cursor { line: 0, col: 3 },
-                    end: Cursor { line: 0, col: 4 }
-                }
+                found: Token::ParenR,
+                span: Range { start: 3, end: 4 }
             })
         );
     }
@@ -582,16 +582,26 @@ mod test {
         let mut lex = Prependable::from_iter(Lex::new("(1,)"));
         assert_matches!(
             Node::parse(&mut lex),
-            Err(SynError::CommaInDelimit { cursor: Cursor { line: 0, col: 2 } })
+            Err(SynError::CommaAsBinary { byte: 2 })
         );
     }
 
     #[test]
     fn test_function_has_no_arg() {
-        let mut lex = Prependable::from_iter(Lex::new("f()"));
+        let mut lex = Prependable::from_iter(Lex::new("f(),"));
         assert_matches!(
             Node::parse(&mut lex),
-            Err(SynError::FunctionHasNoArg { cursor: Cursor { line: 0, col: 2 } })
+            Ok((
+                Node::Function("f", v),
+                Span {
+                    byte_span: Range { start: 0, end: 3 },
+                    cursor_span: Range {
+                        start: Cursor { line: 0, col: 0 },
+                        end: Cursor { line: 0, col: 3 }
+                    },
+                    ..
+                }
+            )) if v.is_empty()
         );
     }
 }

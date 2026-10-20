@@ -26,10 +26,10 @@ impl<'src> Lex<'src> {
         Self {
             source,
             chars: source.chars().peekable(),
-            byte_ptr: 0,
-            cursor_ptr: Default::default(),
             byte_begin: 0,
             cursor_begin: Default::default(),
+            byte_ptr: 0,
+            cursor_ptr: Default::default(),
         }
     }
 
@@ -66,7 +66,8 @@ impl<'src> Lex<'src> {
         }
     }
 
-    fn num(&mut self, mut dot: bool) -> Result<Spanned<'src, Token>, LexError> {
+    fn num(&mut self) -> Result<Spanned<'src, Token>, LexError> {
+        let mut dot = false;
         while let Some(c) = self.chars.next_if(|c| match c {
             '0'..='9' => true,
             '.' => {
@@ -86,19 +87,19 @@ impl<'src> Lex<'src> {
     }
 
     fn ident(&mut self, mut prev: char) -> Result<Spanned<'src, Token>, LexError> {
-        let mut prev_cursor = self.cursor_ptr;
+        let mut prev_byte = self.byte_ptr;
         while let Some(c) = self.chars.next_if(|c| match c {
             'a'..='z' | 'A'..='Z' | '_' => true,
             c if !c.is_ascii() => true,
             _ => false,
         }) {
             prev = c;
-            prev_cursor = self.cursor_ptr;
+            prev_byte = self.byte_ptr;
             self.byte_ptr += c.len_utf8();
             self.cursor_ptr.col += 1;
         }
         if prev == '_' {
-            return Err(LexError::UnderscoreAtEnd { cursor: prev_cursor });
+            return Err(LexError::UnderscoreAtEnd { span: prev_byte..self.byte_ptr });
         }
         while let Some(_) = self.chars.next_if_eq(&'\'') {
             self.byte_ptr += '\''.len_utf8();
@@ -123,8 +124,7 @@ impl<'src> Iterator for Lex<'src> {
         self.cursor_ptr.col += 1;
 
         match first {
-            '0'..='9' => Some(self.num(false)),
-            '.' => Some(self.num(true)),
+            '0'..='9' => Some(self.num()),
             c @ ('a'..='z' | 'A'..='Z') => Some(self.ident(c)),
             c if !c.is_ascii() => Some(self.ident(c)),
             '^' => Some(Ok((Token::Pow, self.span()))),
@@ -154,24 +154,23 @@ impl<'src> Iterator for Lex<'src> {
                     Some(Ok((Token::SlashB, self.span())))
                 }
                 Some(found) => {
-                    let cursor = self.cursor_ptr;
+                    let ptr = self.byte_ptr;
                     self.byte_ptr += found.len_utf8();
                     self.cursor_ptr.col += 1;
                     Some(Err(LexError::UnexpectedMid {
-                        expected: {
-                            let mut set = HashSet::new();
-                            set.insert('\\');
-                            set
-                        },
+                        expected: '\\',
                         found,
-                        cursor,
+                        span: ptr..self.byte_ptr,
                     }))
                 }
-                None => Some(Err(LexError::UnexpectedEof { cursor: self.cursor_ptr })),
+                None => Some(Err(LexError::UnexpectedEof {
+                    expected: '\\',
+                    span: self.byte_ptr..self.byte_ptr,
+                })),
             },
             c => Some(Err(LexError::UnexpectedBegin {
                 found: c,
-                cursor: self.cursor_begin,
+                span: self.byte_begin..self.byte_ptr,
             })),
         }
     }

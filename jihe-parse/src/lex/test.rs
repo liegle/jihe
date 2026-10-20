@@ -70,7 +70,7 @@ fn test_unexpected_begin() {
         lex.next(),
         Some(Err(LexError::UnexpectedBegin {
             found: '@',
-            cursor: Cursor { line: 1, col: 3 }
+            span: Range { start: 6, end: 7 }
         }))
     );
 
@@ -79,7 +79,7 @@ fn test_unexpected_begin() {
         lex.next(),
         Some(Err(LexError::UnexpectedBegin {
             found: '_',
-            cursor: Cursor { line: 0, col: 0 }
+            span: Range { start: 0, end: 1 }
         }))
     );
 }
@@ -92,7 +92,7 @@ fn test_unexpected_mid() {
         Some(Err(LexError::UnexpectedMid {
             expected: _,
             found: 'a',
-            cursor: Cursor { line: 0, col: 1 }
+            span: Range { start: 1, end: 2 }
         }))
     );
 }
@@ -103,7 +103,8 @@ fn test_unexpected_eof() {
     assert_matches!(
         lex.next(),
         Some(Err(LexError::UnexpectedEof {
-            cursor: Cursor { line: 0, col: 1 }
+            expected: '\\',
+            span: Range { start: 1, end: 1 }
         }))
     );
 }
@@ -114,7 +115,7 @@ fn test_underscore_at_end() {
     assert_matches!(
         lex.next(),
         Some(Err(LexError::UnderscoreAtEnd {
-            cursor: Cursor { line: 0, col: 5 }
+            span: Range { start: 5, end: 6 }
         }))
     );
 }

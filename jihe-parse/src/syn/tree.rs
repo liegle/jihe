@@ -34,15 +34,17 @@ impl<'src> Parse<'src> for Fields<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
         handle_token! { lex.expect_token()? =>
             (Token::BraceL, start) => {
-                let mut fields = HashMap::new();
+                let mut fields = HashMap::<&'src str, Spanned<'src, Node<'src>>>::new();
                 let Span { mut byte_span, mut cursor_span, .. } = lex.expect_token_is(Token::Ident)?;
                 let end = loop {
                     let name = &lex.inner().source()[byte_span.clone()];
-                    let Entry::Vacant(entry) = fields.entry(name) else {
-                        return Err(SynError::DuplicatedStatementField {
+                    let entry = match fields.entry(name) {
+                        Entry::Vacant(entry) => entry,
+                        Entry::Occupied(entry) => return Err(SynError::DuplicatedStatementField {
                             name: name.to_owned(),
-                            cursor_span,
-                        });
+                            prev_span: entry.get().1.byte_span.clone(),
+                            span: byte_span,
+                        })
                     };
                     let _ = lex.expect_token_is(Token::Colon)?;
                     let (node, end) = Node::parse(lex)?;
@@ -160,4 +162,6 @@ mod test {
             panic!("test_unnamed failed 6, left: {node:?}");
         };
     }
+
+    // TODO: Add test for duplicated statement field
 }

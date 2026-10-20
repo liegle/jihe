@@ -1,11 +1,7 @@
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-    ops::Range,
-};
+use std::ops::Range;
 
 use crate::{
-    Cursor, LexError,
+    LexError, Report,
     lex::{Token, TokenSet},
 };
 
@@ -16,76 +12,102 @@ pub enum SynError {
     UnexpectedToken {
         expected: TokenSet,
         found: String,
-        cursor_span: Range<Cursor>,
+        span: Range<usize>,
     },
     DuplicatedStatementField {
         name: String,
-        cursor_span: Range<Cursor>,
+        prev_span: Range<usize>,
+        span: Range<usize>,
     },
     UnaryInsideExpr {
-        cursor: Cursor,
+        span: Range<usize>,
     },
     DismatchDelimit {
         expected: Token,
-        cursor_span: Range<Cursor>,
+        found: Token,
+        span: Range<usize>,
     },
-    CommaInDelimit {
-        cursor: Cursor,
-    },
-    FunctionHasNoArg {
-        cursor: Cursor,
+    CommaAsBinary {
+        // comma is single byte so there's no need to use span here
+        byte: usize,
     },
 }
 
-impl Error for SynError {}
-
-impl Display for SynError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl Report for SynError {
+    fn report(self) -> ariadne::Report<'static> {
         match self {
-            Self::LexError(e) => e.fmt(f),
-            Self::UnexpectedEof => write!(f, "Source file ended"),
-            Self::UnexpectedToken { expected, found, cursor_span } => {
-                write!(f, "Expected ")?;
-                let mut is_begin = true;
-                for e in expected.into_iter() {
-                    if is_begin {
-                        write!(f, "{e}")?;
-                        is_begin = false;
-                    } else {
-                        write!(f, "or {e}")?;
-                    }
-                }
-                write!(
-                    f,
-                    ", found \"{found}\" at {}..{}",
-                    cursor_span.start, cursor_span.end
-                )
+            Self::LexError(e) => e.report(),
+            Self::UnexpectedEof => ariadne::Report::build(ariadne::ReportKind::Error, 0..0)
+                .with_message("Syn error: Unexpected end of file")
+                .with_note("It's expected to be more tokens input")
+                .finish(),
+            Self::UnexpectedToken { expected, found, span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                    .with_message("Syn error: Unexpected token")
+                    .with_label(
+                        ariadne::Label::new(span)
+                            .with_color(ariadne::Color::Red)
+                            .with_message(format!(
+                                "Expected {}, found {}",
+                                ariadne::Fmt::fg(format!("{expected}"), ariadne::Color::Green),
+                                ariadne::Fmt::fg(format!("{found}"), ariadne::Color::Red)
+                            )),
+                    )
+                    .finish()
             }
-            Self::DuplicatedStatementField { name, cursor_span } => {
-                write!(
-                    f,
-                    "Field {name} has been defined twice at {}..{}",
-                    cursor_span.start, cursor_span.end
-                )
+            Self::DuplicatedStatementField { name, prev_span, span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                    .with_message("Syn error: Duplicated statement field")
+                    .with_label(
+                        ariadne::Label::new(span)
+                            .with_color(ariadne::Color::Red)
+                            .with_message(format!(
+                                "The field name {} is duplicated",
+                                ariadne::Fmt::fg(name, ariadne::Color::Red)
+                            )),
+                    )
+                    .with_label(
+                        ariadne::Label::new(prev_span)
+                            .with_color(ariadne::Color::Yellow)
+                            .with_message("A field with the same name is already defined here"),
+                    )
+                    .finish()
             }
-            Self::UnaryInsideExpr { cursor } => {
-                write!(
-                    f,
-                    "Unary operator at {cursor} inside expression should be surrounded by '(' & ')'"
-                )
+            Self::UnaryInsideExpr { span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                    .with_message("Syn error: Unary operator inside expression")
+                    .with_label(
+                        ariadne::Label::new(span)
+                            .with_color(ariadne::Color::Red)
+                            .with_message("Unary operator must be start of en expression"),
+                    )
+                    .finish()
             }
-            Self::DismatchDelimit { expected, cursor_span } => {
-                write!(
-                    f,
-                    "Delimit dismatches at {}..{}, expected is {expected}",
-                    cursor_span.start, cursor_span.end
-                )
+            Self::DismatchDelimit { expected, found, span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                    .with_message("Syn error: Dismatch delimiter")
+                    .with_label(
+                        ariadne::Label::new(span)
+                            .with_color(ariadne::Color::Red)
+                            .with_message(format!(
+                                "Expected {}, found {}",
+                                ariadne::Fmt::fg(format!("{expected}"), ariadne::Color::Green),
+                                ariadne::Fmt::fg(format!("{found}"), ariadne::Color::Red),
+                            )),
+                    )
+                    .finish()
             }
-            Self::CommaInDelimit { cursor } => {
-                write!(f, "Comma found in delimit at {cursor}")
-            }
-            Self::FunctionHasNoArg { cursor } => {
-                write!(f, "Function ended at {cursor} must have args")
+            Self::CommaAsBinary { byte } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, byte..(byte + 1))
+                    .with_message("Syn error: Comma use as binary operator")
+                    .with_label(
+                        ariadne::Label::new(byte..(byte + 1))
+                            .with_color(ariadne::Color::Red)
+                            .with_message(
+                                "Comma should only be used to divide function arguements",
+                            ),
+                    )
+                    .finish()
             }
         }
     }

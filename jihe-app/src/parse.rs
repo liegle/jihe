@@ -149,18 +149,7 @@ async fn run(
 }
 
 fn parse(path: &Path, scene: &Arc<Mutex<jihe_render::Scene>>, callback: &impl Fn()) {
-    if let Ok(false) | Err(_) = fs::exists(path) {
-        log::error!("Source file {path:?} lost");
-        return;
-    }
-    let source = match fs::read_to_string(path) {
-        Ok(source) => source,
-        Err(e) => {
-            log::error!("Can't read source file because:{e}");
-            return;
-        }
-    };
-    match jihe_parse::parse(&source) {
+    match jihe_parse::parse(path) {
         Ok(content) => {
             scene.lock().unwrap().content = content;
             callback();
