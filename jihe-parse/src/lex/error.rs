@@ -15,7 +15,7 @@ pub enum LexError {
     },
     UnexpectedEof {
         expected: char,
-        span: Range<usize>,
+        byte: usize,
     },
     UnderscoreAtEnd {
         span: Range<usize>,
@@ -52,10 +52,10 @@ impl Report for LexError {
                     )
                     .finish()
             }
-            Self::UnexpectedEof { expected, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+            Self::UnexpectedEof { expected, byte } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, byte..byte)
                     .with_message("Lex error: Unexpected end of file")
-                    .with_label(ariadne::Label::new(span).with_message(format!(
+                    .with_label(ariadne::Label::new(byte..byte).with_message(format!(
                         "Its expected to be an additional '{}' here",
                         ariadne::Fmt::fg(expected, ariadne::Color::Green)
                     )))

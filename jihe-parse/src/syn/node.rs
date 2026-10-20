@@ -1,9 +1,9 @@
 use std::{mem, ops::Range};
 
 use crate::{
-    Cursor, Lex, Span, Spanned,
+    Lex, Spanned,
     lex::{Token, TokenSet},
-    syn::{ExpectToken, Parse, Prependable, SynError},
+    syn::{Parse, Prependable, SynError},
 };
 
 // TODO: maybe use a continuous data structure like Vec and its indices
@@ -74,9 +74,9 @@ enum_binary! {
 }
 
 impl<'src> Parse<'src> for Node<'src> {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<Self>, SynError> {
         let first = lex.expect_token()?;
-        let start = (first.1.byte_span.start, first.1.cursor_span.start);
+        let start = first.1.start;
         lex.prepend(Ok(first));
         let mut end = start;
 
@@ -89,16 +89,11 @@ impl<'src> Parse<'src> for Node<'src> {
                     if stack.is_empty() =>
                 {
                     lex.prepend(Ok(spanned));
-                    let span = Span {
-                        byte_span: start.0..end.0,
-                        cursor_span: start.1..end.1,
-                        ..Default::default()
-                    };
-                    return Ok((node, span));
+                    return Ok((node, start..end));
                 }
                 (state, _) => state,
             };
-            end = (spanned.1.byte_span.end, spanned.1.cursor_span.end);
+            end = spanned.1.end;
 
             curr = match curr {
                 State::None => begin_expr(lex, spanned)?,
@@ -109,7 +104,7 @@ impl<'src> Parse<'src> for Node<'src> {
                     begin_expr(lex, spanned)?
                 }
                 State::Function(function) => match (function, spanned) {
-                    (Function::Name(name), (Token::ParenR, Span { cursor_span, .. })) => {
+                    (Function::Name(name), (Token::ParenR, _)) => {
                         State::Complete(Node::Function(name, Vec::new()))
                     }
                     // Trailing comma
@@ -153,22 +148,22 @@ enum Function<'src> {
 
 fn begin_expr<'src>(
     lex: &mut Prependable<Lex<'src>>,
-    spanned: Spanned<'src, Token>,
+    spanned: Spanned<Token>,
 ) -> Result<State<'src>, SynError> {
     fn delimit<'src>(delimit: Delimit) -> Result<State<'src>, SynError> {
         Ok(State::Delimit(delimit))
     }
     handle_token! { spanned =>
-        (Token::Num, Span { byte_span, .. }) => {
-            Ok(State::Complete(Node::Primary(Primary::Num(&lex.inner().source()[byte_span]))))
+        (Token::Num, span) => {
+            Ok(State::Complete(Node::Primary(Primary::Num(&lex.inner().source()[span]))))
         }
-        (Token::Ident, Span { byte_span, .. }) => {
+        (Token::Ident, span) => {
             let next = lex.expect_token()?;
             if let (Token::ParenL, _) = &next {
-                Ok(State::Function(Function::Name(&lex.inner().source()[byte_span])))
+                Ok(State::Function(Function::Name(&lex.inner().source()[span])))
             } else {
                 lex.prepend(Ok(next));
-                Ok(State::Complete(Node::Primary(Primary::Var(&lex.inner().source()[byte_span]))))
+                Ok(State::Complete(Node::Primary(Primary::Var(&lex.inner().source()[span]))))
             }
         }
         (Token::Sub, _) => { Ok(State::Operate(Operate::Unary(Unary::Neg))) }
@@ -182,7 +177,7 @@ fn begin_expr<'src>(
 
 fn append_complete<'src>(
     lex: &mut Prependable<Lex<'src>>,
-    spanned: Spanned<'src, Token>,
+    spanned: Spanned<Token>,
     stack: &mut Vec<Frame<'src>>,
     node: Node<'src>,
 ) -> Result<State<'src>, SynError> {
@@ -193,7 +188,7 @@ fn append_complete<'src>(
         token: Token,
         stack: &mut Vec<Frame<'src>>,
         node: Node<'src>,
-        byte_span: Range<usize>,
+        span: Range<usize>,
     ) -> Result<State<'src>, SynError> {
         match stack.pop() {
             None => unreachable!("Expr::parse() should have returned but did not"),
@@ -210,13 +205,13 @@ fn append_complete<'src>(
                 if token == expected {
                     Ok(State::Complete(Node::Delimit(delimit, Box::new(node))))
                 } else {
-                    Err(SynError::DismatchDelimit { expected, found: token, span: byte_span })
+                    Err(SynError::DismatchDelimit { expected, found: token, span: span })
                 }
             }
             Some(Frame::Function(..)) => Err(SynError::DismatchDelimit {
                 expected: Token::ParenR,
                 found: token,
-                span: byte_span,
+                span: span,
             }),
         }
     }
@@ -227,14 +222,14 @@ fn append_complete<'src>(
         (Token::Add, _) => { binary(Binary::Add, node) }
         (Token::Sub, _) => { binary(Binary::Sub, node) }
         (Token::Eq, _) => { binary(Binary::Eq, node) }
-        (Token::Comma, Span { byte_span, .. }) => {
+        (Token::Comma, span) => {
             match stack.pop() {
                 None => unreachable!("Expr::parse() should have returned but did not"),
                 Some(Frame::Operate(..)) => {
                     unreachable!("Frame::Operate should have been poped but was not")
                 }
                 Some(Frame::Delimit(..)) => {
-                    Err(SynError::CommaAsBinary { byte: byte_span.start })
+                    Err(SynError::CommaAsBinary { byte: span.start })
                 }
                 Some(Frame::Function(function)) => {
                     match function {
@@ -249,7 +244,7 @@ fn append_complete<'src>(
                 }
             }
         }
-        (Token::ParenR, Span { byte_span, .. }) => {
+        (Token::ParenR, span) => {
             match stack.pop() {
                 None => unreachable!("Expr::parse() should have returned but did not"),
                 Some(Frame::Operate(..)) => {
@@ -264,7 +259,7 @@ fn append_complete<'src>(
                         Delimit::Ceil => Token::SlashB,
                         Delimit::Abs => Token::Bar,
                     };
-                    Err(SynError::DismatchDelimit { expected, found: Token::ParenR, span: byte_span })
+                    Err(SynError::DismatchDelimit { expected, found: Token::ParenR, span })
                 }
                 Some(Frame::Function(function)) => {
                     match function {
@@ -279,14 +274,14 @@ fn append_complete<'src>(
                 }
             }
         }
-        (Token::SlashF, Span { byte_span, .. }) => {
-            delimit(Token::SlashF, stack, node, byte_span)
+        (Token::SlashF, span) => {
+            delimit(Token::SlashF, stack, node, span)
         }
-        (Token::SlashB, Span { byte_span, .. }) => {
-            delimit(Token::SlashB, stack, node, byte_span)
+        (Token::SlashB, span) => {
+            delimit(Token::SlashB, stack, node, span)
         }
-        (Token::Bar, Span { byte_span, .. }) => {
-            delimit(Token::Bar, stack, node, byte_span)
+        (Token::Bar, span) => {
+            delimit(Token::Bar, stack, node, span)
         }
         _ => UnexpectedToken @ lex
     }
@@ -294,7 +289,7 @@ fn append_complete<'src>(
 
 fn append_operate<'src>(
     lex: &mut Prependable<Lex<'src>>,
-    spanned: Spanned<'src, Token>,
+    spanned: Spanned<Token>,
     stack: &mut Vec<Frame<'src>>,
     operate: Operate<'src>,
 ) -> Result<State<'src>, SynError> {
@@ -307,27 +302,27 @@ fn append_operate<'src>(
         Ok(State::Delimit(delimit))
     }
     handle_token! { spanned =>
-        (Token::Num, Span { byte_span, .. }) => {
+        (Token::Num, span) => {
             Ok(State::Complete(merge_operate(
                 operate,
-                Node::Primary(Primary::Num(&lex.inner().source()[byte_span])),
+                Node::Primary(Primary::Num(&lex.inner().source()[span])),
             )))
         }
-        (Token::Ident, Span { byte_span, .. }) => {
+        (Token::Ident, span) => {
             let next = lex.expect_token()?;
             if let (Token::ParenL, _) = &next {
                 stack.push(Frame::Operate(operate));
-                Ok(State::Function(Function::Name(&lex.inner().source()[byte_span])))
+                Ok(State::Function(Function::Name(&lex.inner().source()[span])))
             } else {
                 lex.prepend(Ok(next));
                 Ok(State::Complete(merge_operate(
                     operate,
-                    Node::Primary(Primary::Var(&lex.inner().source()[byte_span])),
+                    Node::Primary(Primary::Var(&lex.inner().source()[span])),
                 )))
             }
         }
-        (Token::Sub, Span { byte_span, .. }) => {
-            return Err(SynError::UnaryInsideExpr { span: byte_span })
+        (Token::Sub, span) => {
+            return Err(SynError::UnaryInsideExpr { span })
         }
         (Token::ParenL, _) => { delimit(Delimit::Paren, stack, operate) }
         (Token::SlashF, _) => { delimit(Delimit::Ceil, stack, operate) }
@@ -385,8 +380,6 @@ fn rewind_stack<'src>(stack: &mut Vec<Frame<'src>>, mut curr: State<'src>) -> St
 mod test {
     use std::assert_matches;
 
-    use crate::Cursor;
-
     use super::*;
 
     #[test]
@@ -395,20 +388,18 @@ mod test {
         let node = Node::parse(&mut lex);
         assert_matches!(
             node,
-            Ok((Node::Primary(Primary::Num("10.")), Span { byte_span, cursor_span, .. }))
-                if &lex.inner().source()[byte_span.clone()] == "10."
-                && matches!(cursor_span.start, Cursor { line: 0, col: 0 })
-                && matches!(cursor_span.end, Cursor { line: 0, col: 3 })
+            Ok((Node::Primary(Primary::Num("10.")), span))
+                if &lex.inner().source()[span.clone()] == "10."
+                && matches!(span, Range { start: 0, end: 3 })
         );
 
         let mut lex = Prependable::from_iter(Lex::new("x,"));
         let node = Node::parse(&mut lex);
         assert_matches!(
             node,
-            Ok((Node::Primary(Primary::Var("x")), Span { byte_span, cursor_span, .. }))
-                if &lex.inner().source()[byte_span.clone()] == "x"
-                && matches!(cursor_span.start, Cursor { line: 0, col: 0 })
-                && matches!(cursor_span.end, Cursor { line: 0, col: 1 })
+            Ok((Node::Primary(Primary::Var("x")), span))
+                if &lex.inner().source()[span.clone()] == "x"
+                && matches!(span, Range { start: 0, end: 1 })
         );
     }
 
@@ -416,12 +407,11 @@ mod test {
     fn test_unary() {
         let mut lex = Prependable::from_iter(Lex::new("-0.2,"));
         let node = Node::parse(&mut lex);
-        let Ok((Node::Unary(Unary::Neg, inner), Span { byte_span, cursor_span, .. })) = node else {
+        let Ok((Node::Unary(Unary::Neg, inner), span)) = node else {
             panic!("test_unary failed, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "-0.2");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 4 });
+        assert_eq!(&lex.inner().source()[span.clone()], "-0.2");
+        assert_matches!(span, Range { start: 0, end: 4 });
         assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("0.2")));
     }
 
@@ -429,13 +419,11 @@ mod test {
     fn test_binary() {
         let mut lex = Prependable::from_iter(Lex::new("l+  \nr,"));
         let node = Node::parse(&mut lex);
-        let Ok((Node::Binary(Binary::Add, l, r), Span { byte_span, cursor_span, .. })) = node
-        else {
+        let Ok((Node::Binary(Binary::Add, l, r), span)) = node else {
             panic!("test_binary failed, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "l+  \nr");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 1, col: 1 });
+        assert_eq!(&lex.inner().source()[span.clone()], "l+  \nr");
+        assert_matches!(span, Range { start: 0, end: 6 });
         assert_matches!(l.as_ref(), Node::Primary(Primary::Var("l")));
         assert_matches!(r.as_ref(), Node::Primary(Primary::Var("r")));
     }
@@ -444,35 +432,29 @@ mod test {
     fn test_delimit() {
         let mut lex = Prependable::from_iter(Lex::new("(233),"));
         let node = Node::parse(&mut lex);
-        let Ok((Node::Delimit(Delimit::Paren, inner), Span { byte_span, cursor_span, .. })) = node
-        else {
+        let Ok((Node::Delimit(Delimit::Paren, inner), span)) = node else {
             panic!("test_delimit failed 1, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "(233)");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 5 });
+        assert_eq!(&lex.inner().source()[span.clone()], "(233)");
+        assert_matches!(span, Range { start: 0, end: 5 });
         assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
 
         let mut lex = Prependable::from_iter(Lex::new("\\\\233//,"));
         let node = Node::parse(&mut lex);
-        let Ok((Node::Delimit(Delimit::Floor, inner), Span { byte_span, cursor_span, .. })) = node
-        else {
+        let Ok((Node::Delimit(Delimit::Floor, inner), span)) = node else {
             panic!("test_delimit failed 2, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "\\\\233//");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 7 });
+        assert_eq!(&lex.inner().source()[span.clone()], "\\\\233//");
+        assert_matches!(span, Range { start: 0, end: 7 });
         assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
 
         let mut lex = Prependable::from_iter(Lex::new("//233\\\\,"));
         let node = Node::parse(&mut lex);
-        let Ok((Node::Delimit(Delimit::Ceil, inner), Span { byte_span, cursor_span, .. })) = node
-        else {
+        let Ok((Node::Delimit(Delimit::Ceil, inner), span)) = node else {
             panic!("test_delimit failed 3, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "//233\\\\");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 7 });
+        assert_eq!(&lex.inner().source()[span.clone()], "//233\\\\");
+        assert_matches!(span, Range { start: 0, end: 7 });
         assert_matches!(inner.as_ref(), Node::Primary(Primary::Num("233")));
     }
 
@@ -480,23 +462,21 @@ mod test {
     fn test_function() {
         let mut lex = Prependable::from_iter(Lex::new("x(233),"));
         let node = Node::parse(&mut lex);
-        let Ok((Node::Function("x", inner), Span { byte_span, cursor_span, .. })) = node else {
+        let Ok((Node::Function("x", inner), span)) = node else {
             panic!("test_function failed, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "x(233)");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 6 });
+        assert_eq!(&lex.inner().source()[span.clone()], "x(233)");
+        assert_matches!(span, Range { start: 0, end: 6 });
         assert_eq!(inner.len(), 1);
         assert_matches!(inner[0], Node::Primary(Primary::Num("233")));
 
         let mut lex = Prependable::from_iter(Lex::new("x(233, y),"));
         let node = Node::parse(&mut lex);
-        let Ok((Node::Function("x", inner), Span { byte_span, cursor_span, .. })) = node else {
+        let Ok((Node::Function("x", inner), span)) = node else {
             panic!("test_function failed, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[byte_span.clone()], "x(233, y)");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 9 });
+        assert_eq!(&lex.inner().source()[span.clone()], "x(233, y)");
+        assert_matches!(span, Range { start: 0, end: 9 });
         assert_eq!(inner.len(), 2);
         assert_matches!(inner[0], Node::Primary(Primary::Num("233")));
         assert_matches!(inner[1], Node::Primary(Primary::Var("y")));
@@ -507,15 +487,14 @@ mod test {
         let mut lex =
             Prependable::from_iter(Lex::new("//x - 3\\\\ + (-y * func(x / 2, y, 10)) ^ x = 8,"));
         let node = Node::parse(&mut lex);
-        let Ok((Node::Binary(Binary::Eq, l, r), Span { byte_span, cursor_span, .. })) = node else {
+        let Ok((Node::Binary(Binary::Eq, l, r), span)) = node else {
             panic!("test_all failed 1, left: {:?}", node);
         };
         assert_eq!(
-            &lex.inner().source()[byte_span.clone()],
+            &lex.inner().source()[span.clone()],
             "//x - 3\\\\ + (-y * func(x / 2, y, 10)) ^ x = 8"
         );
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 45 });
+        assert_matches!(span, Range { start: 0, end: 45 });
         assert_matches!(r.as_ref(), Node::Primary(Primary::Num("8")));
         let Node::Binary(Binary::Add, ll, rr) = l.as_ref() else {
             panic!("test_all failed 2, left: {:?}", l);
@@ -591,17 +570,7 @@ mod test {
         let mut lex = Prependable::from_iter(Lex::new("f(),"));
         assert_matches!(
             Node::parse(&mut lex),
-            Ok((
-                Node::Function("f", v),
-                Span {
-                    byte_span: Range { start: 0, end: 3 },
-                    cursor_span: Range {
-                        start: Cursor { line: 0, col: 0 },
-                        end: Cursor { line: 0, col: 3 }
-                    },
-                    ..
-                }
-            )) if v.is_empty()
+            Ok((Node::Function("f", v), _)) if v.is_empty()
         );
     }
 }

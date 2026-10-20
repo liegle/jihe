@@ -1,9 +1,9 @@
 use std::collections::{HashMap, hash_map::Entry};
 
 use crate::{
-    Lex, Span, Spanned, SynError,
+    Lex, Spanned, SynError,
     lex::{Token, TokenSet},
-    syn::{ExpectToken, Parse, Prependable, node::Node},
+    syn::{Parse, Prependable, node::Node},
 };
 
 #[derive(Debug)]
@@ -14,45 +14,41 @@ pub(crate) struct Tree<'src> {
 }
 
 impl<'src> Parse<'src> for Tree<'src> {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<Self>, SynError> {
         let start = lex.expect_token_is(Token::Ident)?;
-        let name = &lex.inner().source()[start.byte_span.clone()];
+        let name = &lex.inner().source()[start.clone()];
         let _ = lex.expect_token_is(Token::Eq)?;
-        let class = &lex.inner().source()[lex.expect_token_is(Token::Ident)?.byte_span];
+        let class = &lex.inner().source()[lex.expect_token_is(Token::Ident)?];
         let (fields, end) = Fields::parse(lex)?;
-        Ok((Tree { name, class, fields }, Span::join(&start, &end)))
+        Ok((Tree { name, class, fields }, start.start..end.end))
     }
 }
 
 #[derive(Debug)]
 pub(crate) enum Fields<'src> {
-    Named(HashMap<&'src str, Spanned<'src, Node<'src>>>),
-    Unnamed(Vec<Spanned<'src, Node<'src>>>),
+    Named(HashMap<&'src str, Spanned<Node<'src>>>),
+    Unnamed(Vec<Spanned<Node<'src>>>),
 }
 
 impl<'src> Parse<'src> for Fields<'src> {
-    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<'src, Self>, SynError> {
+    fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<Self>, SynError> {
         handle_token! { lex.expect_token()? =>
             (Token::BraceL, start) => {
-                let mut fields = HashMap::<&'src str, Spanned<'src, Node<'src>>>::new();
-                let Span { mut byte_span, mut cursor_span, .. } = lex.expect_token_is(Token::Ident)?;
+                let mut fields = HashMap::<&'src str, Spanned<Node<'src>>>::new();
+                let mut span = lex.expect_token_is(Token::Ident)?;
                 let end = loop {
-                    let name = &lex.inner().source()[byte_span.clone()];
+                    let name = &lex.inner().source()[span.clone()];
                     let entry = match fields.entry(name) {
                         Entry::Vacant(entry) => entry,
                         Entry::Occupied(entry) => return Err(SynError::DuplicatedStatementField {
                             name: name.to_owned(),
-                            prev_span: entry.get().1.byte_span.clone(),
-                            span: byte_span,
+                            prev_span: entry.get().1.clone(),
+                            span,
                         })
                     };
                     let _ = lex.expect_token_is(Token::Colon)?;
                     let (node, end) = Node::parse(lex)?;
-                    entry.insert((node, Span {
-                        byte_span: byte_span.start..end.byte_span.end,
-                        cursor_span: cursor_span.start..end.cursor_span.end,
-                        ..Default::default()
-                    }));
+                    entry.insert((node, span.start..end.end));
                     handle_token! { lex.expect_token()? =>
                         (Token::BraceR, end) => { break end }
                         (Token::Comma, _) => {}
@@ -60,14 +56,11 @@ impl<'src> Parse<'src> for Fields<'src> {
                     }
                     handle_token! { lex.expect_token()? =>
                         (Token::BraceR, end) => { break end }
-                        (Token::Ident, next) => {
-                            byte_span = next.byte_span;
-                            cursor_span = next.cursor_span;
-                        }
+                        (Token::Ident, next) => { span = next; }
                         _ => UnexpectedToken @ lex
                     }
                 };
-                Ok((Self::Named(fields), Span::join(&start, &end)))
+                Ok((Self::Named(fields), start.start..end.end))
             }
             (Token::ParenL, start) => {
                 let mut fields = Vec::new();
@@ -83,7 +76,7 @@ impl<'src> Parse<'src> for Fields<'src> {
                         spanned => lex.prepend(Ok(spanned)),
                     }
                 };
-                Ok((Self::Unnamed(fields), Span::join(&start, &end)))
+                Ok((Self::Unnamed(fields), start.start..end.end))
             }
             _ => UnexpectedToken @ lex
         }
@@ -92,12 +85,9 @@ impl<'src> Parse<'src> for Fields<'src> {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        Cursor,
-        syn::node::{Binary, Primary},
-    };
+    use crate::syn::node::{Binary, Primary};
 
-    use std::assert_matches;
+    use std::{assert_matches, ops::Range};
 
     use super::*;
 
@@ -107,15 +97,14 @@ mod test {
             "len = Fn { def: fn(x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }",
         ));
         let spanned = Tree::parse(&mut lex);
-        let Ok((tree, Span { byte_span, cursor_span, .. })) = spanned else {
+        let Ok((tree, span)) = spanned else {
             panic!("test_named failed 1, left: {spanned:?}");
         };
         assert_eq!(
-            &lex.inner().source()[byte_span],
+            &lex.inner().source()[span.clone()],
             "len = Fn { def: fn(x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }"
         );
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 50 });
+        assert_matches!(span, Range { start: 0, end: 50 });
         assert_eq!(tree.name, "len");
         assert_eq!(tree.class, "Fn");
         let Fields::Named(fields) = tree.fields else {
@@ -135,12 +124,11 @@ mod test {
     fn test_unnamed() {
         let mut lex = Prependable::from_iter(Lex::new("alpha = Slide(0, 5)"));
         let spanned = Tree::parse(&mut lex);
-        let Ok((tree, Span { byte_span, cursor_span, .. })) = spanned else {
+        let Ok((tree, span)) = spanned else {
             panic!("test_unnamed failed 1, left: {spanned:?}");
         };
-        assert_eq!(&lex.inner().source()[byte_span], "alpha = Slide(0, 5)");
-        assert_matches!(cursor_span.start, Cursor { line: 0, col: 0 });
-        assert_matches!(cursor_span.end, Cursor { line: 0, col: 19 });
+        assert_eq!(&lex.inner().source()[span.clone()], "alpha = Slide(0, 5)");
+        assert_matches!(span, Range { start: 0, end: 19 });
         assert_eq!(tree.name, "alpha");
         assert_eq!(tree.class, "Slide");
         let Fields::Unnamed(fields) = tree.fields else {
@@ -163,5 +151,16 @@ mod test {
         };
     }
 
-    // TODO: Add test for duplicated statement field
+    #[test]
+    fn test_duplicated_statement_field() {
+        let mut lex = Prependable::from_iter(Lex::new("a = Config { max_fps: 60, max_fps: 30 }"));
+        assert_matches!(
+            Tree::parse(&mut lex),
+            Err(SynError::DuplicatedStatementField {
+                name,
+                prev_span: Range { start: 13, end: 24 },
+                span: Range { start: 26, end: 33 }
+            }) if name == "max_fps"
+        );
+    }
 }

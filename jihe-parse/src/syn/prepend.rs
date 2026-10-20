@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub(super) struct Prependable<I: Iterator> {
     pre: Vec<<I as Iterator>::Item>,
     iter: I,

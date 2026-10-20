@@ -8,7 +8,9 @@ use crate::{
 #[derive(Debug)]
 pub enum SynError {
     LexError(LexError),
-    UnexpectedEof,
+    UnexpectedEof {
+        byte: usize,
+    },
     UnexpectedToken {
         expected: TokenSet,
         found: String,
@@ -37,10 +39,15 @@ impl Report for SynError {
     fn report(self) -> ariadne::Report<'static> {
         match self {
             Self::LexError(e) => e.report(),
-            Self::UnexpectedEof => ariadne::Report::build(ariadne::ReportKind::Error, 0..0)
-                .with_message("Syn error: Unexpected end of file")
-                .with_note("It's expected to be more tokens input")
-                .finish(),
+            Self::UnexpectedEof { byte } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, byte..byte)
+                    .with_message("Syn error: Unexpected end of file")
+                    .with_label(
+                        ariadne::Label::new(byte..byte)
+                            .with_message("More tokens are expected here"),
+                    )
+                    .finish()
+            }
             Self::UnexpectedToken { expected, found, span } => {
                 ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
                     .with_message("Syn error: Unexpected token")

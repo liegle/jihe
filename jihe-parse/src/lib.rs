@@ -39,34 +39,4 @@ trait Report {
     fn report(self) -> ariadne::Report<'static>;
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Cursor {
-    line: usize,
-    col: usize,
-}
-
-impl Display for Cursor {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.line, self.col)
-    }
-}
-
-#[derive(Debug, Default)]
-struct Span<'src> {
-    byte_span: Range<usize>,
-    cursor_span: Range<Cursor>,
-    // TODO: is this required?
-    _phantom: PhantomData<&'src ()>,
-}
-
-impl Span<'_> {
-    fn join(start: &Self, end: &Self) -> Self {
-        Self {
-            byte_span: start.byte_span.start..end.byte_span.end,
-            cursor_span: start.cursor_span.start..end.cursor_span.end,
-            ..Default::default()
-        }
-    }
-}
-
-type Spanned<'src, T> = (T, Span<'src>);
+type Spanned<T> = (T, Range<usize>);
