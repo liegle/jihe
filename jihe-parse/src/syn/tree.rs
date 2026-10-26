@@ -1,4 +1,7 @@
-use std::collections::{HashMap, hash_map::Entry};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    ops::Range,
+};
 
 use crate::{
     Lex, Spanned, SynError,
@@ -8,17 +11,17 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) struct Tree<'src> {
-    pub(crate) name: &'src str,
-    pub(crate) class: &'src str,
+    pub(crate) name: Range<usize>,
+    pub(crate) class: Range<usize>,
     pub(crate) fields: Fields<'src>,
 }
 
 impl<'src> Parse<'src> for Tree<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<Self>, SynError> {
         let start = lex.expect_token_is(Token::Ident)?;
-        let name = &lex.inner().source()[start.clone()];
+        let name = start.clone();
         let _ = lex.expect_token_is(Token::Eq)?;
-        let class = &lex.inner().source()[lex.expect_token_is(Token::Ident)?];
+        let class = lex.expect_token_is(Token::Ident)?;
         let (fields, end) = Fields::parse(lex)?;
         Ok((Tree { name, class, fields }, start.start..end.end))
     }
@@ -26,15 +29,15 @@ impl<'src> Parse<'src> for Tree<'src> {
 
 #[derive(Debug)]
 pub(crate) enum Fields<'src> {
-    Named(HashMap<&'src str, Spanned<Node<'src>>>),
-    Unnamed(Vec<Spanned<Node<'src>>>),
+    Named(HashMap<&'src str, Spanned<Node>>),
+    Unnamed(Vec<Spanned<Node>>),
 }
 
 impl<'src> Parse<'src> for Fields<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<Self>, SynError> {
         handle_token! { lex.expect_token()? =>
             (Token::BraceL, start) => {
-                let mut fields = HashMap::<&'src str, Spanned<Node<'src>>>::new();
+                let mut fields = HashMap::<&'src str, Spanned<Node>>::new();
                 let mut span = lex.expect_token_is(Token::Ident)?;
                 let end = loop {
                     let name = &lex.inner().source()[span.clone()];
@@ -87,7 +90,7 @@ impl<'src> Parse<'src> for Fields<'src> {
 mod test {
     use crate::syn::node::{Binary, Primary};
 
-    use std::{assert_matches, ops::Range};
+    use std::assert_matches;
 
     use super::*;
 
@@ -105,8 +108,8 @@ mod test {
             "len = Fn { def: fn(x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }"
         );
         assert_matches!(span, Range { start: 0, end: 50 });
-        assert_eq!(tree.name, "len");
-        assert_eq!(tree.class, "Fn");
+        assert_eq!(tree.name, Range { start: 0, end: 3 });
+        assert_eq!(tree.class, Range { start: 6, end: 8 });
         let Fields::Named(fields) = tree.fields else {
             panic!("test_named failed 2, left: {:?}", tree.fields);
         };
@@ -129,8 +132,8 @@ mod test {
         };
         assert_eq!(&lex.inner().source()[span.clone()], "alpha = Slide(0, 5)");
         assert_matches!(span, Range { start: 0, end: 19 });
-        assert_eq!(tree.name, "alpha");
-        assert_eq!(tree.class, "Slide");
+        assert_eq!(tree.name, Range { start: 0, end: 5 });
+        assert_eq!(tree.class, Range { start: 8, end: 13 });
         let Fields::Unnamed(fields) = tree.fields else {
             panic!("test_unnamed failed 2, left: {:?}", tree.fields);
         };
@@ -139,14 +142,14 @@ mod test {
         let Some(node) = node else {
             panic!("test_unnamed failed 3, left: {node:?}");
         };
-        let Node::Primary(Primary::Num("0")) = node.0 else {
+        let Node::Primary(Primary::Num(Range { start: 14, end: 15 })) = node.0 else {
             panic!("test_unnamed failed 4, left: {node:?}");
         };
         let node = fields.get(1);
         let Some(node) = node else {
             panic!("test_unnamed failed 5, left: {node:?}");
         };
-        let Node::Primary(Primary::Num("5")) = node.0 else {
+        let Node::Primary(Primary::Num(Range { start: 17, end: 18 })) = node.0 else {
             panic!("test_unnamed failed 6, left: {node:?}");
         };
     }

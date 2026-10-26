@@ -110,8 +110,8 @@ mod test {
             syn.next(),
             Some(Ok((
                 Tree {
-                    name: "config",
-                    class: "Config",
+                    name: Range { start: 0, end: 6 },
+                    class: Range { start: 9, end: 15 },
                     fields: Fields::Named(fields)
                 },
                 Range { start: 0, end: 59 }
@@ -121,8 +121,8 @@ mod test {
             syn.next(),
             Some(Ok((
                 Tree {
-                    name: "f",
-                    class: "Fn",
+                    name: Range { start: 73, end: 74 },
+                    class: Range { start: 77, end: 79 },
                     fields: Fields::Unnamed(fields)
                 },
                 Range { start: 73, end: 111 }
@@ -132,8 +132,8 @@ mod test {
             syn.next(),
             Some(Ok((
                 Tree {
-                    name: "alpha",
-                    class: "Slide",
+                    name: Range { start: 125, end: 130 },
+                    class: Range { start: 133, end: 138 },
                     fields: Fields::Unnamed(fields)
                 },
                 Range { start: 125, end: 144 }
@@ -143,8 +143,8 @@ mod test {
             syn.next(),
             Some(Ok((
                 Tree {
-                    name: "c",
-                    class: "Curve",
+                    name: Range { start: 158, end: 159 },
+                    class: Range { start: 162, end: 167 },
                     fields: Fields::Named(fields)
                 },
                 Range { start: 158, end: 270 }
