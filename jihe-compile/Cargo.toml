@@ -1,5 +1,5 @@
 [package]
-name        = "jihe-parse"
+name        = "jihe-compile"
 version     = { workspace = true, }
 edition     = { workspace = true, }
 

@@ -887,7 +887,7 @@ dependencies = [
  "chrono",
  "env_logger",
  "glam",
- "jihe-parse",
+ "jihe-compile",
  "jihe-render",
  "jihe-shared",
  "log",
@@ -897,7 +897,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "jihe-parse"
+name = "jihe-compile"
 version = "0.1.0"
 dependencies = [
  "ariadne",

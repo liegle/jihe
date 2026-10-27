@@ -149,7 +149,7 @@ async fn run(
 }
 
 fn parse(path: &Path, scene: &Arc<Mutex<jihe_render::Scene>>, callback: &impl Fn()) {
-    match jihe_parse::parse(path) {
+    match jihe_compile::compile(path) {
         Ok(content) => {
             scene.lock().unwrap().content = content;
             callback();

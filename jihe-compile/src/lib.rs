@@ -13,7 +13,7 @@ mod lex;
 mod sem;
 mod syn;
 
-pub fn parse(path: &Path) -> Result<jihe_shared::Content, ParseError> {
+pub fn compile(path: &Path) -> Result<jihe_shared::Content, ParseError> {
     if let Ok(false) | Err(_) = fs::exists(path) {
         return Err(ParseError::FileNotExist(path.to_path_buf()));
     }
