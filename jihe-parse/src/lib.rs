@@ -1,7 +1,5 @@
 use std::{
-    fmt::{self, Display, Formatter},
     fs, io,
-    marker::PhantomData,
     ops::Range,
     path::{Path, PathBuf},
 };
@@ -12,6 +10,7 @@ use crate::{
 };
 
 mod lex;
+mod sem;
 mod syn;
 
 pub fn parse(path: &Path) -> Result<jihe_shared::Content, ParseError> {
