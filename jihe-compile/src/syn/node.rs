@@ -70,6 +70,7 @@ enum_binary! {
     Div   => 2,
     Add   => 1,
     Sub   => 1,
+    // TODO: maybe let Eq only appear at top level
     Eq    => 0
 }
 

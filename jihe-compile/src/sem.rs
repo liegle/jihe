@@ -2,7 +2,10 @@ use std::{collections::HashMap, ops::Range, sync::LazyLock};
 
 use crate::{
     Spanned, Syn,
-    sem::{error::SemError, expr::Expr},
+    sem::{
+        error::{FieldStruct, SemError},
+        expr::Expr,
+    },
     syn::{Fields, Node},
 };
 
@@ -24,7 +27,7 @@ pub struct Statement {
 
 impl Statement {
     fn parse_all<G: GenId>(syn: Syn, source: &str, g: &mut G) -> Result<Vec<Self>, SemError> {
-        let mut v = Vec::new();
+        let mut statements = Vec::new();
         for tree in syn {
             let (tree, span) = tree.map_err(SemError::SynError)?;
             let class = &source[tree.class.clone()];
@@ -34,40 +37,103 @@ impl Statement {
                     span: tree.class,
                 });
             };
+            // 🤣
             let inner = match tree.fields {
-                Fields::Named(f) => named(f),
-                Fields::Unnamed(f) => unnamed(f),
+                Fields::Named(f) => named(f, span.clone()),
+                Fields::Unnamed(f) => unnamed(f, span.clone()),
             }?;
             let id = g.next_id(&source[tree.name]);
-            v.push(Self { id, inner, span });
+            statements.push(Self { id, inner, span });
         }
-        Ok(v)
+        Ok(statements)
     }
 }
 
 struct Construct {
-    named: fn(HashMap<&str, Spanned<Node>>) -> Result<Inner, SemError>,
-    unnamed: fn(Vec<Spanned<Node>>) -> Result<Inner, SemError>,
+    named: fn(HashMap<&str, Spanned<Node>>, span: Range<usize>) -> Result<Inner, SemError>,
+    unnamed: fn(Vec<Spanned<Node>>, span: Range<usize>) -> Result<Inner, SemError>,
 }
 
-static CONSTRUCTS: LazyLock<HashMap<&'static str, Construct>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
-    map.insert("Slide", todo!());
-    map
-});
+// TODO: use std::range::Range
+macro_rules! enum_inner {
+    {
+        $($class:ident {
+            $($function:ident($($field:ident),+) = $single:ident $(? [$($default:literal),+])?),+
+        }),+
+    } => {
+        pub enum Inner {
+            $($class {
+                $($($field: Expr,)+)+
+            }),+
+        }
 
-pub enum Inner {
-    Slide {
-        from: Expr,
-        to: Expr,
+        static CONSTRUCTS: LazyLock<HashMap<&'static str, Construct>> = LazyLock::new(|| {
+            let mut map = HashMap::new();
+            $({
+                fn named(
+                    mut fields: HashMap<&str, Spanned<Node>>,
+                    span: Range<usize>
+                ) -> Result<Inner, SemError> {
+                    $(let [$($field),+] = {
+                        let field = stringify!($single);
+                        fields.remove(field).map(|(node, span)| {
+                            paste::paste!([<$function:lower:snake>](node))
+                                .map_err(|stru| SemError::WrongFieldStruct { field, stru, span })
+                        })
+                        $(.or(Some(Ok(lit_expr!([$($default),+])))))?
+                        .ok_or(SemError::FieldLost { field, span: span.clone() })??
+                    };)+
+                    Ok(Inner::$class { $($($field,)+)+ })
+                }
+
+                fn unnamed(
+                    mut fields: Vec<Spanned<Node>>,
+                    span: Range<usize>
+                ) -> Result<Inner, SemError> {
+                    fields.reverse();
+                    $(let [$($field),+] = {
+                        let field = stringify!($single);
+                        fields.pop().map(|(node, span)| {
+                            paste::paste!([<$function:lower:snake>](node))
+                                .map_err(|stru| SemError::WrongFieldStruct { field, stru, span })
+                        })
+                        $(.or(Some(Ok(lit_expr!([$($default),+])))))?
+                        .ok_or(SemError::FieldLost { field, span: span.clone() })??
+                    };)+
+                    Ok(Inner::$class { $($($field,)+)+ })
+                }
+
+                map.insert(stringify!($class), Construct { named, unnamed });
+            })+
+            map
+        });
+    };
+}
+
+macro_rules! lit_expr {
+    ([$($default:literal),+]) => { [$(Expr::Literal($default)),+] }
+}
+
+enum_inner! {
+    Slider {
+         Ident(from) = from,
+         Ident(to) = to
     },
     Curve {
-        expr_l: Expr,
-        expr_r: Expr,
-        thickness: Expr,
-        r: Expr,
-        g: Expr,
-        b: Expr,
-        a: Expr,
-    },
+         Eq(expr_l, expr_r) = expr,
+         Ident(thickness) = thickness ? [3.],
+         Color(r, g, b, a) = color ? [0., 0., 0., 1.]
+    }
+}
+
+fn ident(node: Node) -> Result<[Expr; 1], FieldStruct> {
+    todo!()
+}
+
+fn eq(node: Node) -> Result<[Expr; 2], FieldStruct> {
+    todo!()
+}
+
+fn color(node: Node) -> Result<[Expr; 4], FieldStruct> {
+    todo!()
 }

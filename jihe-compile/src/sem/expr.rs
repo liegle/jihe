@@ -17,12 +17,8 @@ impl Todo {
 
 pub enum Expr {
     Literal(f64),
-    Tree(Tree),
-}
-
-// TODO: JIT?
-struct Tree {
-    ops: Vec<Op>,
+    // TODO: JIT?
+    Tree(Vec<Op>),
 }
 
 impl Expr {
@@ -34,7 +30,7 @@ impl Expr {
     pub fn eval(&self, todo: &Todo) -> f64 {
         let ops = match self {
             Self::Literal(value) => return *value,
-            Self::Tree(inner) => &inner.ops,
+            Self::Tree(ops) => ops,
         };
         let mut stack = Vec::new();
         for op in ops {
