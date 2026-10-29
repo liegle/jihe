@@ -1,10 +1,10 @@
 use std::{env, fs, io::Write, mem, panic, path::PathBuf, str::FromStr, sync::Arc};
 
-use crate::{config::Config, parse::Parse, render::Render, state::State};
+use crate::{compile::Compile, config::Config, render::Render, state::State};
 
+mod compile;
 mod config;
 mod debounce;
-mod parse;
 mod render;
 mod state;
 
@@ -36,7 +36,7 @@ enum App {
     Ready {
         state: State,
         window: Arc<winit::window::Window>,
-        parse: Parse,
+        compile: Compile,
         render: Render,
     },
     Dead,
@@ -64,7 +64,7 @@ impl winit::application::ApplicationHandler for App {
         window.set_title("jihe");
         let window = Arc::new(window);
 
-        let parse = match Parse::new(PathBuf::from_str(path).unwrap(), scene.clone(), {
+        let compile = match Compile::new(PathBuf::from_str(path).unwrap(), scene.clone(), {
             let window = window.clone();
             move || {
                 window.request_redraw();
@@ -72,7 +72,7 @@ impl winit::application::ApplicationHandler for App {
         }) {
             Some(r) => r,
             None => {
-                log::error!("Can't create parse");
+                log::error!("Can't create compile");
                 return;
             }
         };
@@ -90,7 +90,7 @@ impl winit::application::ApplicationHandler for App {
             }
         };
 
-        *self = App::Ready { state, window, parse, render };
+        *self = App::Ready { state, window, compile, render };
     }
 
     fn window_event(
@@ -99,7 +99,7 @@ impl winit::application::ApplicationHandler for App {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let App::Ready { state, window, parse, render } = self else {
+        let App::Ready { state, window, compile, render } = self else {
             return;
         };
         use winit::event::WindowEvent;
@@ -107,7 +107,7 @@ impl winit::application::ApplicationHandler for App {
             WindowEvent::CloseRequested => {
                 log::info!("Exit");
                 render.exit();
-                parse.exit();
+                compile.exit();
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => render.draw(),
@@ -136,13 +136,13 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let App::Ready { parse, render, .. } = mem::replace(self, App::Dead) {
+        if let App::Ready { compile, render, .. } = mem::replace(self, App::Dead) {
             if let Err(e) = render.join() {
                 log::error!("Render thread is found panicked when exiting");
                 panic::resume_unwind(e);
             }
-            if let Err(e) = parse.join() {
-                log::error!("Parse thread is found panicked when exiting");
+            if let Err(e) = compile.join() {
+                log::error!("Compile thread is found panicked when exiting");
                 panic::resume_unwind(e);
             }
         }

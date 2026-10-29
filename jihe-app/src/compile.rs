@@ -9,15 +9,15 @@ use crate::debounce::Debounce;
 
 enum Task {
     Exit,
-    Parse,
+    Compile,
 }
 
-pub(super) struct Parse {
+pub(super) struct Compile {
     join_handle: JoinHandle<()>,
     sender: tokio::sync::mpsc::UnboundedSender<Task>,
 }
 
-impl Parse {
+impl Compile {
     pub(super) fn new(
         path: PathBuf,
         scene: Arc<Mutex<jihe_render::Scene>>,
@@ -32,7 +32,7 @@ impl Parse {
             {
                 Ok(rt) => rt,
                 Err(e) => {
-                    log::error!("Can't create tokio runtime for parse because:{e}");
+                    log::error!("Can't create tokio runtime for compile because:{e}");
                     return None;
                 }
             };
@@ -68,7 +68,7 @@ impl Parse {
 
     pub(super) fn exit(&self) {
         if self.sender.send(Task::Exit).is_err() {
-            log::error!("Parse task receiver has been closed");
+            log::error!("Compile task receiver has been closed");
         }
     }
 }
@@ -97,9 +97,9 @@ impl notify::EventHandler for Filter {
                     let file_name = self.path.file_name();
                     if paths.iter().any(|path| path.file_name() == file_name)
                         && matches!(fs::exists(&self.path), Ok(true) | Err(_))
-                        && self.sender.send(Task::Parse).is_err()
+                        && self.sender.send(Task::Compile).is_err()
                     {
-                        log::error!("Parse task receiver has been closed");
+                        log::error!("Compile task receiver has been closed");
                     }
                 }
             }
@@ -120,40 +120,40 @@ async fn run(
 
     loop {
         if receiver.is_closed() {
-            log::error!("Parse task reveiver has been closed");
+            log::error!("Compile task reveiver has been closed");
             break;
         }
         tokio::select! {
             task = receiver.recv() => {
                 match task {
                     None => {
-                        log::error!("Parse task channel has been closed");
+                        log::error!("Compile task channel has been closed");
                         break;
                     }
                     Some(Task::Exit) => {
                         break;
                     }
-                    Some(Task::Parse) => {
+                    Some(Task::Compile) => {
                         if let Some(()) = debounce.push_task(()) {
-                            parse(&path, &scene, &callback);
+                            compile(&path, &scene, &callback);
                         }
                     }
                 }
             }
             Some(_) = debounce.sleep() => {
-                parse(&path, &scene, &callback);
+                compile(&path, &scene, &callback);
             }
             else => break,
         }
     }
 }
 
-fn parse(path: &Path, scene: &Arc<Mutex<jihe_render::Scene>>, callback: &impl Fn()) {
+fn compile(path: &Path, scene: &Arc<Mutex<jihe_render::Scene>>, callback: &impl Fn()) {
     match jihe_compile::compile(path) {
         Ok(content) => {
             scene.lock().unwrap().content = content;
             callback();
         }
-        Err(e) => log::error!("Failed to parse jihe because:{e}"),
+        Err(e) => log::error!("Failed to compile jihe because:{e}"),
     }
 }
