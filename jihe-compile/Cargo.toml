@@ -9,5 +9,4 @@ jihe-shared = { path = "../jihe-shared" }
 #external
 ariadne     = { workspace = true, }
 log         = { workspace = true, }
-paste       = { workspace = true, }
 thiserror   = { workspace = true, }
