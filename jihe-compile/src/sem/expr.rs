@@ -67,8 +67,8 @@ impl Expr {
         let mut rest = Vec::new();
         loop {
             node = match node {
-                Node::Primary(p) => {
-                    match p {
+                Node::Primary { primary } => {
+                    match primary {
                         syn::Primary::Num(span) => ops.push(Op::Const(
                             f64::from_str(&source[span]).expect("Num was checked by lex"),
                         )),
@@ -97,26 +97,28 @@ impl Expr {
                         }
                     }
                 }
-                Node::Unary(syn::Unary::Neg, i) => {
+                Node::Unary { unary: syn::Unary::Neg, pos, inner } => {
                     rest.push(Next::Op(Op::Unary(Unary::Neg)));
-                    *i
+                    *inner
                 }
-                Node::Binary(b, l, r) => {
-                    let binary = match b {
+                Node::Binary { binary, pos, left, right } => {
+                    let binary = match binary {
                         syn::Binary::Pow => Binary::Pow,
                         syn::Binary::Mul => Binary::Mul,
                         syn::Binary::Div => Binary::Div,
                         syn::Binary::Add => Binary::Add,
                         syn::Binary::Sub => Binary::Sub,
-                        syn::Binary::Eq => todo!(),
+                        syn::Binary::Eq => {
+                            return Err(SemError::EqInSingleExpr { byte: pos.start });
+                        }
                     };
                     rest.push(Next::Op(Op::Binary(binary)));
-                    rest.push(Next::Node(*r));
-                    *l
+                    rest.push(Next::Node(*right));
+                    *left
                 }
-                Node::Delimit(d, i) => {
+                Node::Delimit { delimit, left, right, inner } => {
                     'unary: {
-                        let unary = match d {
+                        let unary = match delimit {
                             syn::Delimit::Paren => break 'unary,
                             syn::Delimit::Floor => Unary::Floor,
                             syn::Delimit::Ceil => Unary::Ceil,
@@ -124,9 +126,9 @@ impl Expr {
                         };
                         rest.push(Next::Op(Op::Unary(unary)));
                     }
-                    *i
+                    *inner
                 }
-                Node::Function(span, mut args) => {
+                Node::Function { name: span, left, right, mut args } => {
                     // TODO: check "fn"
                     let name = &source[span.clone()];
                     let id = match table.depend(name, Dep::Fn) {

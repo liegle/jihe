@@ -118,7 +118,7 @@ mod test {
         let Some(node) = node else {
             panic!("test_named failed 3, left: {node:?}");
         };
-        let Node::Binary(Binary::Eq, ..) = node.0 else {
+        let Node::Binary { binary: Binary::Eq, .. } = node.0 else {
             panic!("test_named failed 4, left: {node:?}");
         };
     }
@@ -142,14 +142,20 @@ mod test {
         let Some(node) = node else {
             panic!("test_unnamed failed 3, left: {node:?}");
         };
-        let Node::Primary(Primary::Num(Range { start: 14, end: 15 })) = node.0 else {
+        let Node::Primary {
+            primary: Primary::Num(Range { start: 14, end: 15 }),
+        } = node.0
+        else {
             panic!("test_unnamed failed 4, left: {node:?}");
         };
         let node = fields.get(1);
         let Some(node) = node else {
             panic!("test_unnamed failed 5, left: {node:?}");
         };
-        let Node::Primary(Primary::Num(Range { start: 17, end: 18 })) = node.0 else {
+        let Node::Primary {
+            primary: Primary::Num(Range { start: 17, end: 18 }),
+        } = node.0
+        else {
             panic!("test_unnamed failed 6, left: {node:?}");
         };
     }

@@ -20,6 +20,9 @@ pub(crate) enum SemError {
         def: &'static str,
         span: Range<usize>,
     },
+    EqInSingleExpr {
+        byte: usize,
+    },
     RedundantField {
         span: Range<usize>,
     },
@@ -72,6 +75,16 @@ impl Report for SemError {
                                 "Field \"{}\" should have structure looks like {def}",
                                 ariadne::Fmt::fg(field, ariadne::Color::Red),
                             )),
+                    )
+                    .finish()
+            }
+            Self::EqInSingleExpr { byte } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, byte..byte)
+                    .with_message("Sem error: Eq appears in single expr")
+                    .with_label(
+                        ariadne::Label::new(byte..byte)
+                            .with_color(ariadne::Color::Red)
+                            .with_message("Eq should not appear here"),
                     )
                     .finish()
             }

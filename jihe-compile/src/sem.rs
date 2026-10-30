@@ -31,7 +31,7 @@ pub struct Statement {
 }
 
 impl Statement {
-    fn parse_all<T: Table>(syn: Syn, source: &str, table: &mut T) -> Result<Vec<Self>, SemError> {
+    fn analyze<T: Table>(syn: Syn, source: &str, table: &mut T) -> Result<Vec<Self>, SemError> {
         let mut statements = Vec::new();
         for tree in syn {
             let (tree, span) = tree.map_err(SemError::SynError)?;
