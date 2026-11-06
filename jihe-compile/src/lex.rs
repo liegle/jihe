@@ -1,4 +1,4 @@
-use std::{iter::Peekable, ops::Range, str::Chars};
+use std::{iter::Peekable, range::Range, str::Chars};
 
 use crate::Spanned;
 
@@ -24,7 +24,7 @@ impl<'src> Lex<'src> {
         Self {
             source,
             chars: source.chars().peekable(),
-            span: 0..0,
+            span: (0..0).into(),
         }
     }
 
@@ -63,7 +63,7 @@ impl<'src> Lex<'src> {
         }) {
             self.span.end += c.len_utf8();
         }
-        Ok((Token::Num, self.span.clone()))
+        Ok((Token::Num, self.span))
     }
 
     fn ident(&mut self, mut prev: char) -> <Self as Iterator>::Item {
@@ -78,12 +78,12 @@ impl<'src> Lex<'src> {
             self.span.end += c.len_utf8();
         }
         if prev == '_' {
-            return Err(LexError::UnderscoreAtEnd { span: prev_byte..self.span.end });
+            return Err(LexError::UnderscoreAtEnd { span: (prev_byte..self.span.end).into() });
         }
         while let Some(_) = self.chars.next_if_eq(&'\'') {
             self.span.end += '\''.len_utf8();
         }
-        Ok((Token::Ident, self.span.clone()))
+        Ok((Token::Ident, self.span))
     }
 }
 
@@ -103,29 +103,29 @@ impl<'src> Iterator for Lex<'src> {
             '0'..='9' => Some(self.num()),
             c @ ('a'..='z' | 'A'..='Z') => Some(self.ident(c)),
             c if !c.is_ascii() => Some(self.ident(c)),
-            '^' => Some(Ok((Token::Pow, self.span.clone()))),
-            '*' => Some(Ok((Token::Mul, self.span.clone()))),
+            '^' => Some(Ok((Token::Pow, self.span))),
+            '*' => Some(Ok((Token::Mul, self.span))),
             '/' => match self.chars.next_if_eq(&'/') {
                 Some(c) => {
                     self.span.end += c.len_utf8();
-                    Some(Ok((Token::SlashF, self.span.clone())))
+                    Some(Ok((Token::SlashF, self.span)))
                 }
-                _ => Some(Ok((Token::Div, self.span.clone()))),
+                _ => Some(Ok((Token::Div, self.span))),
             },
-            '+' => Some(Ok((Token::Add, self.span.clone()))),
-            '-' => Some(Ok((Token::Sub, self.span.clone()))),
-            '=' => Some(Ok((Token::Eq, self.span.clone()))),
-            ',' => Some(Ok((Token::Comma, self.span.clone()))),
-            ':' => Some(Ok((Token::Colon, self.span.clone()))),
-            '{' => Some(Ok((Token::BraceL, self.span.clone()))),
-            '}' => Some(Ok((Token::BraceR, self.span.clone()))),
-            '(' => Some(Ok((Token::ParenL, self.span.clone()))),
-            ')' => Some(Ok((Token::ParenR, self.span.clone()))),
-            '|' => Some(Ok((Token::Bar, self.span.clone()))),
+            '+' => Some(Ok((Token::Add, self.span))),
+            '-' => Some(Ok((Token::Sub, self.span))),
+            '=' => Some(Ok((Token::Eq, self.span))),
+            ',' => Some(Ok((Token::Comma, self.span))),
+            ':' => Some(Ok((Token::Colon, self.span))),
+            '{' => Some(Ok((Token::BraceL, self.span))),
+            '}' => Some(Ok((Token::BraceR, self.span))),
+            '(' => Some(Ok((Token::ParenL, self.span))),
+            ')' => Some(Ok((Token::ParenR, self.span))),
+            '|' => Some(Ok((Token::Bar, self.span))),
             '\\' => match self.chars.next() {
                 Some('\\') => {
                     self.span.end += '\\'.len_utf8();
-                    Some(Ok((Token::SlashB, self.span.clone())))
+                    Some(Ok((Token::SlashB, self.span)))
                 }
                 Some(found) => {
                     let ptr = self.span.end;
@@ -133,7 +133,7 @@ impl<'src> Iterator for Lex<'src> {
                     Some(Err(LexError::UnexpectedMid {
                         expected: '\\',
                         found,
-                        span: ptr..self.span.end,
+                        span: (ptr..self.span.end).into(),
                     }))
                 }
                 None => Some(Err(LexError::UnexpectedEof {
@@ -141,10 +141,7 @@ impl<'src> Iterator for Lex<'src> {
                     byte: self.source.len(),
                 })),
             },
-            c => Some(Err(LexError::UnexpectedBegin {
-                found: c,
-                span: self.span.clone(),
-            })),
+            c => Some(Err(LexError::UnexpectedBegin { found: c, span: self.span })),
         }
     }
 }

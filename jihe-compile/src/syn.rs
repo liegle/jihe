@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::range::Range;
 
 pub(super) use crate::syn::{
     error::SynError,
@@ -23,13 +23,11 @@ macro_rules! handle_token {
     } => {
         match $target {
             $((Token::$token, $span) => $handle)+
-            (_, span) => {
-                return Err(SynError::UnexpectedToken {
-                    expected: TokenSet::with_values([$(Token::$token),+]),
-                    found: $lex.inner().source()[span.clone()].to_owned(),
-                    span,
-                });
-            }
+            (_, span) => return Err(SynError::UnexpectedToken {
+                expected: TokenSet::with_values([$(Token::$token),+]),
+                found: $lex.inner().source()[span].to_owned(),
+                span,
+            })
         }
     };
 }
@@ -77,7 +75,7 @@ impl<'src> Prependable<Lex<'src>> {
         } else {
             Err(SynError::UnexpectedToken {
                 expected: TokenSet::with_values([token]),
-                found: self.inner().source()[span.clone()].to_owned(),
+                found: self.inner().source()[span].to_owned(),
                 span,
             })
         }

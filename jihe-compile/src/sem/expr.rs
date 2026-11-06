@@ -73,7 +73,7 @@ impl Expr {
                             f64::from_str(&source[span]).expect("Num was checked by lex"),
                         )),
                         syn::Primary::Var(span) => {
-                            let name = &source[span.clone()];
+                            let name = &source[span];
                             let id = match table.depend(name, Dep::Var) {
                                 Ok(id) => id,
                                 Err((prev_span, prev_dep)) => {
@@ -130,7 +130,7 @@ impl Expr {
                 }
                 Node::Function { name: span, left, right, mut args } => {
                     // TODO: check "fn"
-                    let name = &source[span.clone()];
+                    let name = &source[span];
                     let id = match table.depend(name, Dep::Fn) {
                         Ok(id) => id,
                         Err((prev_span, prev_dep)) => {

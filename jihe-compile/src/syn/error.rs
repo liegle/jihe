@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::range::Range;
 
 use crate::{
     LexError, Report,
@@ -49,10 +49,10 @@ impl Report for SynError {
                     .finish()
             }
             Self::UnexpectedToken { expected, found, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Syn error: Unexpected token")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "Expected {}, found {}",
@@ -63,10 +63,10 @@ impl Report for SynError {
                     .finish()
             }
             Self::DuplicatedStatementField { name, prev_span, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Syn error: Duplicated statement field")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "The field name {} is duplicated",
@@ -74,27 +74,27 @@ impl Report for SynError {
                             )),
                     )
                     .with_label(
-                        ariadne::Label::new(prev_span)
+                        ariadne::Label::new(prev_span.into())
                             .with_color(ariadne::Color::Yellow)
                             .with_message("A field with the same name is already defined here"),
                     )
                     .finish()
             }
             Self::UnaryInsideExpr { span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Syn error: Unary operator inside expression")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message("Unary operator must be start of en expression"),
                     )
                     .finish()
             }
             Self::DismatchDelimit { expected, found, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Syn error: Dismatch delimiter")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "Expected {}, found {}",

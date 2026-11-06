@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::range::Range;
 
 use crate::Report;
 
@@ -26,10 +26,10 @@ impl Report for LexError {
     fn report(self) -> ariadne::Report<'static> {
         match self {
             Self::UnexpectedBegin { found, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Lex error: Unexpected token begin")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "Char '{}' is not a beginning of any known token kind",
@@ -39,10 +39,10 @@ impl Report for LexError {
                     .finish()
             }
             Self::UnexpectedMid { expected, found, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Lex error: Unexpected token mid")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "Char '{}' is expected to be '{}' here",
@@ -62,10 +62,10 @@ impl Report for LexError {
                     .finish()
             }
             Self::UnderscoreAtEnd { span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Lex error: Underscore at end of ident")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message("Underscore should not appear at end of identifier"),
                     )

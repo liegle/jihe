@@ -1,6 +1,6 @@
 use std::{
     fmt::{self, Display, Formatter},
-    ops::Range,
+    range::Range,
 };
 
 use crate::{Report, SynError, sem::Dep};
@@ -40,10 +40,10 @@ impl Report for SemError {
         match self {
             Self::SynError(e) => e.report(),
             Self::ClassNotFound { found, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Sem error: Class not found")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "\"{}\" is not a name of any statement class",
@@ -53,10 +53,10 @@ impl Report for SemError {
                     .finish()
             }
             Self::FieldLost { field, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Sem error: Required field lost")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "Field \"{}\" is required in this statement",
@@ -66,10 +66,10 @@ impl Report for SemError {
                     .finish()
             }
             Self::WrongFieldDefinition { field, def, span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Sem error: Statement field structure is wrong")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "Field \"{}\" should have structure looks like {def}",
@@ -89,20 +89,20 @@ impl Report for SemError {
                     .finish()
             }
             Self::RedundantField { span } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Sem error: Redundant statement field")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message("This field should not appear"),
                     )
                     .finish()
             }
             Self::WrongDependenceType { name, prev_span, prev_dep, span, dep } => {
-                ariadne::Report::build(ariadne::ReportKind::Error, span.clone())
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Sem error: Statement was depended but with different type")
                     .with_label(
-                        ariadne::Label::new(span)
+                        ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "Statement \"{}\" is {}",
@@ -111,7 +111,7 @@ impl Report for SemError {
                             )),
                     )
                     .with_label(
-                        ariadne::Label::new(prev_span)
+                        ariadne::Label::new(prev_span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
                                 "It was depended {} here",

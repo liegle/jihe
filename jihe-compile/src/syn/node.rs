@@ -1,4 +1,4 @@
-use std::{mem, ops::Range};
+use std::{mem, range::Range};
 
 use crate::{
     Lex, Spanned,
@@ -111,7 +111,7 @@ impl Parse<'_> for Node {
                     if stack.is_empty() =>
                 {
                     lex.prepend(Ok(spanned));
-                    return Ok((node, start..end));
+                    return Ok((node, (start..end).into()));
                 }
                 (state, _) => state,
             };
@@ -382,7 +382,9 @@ fn merge_operate(operate: Operate, next: Node) -> Node {
                     _ => unreachable!(),
                 };
             }
-            const DUMMY: Node = Node::Primary { primary: Primary::Num(0..0) };
+            const DUMMY: Node = Node::Primary {
+                primary: Primary::Num(Range { start: 0, end: 0 }),
+            };
 
             let old = mem::replace(curr, DUMMY);
             *curr = Node::Binary {
@@ -424,7 +426,7 @@ mod test {
         assert_matches!(
             node,
             Ok((Node::Primary { primary: Primary::Num(Range { start: 0, end: 3 }) }, span))
-                if &lex.inner().source()[span.clone()] == "10."
+                if &lex.inner().source()[span] == "10."
                 && matches!(span, Range { start: 0, end: 3 })
         );
 
@@ -433,7 +435,7 @@ mod test {
         assert_matches!(
             node,
             Ok((Node::Primary { primary: Primary::Var(Range { start: 0, end: 1 }) }, span))
-                if &lex.inner().source()[span.clone()] == "x"
+                if &lex.inner().source()[span] == "x"
                 && matches!(span, Range { start: 0, end: 1 })
         );
     }
@@ -453,7 +455,7 @@ mod test {
         else {
             panic!("test_unary failed, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[span.clone()], "-0.2");
+        assert_eq!(&lex.inner().source()[span], "-0.2");
         assert_matches!(span, Range { start: 0, end: 4 });
         assert_matches!(
             inner.as_ref(),
@@ -479,7 +481,7 @@ mod test {
         else {
             panic!("test_binary failed, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[span.clone()], "l+  \nr");
+        assert_eq!(&lex.inner().source()[span], "l+  \nr");
         assert_matches!(span, Range { start: 0, end: 6 });
         assert_matches!(
             left.as_ref(),
@@ -511,7 +513,7 @@ mod test {
         else {
             panic!("test_delimit failed 1, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[span.clone()], "(233)");
+        assert_eq!(&lex.inner().source()[span], "(233)");
         assert_matches!(span, Range { start: 0, end: 5 });
         assert_matches!(
             inner.as_ref(),
@@ -534,7 +536,7 @@ mod test {
         else {
             panic!("test_delimit failed 2, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[span.clone()], "\\\\233//");
+        assert_eq!(&lex.inner().source()[span], "\\\\233//");
         assert_matches!(span, Range { start: 0, end: 7 });
         assert_matches!(
             inner.as_ref(),
@@ -557,7 +559,7 @@ mod test {
         else {
             panic!("test_delimit failed 3, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[span.clone()], "//233\\\\");
+        assert_eq!(&lex.inner().source()[span], "//233\\\\");
         assert_matches!(span, Range { start: 0, end: 7 });
         assert_matches!(
             inner.as_ref(),
@@ -583,7 +585,7 @@ mod test {
         else {
             panic!("test_function failed 1, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[span.clone()], "x(233)");
+        assert_eq!(&lex.inner().source()[span], "x(233)");
         assert_matches!(span, Range { start: 0, end: 6 });
         assert_eq!(args.len(), 1);
         assert_matches!(
@@ -607,7 +609,7 @@ mod test {
         else {
             panic!("test_function failed 2, left: {:?}", node);
         };
-        assert_eq!(&lex.inner().source()[span.clone()], "x(233, y)");
+        assert_eq!(&lex.inner().source()[span], "x(233, y)");
         assert_matches!(span, Range { start: 0, end: 9 });
         assert_eq!(args.len(), 2);
         assert_matches!(
@@ -642,7 +644,7 @@ mod test {
             panic!("test_all failed 1, left: {:?}", node);
         };
         assert_eq!(
-            &lex.inner().source()[span.clone()],
+            &lex.inner().source()[span],
             "//x - 3\\\\ + (-y * func(x / 2, y, 10)) ^ x = 8"
         );
         assert_matches!(span, Range { start: 0, end: 45 });

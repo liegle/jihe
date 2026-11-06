@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use std::{assert_matches, ops::Range};
+use std::{assert_matches, range::Range};
 
 use super::*;
 use crate::lex::token::Token;
@@ -21,7 +21,7 @@ macro_rules! assert_token {
     ($lex:ident,$token:tt=$value:literal) => {
         assert_matches!(
             $lex.next(),
-            Some(Ok((Token::$token, span))) if &$lex.source[span.clone()] == $value
+            Some(Ok((Token::$token, span))) if &$lex.source[span] == $value
         );
     };
 }

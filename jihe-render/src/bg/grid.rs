@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::Range};
+use std::{borrow::Cow, range::Range};
 
 use crate::{bg::Bounds, utils::AsUniformBytes as _};
 
@@ -64,13 +64,13 @@ impl Grid {
         self.hori.prepare(
             queue,
             distance,
-            screen_bounds_ws.b..screen_bounds_ws.t,
+            (screen_bounds_ws.b..screen_bounds_ws.t).into(),
             glam::vec2(grid_ends_cs.l, grid_ends_cs.r),
         );
         self.vert.prepare(
             queue,
             distance,
-            screen_bounds_ws.l..screen_bounds_ws.r,
+            (screen_bounds_ws.l..screen_bounds_ws.r).into(),
             glam::vec2(grid_ends_cs.b, grid_ends_cs.t),
         );
         queue.write_buffer(&self.color_buffer, 0, &color.as_uniform_bytes());

@@ -1,8 +1,4 @@
-use std::{
-    fs, io,
-    ops::Range,
-    path::{Path, PathBuf},
-};
+use std::{fs, io, path::Path, range::Range};
 
 use crate::{
     lex::{Lex, LexError},

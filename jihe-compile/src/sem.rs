@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range, sync::LazyLock};
+use std::{collections::HashMap, range::Range, sync::LazyLock};
 
 use crate::{
     Spanned, Syn,
@@ -35,7 +35,7 @@ impl Statement {
         let mut statements = Vec::new();
         for tree in syn {
             let (tree, span) = tree.map_err(SemError::SynError)?;
-            let class = &source[tree.class.clone()];
+            let class = &source[tree.class];
             let Some(Construct { named, unnamed }) = CONSTRUCTS.get(class) else {
                 return Err(SemError::ClassNotFound {
                     found: class.to_owned(),
@@ -43,8 +43,8 @@ impl Statement {
                 });
             };
             let class = match tree.fields {
-                Fields::Named(f) => named(f, span.clone()),
-                Fields::Unnamed(f) => unnamed(f, span.clone()),
+                Fields::Named(f) => named(f, span),
+                Fields::Unnamed(f) => unnamed(f, span),
             }?;
             let name = &source[tree.name];
             let dep = class.dep();
@@ -71,7 +71,6 @@ struct Construct {
     unnamed: fn(Vec<Spanned<Node>>, span: Range<usize>) -> Result<Class, SemError>,
 }
 
-// TODO: use std::range::Range
 macro_rules! enum_class {
     {
         $($class:ident: $dep:ident {
@@ -117,7 +116,7 @@ macro_rules! enum_class {
                         }
                     };)+
                     if let Some((_, (_, field_span))) = fields.iter().next() {
-                        return Err(SemError::RedundantField { span: field_span.clone() });
+                        return Err(SemError::RedundantField { span: *field_span });
                     }
                     Ok(Class::$class { $($field),+ })
                 }
@@ -145,7 +144,7 @@ macro_rules! enum_class {
                         }
                     };)+
                     if let Some((_, span)) = fields.get(0) {
-                        return Err(SemError::RedundantField { span: span.clone() });
+                        return Err(SemError::RedundantField { span: *span });
                     }
                     Ok(Class::$class { $($field),+ })
                 }

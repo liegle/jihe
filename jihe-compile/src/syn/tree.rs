@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, hash_map::Entry},
-    ops::Range,
+    range::Range,
 };
 
 use crate::{
@@ -18,12 +18,11 @@ pub(crate) struct Tree<'src> {
 
 impl<'src> Parse<'src> for Tree<'src> {
     fn parse(lex: &mut Prependable<Lex<'src>>) -> Result<Spanned<Self>, SynError> {
-        let start = lex.expect_token_is(Token::Ident)?;
-        let name = start.clone();
+        let name = lex.expect_token_is(Token::Ident)?;
         let _ = lex.expect_token_is(Token::Eq)?;
         let class = lex.expect_token_is(Token::Ident)?;
         let (fields, end) = Fields::parse(lex)?;
-        Ok((Tree { name, class, fields }, start.start..end.end))
+        Ok((Tree { name, class, fields }, (name.start..end.end).into()))
     }
 }
 
@@ -40,18 +39,18 @@ impl<'src> Parse<'src> for Fields<'src> {
                 let mut fields = HashMap::<&'src str, Spanned<Node>>::new();
                 let mut span = lex.expect_token_is(Token::Ident)?;
                 let end = loop {
-                    let name = &lex.inner().source()[span.clone()];
+                    let name = &lex.inner().source()[span];
                     let entry = match fields.entry(name) {
                         Entry::Vacant(entry) => entry,
                         Entry::Occupied(entry) => return Err(SynError::DuplicatedStatementField {
                             name: name.to_owned(),
-                            prev_span: entry.get().1.clone(),
+                            prev_span: entry.get().1,
                             span,
                         })
                     };
                     let _ = lex.expect_token_is(Token::Colon)?;
                     let (node, end) = Node::parse(lex)?;
-                    entry.insert((node, span.start..end.end));
+                    entry.insert((node, (span.start..end.end).into()));
                     handle_token! { lex.expect_token()? =>
                         (Token::BraceR, end) => { break end }
                         (Token::Comma, _) => {}
@@ -63,7 +62,7 @@ impl<'src> Parse<'src> for Fields<'src> {
                         _ => UnexpectedToken @ lex
                     }
                 };
-                Ok((Self::Named(fields), start.start..end.end))
+                Ok((Self::Named(fields), (start.start..end.end).into()))
             }
             (Token::ParenL, start) => {
                 let mut fields = Vec::new();
@@ -79,7 +78,7 @@ impl<'src> Parse<'src> for Fields<'src> {
                         spanned => lex.prepend(Ok(spanned)),
                     }
                 };
-                Ok((Self::Unnamed(fields), start.start..end.end))
+                Ok((Self::Unnamed(fields), (start.start..end.end).into()))
             }
             _ => UnexpectedToken @ lex
         }
@@ -104,7 +103,7 @@ mod test {
             panic!("test_named failed 1, left: {spanned:?}");
         };
         assert_eq!(
-            &lex.inner().source()[span.clone()],
+            &lex.inner().source()[span],
             "len = Fn { def: fn(x, y) = (x ^ 2 + y ^ 2) ^ 0.5 }"
         );
         assert_matches!(span, Range { start: 0, end: 50 });
@@ -130,7 +129,7 @@ mod test {
         let Ok((tree, span)) = spanned else {
             panic!("test_unnamed failed 1, left: {spanned:?}");
         };
-        assert_eq!(&lex.inner().source()[span.clone()], "alpha = Slide(0, 5)");
+        assert_eq!(&lex.inner().source()[span], "alpha = Slide(0, 5)");
         assert_matches!(span, Range { start: 0, end: 19 });
         assert_eq!(tree.name, Range { start: 0, end: 5 });
         assert_eq!(tree.class, Range { start: 8, end: 13 });
