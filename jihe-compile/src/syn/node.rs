@@ -1,4 +1,4 @@
-use std::{mem, range::Range};
+use std::{mem, range::Range, str::FromStr};
 
 use crate::{
     Lex, Spanned,
@@ -40,7 +40,7 @@ pub(crate) enum Node {
 
 #[derive(Clone, Debug)]
 pub(crate) enum Primary {
-    Num(Range<usize>),
+    Num(Range<usize>, f64),
     Var(Range<usize>),
 }
 
@@ -176,7 +176,9 @@ enum Function {
 fn begin_expr(lex: &mut Prependable<Lex>, spanned: Spanned<Token>) -> Result<State, SynError> {
     handle_token! { spanned =>
         (Token::Num, span) => {
-            Ok(State::Complete(Node::Primary { primary: Primary::Num(span) }))
+            Ok(State::Complete(Node::Primary {
+                primary: Primary::Num(span, f64::from_str(&lex.inner().source()[span]).unwrap())
+            }))
         }
         (Token::Ident, span) => {
             let next = lex.expect_token()?;
@@ -335,7 +337,9 @@ fn append_operate(
         (Token::Num, span) => {
             Ok(State::Complete(merge_operate(
                 operate,
-                Node::Primary { primary: Primary::Num(span) },
+                Node::Primary {
+                    primary: Primary::Num(span, f64::from_str(&lex.inner().source()[span]).unwrap())
+                },
             )))
         }
         (Token::Ident, span) => {
@@ -383,7 +387,7 @@ fn merge_operate(operate: Operate, next: Node) -> Node {
                 };
             }
             const DUMMY: Node = Node::Primary {
-                primary: Primary::Num(Range { start: 0, end: 0 }),
+                primary: Primary::Num(Range { start: 0, end: 0 }, 0f64),
             };
 
             let old = mem::replace(curr, DUMMY);
@@ -425,7 +429,7 @@ mod test {
         let node = Node::parse(&mut lex);
         assert_matches!(
             node,
-            Ok((Node::Primary { primary: Primary::Num(Range { start: 0, end: 3 }) }, span))
+            Ok((Node::Primary { primary: Primary::Num(Range { start: 0, end: 3 }, 10f64) }, span))
                 if &lex.inner().source()[span] == "10."
                 && matches!(span, Range { start: 0, end: 3 })
         );
@@ -460,7 +464,7 @@ mod test {
         assert_matches!(
             inner.as_ref(),
             Node::Primary {
-                primary: Primary::Num(Range { start: 1, end: 4 })
+                primary: Primary::Num(Range { start: 1, end: 4 }, -0.2f64)
             }
         );
     }
@@ -518,7 +522,7 @@ mod test {
         assert_matches!(
             inner.as_ref(),
             Node::Primary {
-                primary: Primary::Num(Range { start: 1, end: 4 })
+                primary: Primary::Num(Range { start: 1, end: 4 }, 233f64)
             }
         );
 
@@ -541,7 +545,7 @@ mod test {
         assert_matches!(
             inner.as_ref(),
             Node::Primary {
-                primary: Primary::Num(Range { start: 2, end: 5 })
+                primary: Primary::Num(Range { start: 2, end: 5 }, 233f64)
             }
         );
 
@@ -564,7 +568,7 @@ mod test {
         assert_matches!(
             inner.as_ref(),
             Node::Primary {
-                primary: Primary::Num(Range { start: 2, end: 5 })
+                primary: Primary::Num(Range { start: 2, end: 5 }, 233f64)
             }
         );
     }
@@ -591,7 +595,7 @@ mod test {
         assert_matches!(
             args[0],
             Node::Primary {
-                primary: Primary::Num(Range { start: 2, end: 5 })
+                primary: Primary::Num(Range { start: 2, end: 5 }, 233f64)
             }
         );
 
@@ -615,7 +619,7 @@ mod test {
         assert_matches!(
             args[0],
             Node::Primary {
-                primary: Primary::Num(Range { start: 2, end: 5 })
+                primary: Primary::Num(Range { start: 2, end: 5 }, 233f64)
             }
         );
         assert_matches!(
@@ -651,7 +655,7 @@ mod test {
         assert_matches!(
             r.as_ref(),
             Node::Primary {
-                primary: Primary::Num(Range { start: 44, end: 45 })
+                primary: Primary::Num(Range { start: 44, end: 45 }, 8f64)
             }
         );
         let Node::Binary {
@@ -690,7 +694,7 @@ mod test {
         assert_matches!(
             rrr.as_ref(),
             Node::Primary {
-                primary: Primary::Num(Range { start: 6, end: 7 })
+                primary: Primary::Num(Range { start: 6, end: 7 }, 3f64)
             }
         );
         let Node::Binary {
@@ -768,7 +772,7 @@ mod test {
         assert_matches!(
             rrrrrr.as_ref(),
             Node::Primary {
-                primary: Primary::Num(Range { start: 27, end: 28 })
+                primary: Primary::Num(Range { start: 27, end: 28 }, 2f64)
             }
         );
         assert_matches!(
@@ -780,7 +784,7 @@ mod test {
         assert_matches!(
             iiii[2],
             Node::Primary {
-                primary: Primary::Num(Range { start: 33, end: 35 })
+                primary: Primary::Num(Range { start: 33, end: 35 }, 10f64)
             }
         );
     }

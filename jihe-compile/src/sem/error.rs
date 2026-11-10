@@ -27,11 +27,14 @@ pub(crate) enum SemError {
         span: Range<usize>,
     },
     WrongDependenceType {
-        name: String,
         prev_span: Range<usize>,
         prev_dep: Dep,
         span: Range<usize>,
         dep: Dep,
+    },
+    DuplicatedStatementName {
+        prev_span: Range<usize>,
+        span: Range<usize>,
     },
 }
 
@@ -98,15 +101,14 @@ impl Report for SemError {
                     )
                     .finish()
             }
-            Self::WrongDependenceType { name, prev_span, prev_dep, span, dep } => {
+            Self::WrongDependenceType { prev_span, prev_dep, span, dep } => {
                 ariadne::Report::build(ariadne::ReportKind::Error, span.into())
                     .with_message("Sem error: Statement was depended but with different type")
                     .with_label(
                         ariadne::Label::new(span.into())
                             .with_color(ariadne::Color::Red)
                             .with_message(format!(
-                                "Statement \"{}\" is {}",
-                                ariadne::Fmt::fg(name, ariadne::Color::Red),
+                                "This symbol should be {}",
                                 ariadne::Fmt::fg(dep, ariadne::Color::Red)
                             )),
                     )
@@ -117,6 +119,21 @@ impl Report for SemError {
                                 "It was depended {} here",
                                 ariadne::Fmt::fg(prev_dep, ariadne::Color::Red)
                             )),
+                    )
+                    .finish()
+            }
+            Self::DuplicatedStatementName { prev_span, span } => {
+                ariadne::Report::build(ariadne::ReportKind::Error, span.into())
+                    .with_message("Sem error: Statement's name was already use")
+                    .with_label(
+                        ariadne::Label::new(span.into())
+                            .with_color(ariadne::Color::Red)
+                            .with_message("This symbol"),
+                    )
+                    .with_label(
+                        ariadne::Label::new(prev_span.into())
+                            .with_color(ariadne::Color::Red)
+                            .with_message("Already exists here"),
                     )
                     .finish()
             }

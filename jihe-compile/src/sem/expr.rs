@@ -1,7 +1,7 @@
-use std::str::FromStr;
+use std::range::Range;
 
 use crate::{
-    sem::{Dep, Id, Table, error::SemError},
+    sem::{Dep, Id, error::SemError},
     syn::{self, Node},
 };
 
@@ -53,32 +53,27 @@ pub enum Binary {
 }
 
 impl Expr {
-    pub(super) fn new<T: Table>(
+    pub(super) fn new(
         mut node: Node,
-        source: &str,
-        table: &mut T,
+        mut depend: impl FnMut(Range<usize>, Dep) -> Result<Id, (Range<usize>, Dep)>,
     ) -> Result<Self, SemError> {
-        enum Next {
+        enum Frame {
             Op(Op),
             Node(Node),
         }
 
         let mut ops = Vec::new();
-        let mut rest = Vec::new();
+        let mut stack = Vec::new();
         loop {
             node = match node {
                 Node::Primary { primary } => {
                     match primary {
-                        syn::Primary::Num(span) => ops.push(Op::Const(
-                            f64::from_str(&source[span]).expect("Num was checked by lex"),
-                        )),
+                        syn::Primary::Num(span, val) => ops.push(Op::Const(val)),
                         syn::Primary::Var(span) => {
-                            let name = &source[span];
-                            let id = match table.depend(name, Dep::Var) {
+                            let id = match depend(span, Dep::Var) {
                                 Ok(id) => id,
                                 Err((prev_span, prev_dep)) => {
                                     return Err(SemError::WrongDependenceType {
-                                        name: name.to_owned(),
                                         prev_span,
                                         prev_dep,
                                         span,
@@ -90,15 +85,15 @@ impl Expr {
                         }
                     };
                     loop {
-                        match rest.pop() {
-                            Some(Next::Node(node)) => break node,
-                            Some(Next::Op(op)) => ops.push(op),
+                        match stack.pop() {
+                            Some(Frame::Node(node)) => break node,
+                            Some(Frame::Op(op)) => ops.push(op),
                             None => return Ok(Expr::Tree(ops)),
                         }
                     }
                 }
                 Node::Unary { unary: syn::Unary::Neg, pos, inner } => {
-                    rest.push(Next::Op(Op::Unary(Unary::Neg)));
+                    stack.push(Frame::Op(Op::Unary(Unary::Neg)));
                     *inner
                 }
                 Node::Binary { binary, pos, left, right } => {
@@ -112,8 +107,8 @@ impl Expr {
                             return Err(SemError::EqInSingleExpr { byte: pos.start });
                         }
                     };
-                    rest.push(Next::Op(Op::Binary(binary)));
-                    rest.push(Next::Node(*right));
+                    stack.push(Frame::Op(Op::Binary(binary)));
+                    stack.push(Frame::Node(*right));
                     *left
                 }
                 Node::Delimit { delimit, left, right, inner } => {
@@ -124,21 +119,19 @@ impl Expr {
                             syn::Delimit::Ceil => Unary::Ceil,
                             syn::Delimit::Abs => Unary::Abs,
                         };
-                        rest.push(Next::Op(Op::Unary(unary)));
+                        stack.push(Frame::Op(Op::Unary(unary)));
                     }
                     *inner
                 }
-                Node::Function { name: span, left, right, mut args } => {
+                Node::Function { name, left, right, mut args } => {
                     // TODO: check "fn"
-                    let name = &source[span];
-                    let id = match table.depend(name, Dep::Fn) {
+                    let id = match depend(name, Dep::Fn) {
                         Ok(id) => id,
                         Err((prev_span, prev_dep)) => {
                             return Err(SemError::WrongDependenceType {
-                                name: name.to_owned(),
                                 prev_span,
                                 prev_dep,
-                                span,
+                                span: name,
                                 dep: Dep::Fn,
                             });
                         }
@@ -147,23 +140,23 @@ impl Expr {
                         0 => {
                             ops.push(Op::Fn(id, 0));
                             loop {
-                                match rest.pop() {
-                                    Some(Next::Node(node)) => break node,
-                                    Some(Next::Op(op)) => ops.push(op),
+                                match stack.pop() {
+                                    Some(Frame::Node(node)) => break node,
+                                    Some(Frame::Op(op)) => ops.push(op),
                                     None => return Ok(Expr::Tree(ops)),
                                 }
                             }
                         }
                         1 => {
-                            rest.push(Next::Op(Op::Fn(id, 1)));
+                            stack.push(Frame::Op(Op::Fn(id, 1)));
                             args.remove(0)
                         }
                         n => {
-                            rest.push(Next::Op(Op::Fn(id, n as u8)));
+                            stack.push(Frame::Op(Op::Fn(id, n as u8)));
                             let mut args = args.into_iter();
                             let first = args.next().unwrap();
                             for arg in args.rev() {
-                                rest.push(Next::Node(arg));
+                                stack.push(Frame::Node(arg));
                             }
                             first
                         }
